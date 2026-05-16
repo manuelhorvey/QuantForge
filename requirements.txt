@@ -1,0 +1,16 @@
+pandas
+numpy
+yfinance
+scikit-learn
+xgboost
+lightgbm
+catboost
+matplotlib
+plotly
+ta
+pyarrow
+mlflow
+optuna
+scipy
+statsmodels
+jupyterlab

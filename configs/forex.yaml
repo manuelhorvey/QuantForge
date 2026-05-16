@@ -1,0 +1,11 @@
+symbols:
+  - EURUSD=X
+  - GBPUSD=X
+  - USDJPY=X
+  - GC=F
+
+timeframe: 1h
+risk_per_trade: 0.005
+slippage_bps: 1.5
+spread_model: variable
+rebalance: 1h
