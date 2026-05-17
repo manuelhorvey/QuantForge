@@ -137,19 +137,20 @@ function render(state){
     var d=assets[name],m=d.metrics||{},s=d.last_signal,pos=m.position;
     var sig=s?s.signal:'FLAT',conf=s?s.confidence||0:0;
     var entry=pos?pos.entry:(s?s.close_price:null);
-    var sl=pos?pos.sl:null,tp=pos?pos.tp:null;
+    var stop=pos?pos.sl:null,tp=pos?pos.tp:null;
     cards+='<div class="card card-'+sc(sig)+'"><div class="card-title">'+name+' &middot; '+sl(sig)+'</div>';
     cards+='<div class="card-value">'+fmt(conf,1)+'%</div>';
     cards+='<div class="card-sub">Value: $'+fmt(m.current_value)+' | Ret: '+fmt(m.total_return)+'% | DD: '+fmt(m.drawdown)+'%</div>';
     if(entry){
       cards+='<div class="card-sub" style="margin-top:4px;font-size:10px">';
       cards+='Entry: $'+fmt(entry,2);
-      if(sl)cards+=' | SL: $'+fmt(sl,2);
+      if(stop)cards+=' | SL: $'+fmt(stop,2);
       if(tp)cards+=' | TP: $'+fmt(tp,2);
       if(pos&&pos.unrealized_pnl!=null)cards+=' | P&L: <span style="color:'+(pos.unrealized_pnl>=0?'#4caf50':'#ef5350')+'">'+fmt(pos.unrealized_pnl,2)+'%</span>';
       cards+='</div>';
     }
     cards+='</div>';
+  }
   cards+='<div class="card"><div class="card-title">Portfolio</div>';
   cards+='<div class="card-value" style="color:#4fc3f7">$'+fmt(p.total_value)+'</div>';
   cards+='<div class="card-sub">Ret: '+fmt(p.total_return)+'% | Capital: $'+fmt(p.capital)+' | '+p.days_running+' days</div></div>';
@@ -183,7 +184,7 @@ function render(state){
     mg+='<div class="metric-card"><div class="metric-header"><span class="metric-title">'+name+'</span><span style="font-size:10px;color:#78909c">'+m.n_trades+' trades</span></div>';
     mg+='<div class="metric-row"><span class="metric-label">Profit Factor</span><span class="metric-value '+(pfStr!='\u2014'&&parseFloat(pfStr)>=1?'ok':'')+'">'+pfStr+'</span></div>';
     mg+='<div class="metric-row"><span class="metric-label">Win Rate</span><span class="metric-value">'+fmt(m.win_rate)+'%</span></div>';
-    mg+='<div class="metric-row"><span class="metric-label">Signal Dist (B/S/F)</span><span class="metric-value">'+(m.signal_distribution?m.signal_distribution.BUY||0+'/'+m.signal_distribution.SELL||0+'/'+m.signal_distribution.FLAT||0:'0/0/0')+'</span></div>';
+    mg+='<div class="metric-row"><span class="metric-label">Signal Dist (B/S/F)</span><span class="metric-value">'+(m.signal_distribution?(m.signal_distribution.BUY||0)+'/'+(m.signal_distribution.SELL||0)+'/'+(m.signal_distribution.FLAT||0):'0/0/0')+'</span></div>';
     mg+='<div class="metric-row"><span class="metric-label">Mean Confidence</span><span class="metric-value">'+fmt(m.mean_confidence)+'%</span></div>';
     mg+='<div class="metric-row"><span class="metric-label">P(Long)/P(Short)</span><span class="metric-value">'+fmt(m.mean_prob_long)+'% / '+fmt(m.mean_prob_short)+'%</span></div>';
     mg+='<div class="metric-row"><span class="metric-label">Monthly PF</span><span class="metric-value '+(monthlyPf!=null&&monthlyPf>=0.7?'ok':'warn')+'">'+mpfStr+'</span></div></div>';
