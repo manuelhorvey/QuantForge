@@ -40,8 +40,8 @@ class RegimeAwareSignalGenerator:
         # intentionally stateless to avoid compounding regime decisions.
         results['signal'] = 0
 
-        long_threshold = 0.387
-        short_threshold = 0.37
+        long_threshold = 0.475
+        short_threshold = 0.475
         long_mask = results['raw_prob_long'] > long_threshold
         short_mask = results['raw_prob_short'] > short_threshold
         results.loc[long_mask, 'signal'] = 1

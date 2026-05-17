@@ -18,7 +18,7 @@ class MacroExpertHead:
         X = X_macro[self.features].copy()
         split = int(len(X) * 0.8)
         self.model = xgb.XGBClassifier(
-            n_estimators=200,
+            n_estimators=100,
             max_depth=2,
             learning_rate=0.03,
             subsample=0.8,

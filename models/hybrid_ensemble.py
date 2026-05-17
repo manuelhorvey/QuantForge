@@ -33,7 +33,7 @@ class HybridRegimeEnsemble:
         
         # XGBoost Config (Institutional Specs)
         self.xgb_params = {
-            'n_estimators': 500,
+            'n_estimators': 100,
             'learning_rate': 0.03,
             'max_delta_step': 0,
             'tree_method': 'hist',
