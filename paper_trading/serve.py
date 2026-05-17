@@ -215,6 +215,7 @@ const STATE_PATH = '/state.json';
 let stateData = null;
 
 function fmt(n,d){if(n==null||n===Infinity||isNaN(n))return'\u2014';return Number(n).toFixed(d||2)}
+function fmtPrice(price){if(price==null||price===Infinity||isNaN(price))return'\u2014';var s=String(price),dec=s.indexOf('.'),natural=dec===-1?0:s.length-dec-1;return Number(price).toFixed(Math.max(2,Math.min(natural,6)))}
 function cssClass(s){if(!s)return'flat';var u=String(s).toUpperCase();return u==='BUY'?'buy':u==='SELL'?'sell':'flat'}
 function fd(d){return new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
 function ft(d){return new Date(d).toLocaleTimeString('en-US',{hour12:false})}
@@ -260,7 +261,7 @@ function render(state){
     var val=m.current_value||0,ret=m.total_return||0,dd=m.drawdown||0;
     var confColor=conf>=60?'var(--green)':conf>=45?'var(--amber)':'var(--red)';
     var price=s?s.close_price:null;
-    ac+='<div class="asset-card signal-'+cls+'"><div class="asset-header"><span class="asset-name">'+name+'</span>'+(price!=null?'<span class="asset-price">$'+(price>100?fmt(price,2):fmt(price,4))+'</span>':'')+'<span class="asset-signal">'+sig+'</span></div>';
+    ac+='<div class="asset-card signal-'+cls+'"><div class="asset-header"><span class="asset-name">'+name+'</span>'+(price!=null?'<span class="asset-price">$'+fmtPrice(price)+'</span>':'')+'<span class="asset-signal">'+sig+'</span></div>';
     ac+='<div class="asset-metrics"><div class="asset-metric"><span class="asset-metric-label">Confidence</span><span class="asset-metric-value" style="color:'+confColor+'">'+fmt(conf,1)+'%</span></div>';
     ac+='<div class="asset-metric"><span class="asset-metric-label">Value</span><span class="asset-metric-value">$'+fmt(val,2)+'</span></div>';
     ac+='<div class="asset-metric"><span class="asset-metric-label">Return</span><span class="asset-metric-value '+(ret>=0?'change-up':'change-down')+'">'+fmt(ret)+'%</span></div>';
@@ -268,9 +269,9 @@ function render(state){
     ac+='<div class="asset-conf-bar"><div class="asset-conf-fill" style="width:'+conf+'%;background:'+confColor+'"></div></div>';
     if(entry||stop||tp||upnl!=null){
       ac+='<div class="asset-more">';
-      if(entry)ac+='Entry $'+fmt(entry,2);
-      if(stop)ac+=' &middot; SL $'+fmt(stop,2);
-      if(tp)ac+=' &middot; TP $'+fmt(tp,2);
+      if(entry)ac+='Entry $'+fmtPrice(entry);
+      if(stop)ac+=' &middot; SL $'+fmtPrice(stop);
+      if(tp)ac+=' &middot; TP $'+fmtPrice(tp);
       if(upnl!=null)ac+=' &middot; P&L <span style="color:'+(upnl>=0?'var(--green)':'var(--red)')+'">'+fmt(upnl,2)+'%</span>';
       ac+='</div>';
     }
@@ -289,11 +290,11 @@ function render(state){
     tb+='<td style="color:var(--text-muted)">'+(sig==='BUY'?'Bullish':sig==='SELL'?'Bearish':'Neutral')+'</td>';
     tb+='<td class="cell-signal cell-'+cssClass(sig)+'">'+sig+'</td>';
     tb+='<td><span style="display:inline-block;width:50px;height:6px;border-radius:3px;background:var(--bg-primary);vertical-align:middle;margin-right:6px;overflow:hidden"><span style="display:block;height:100%;width:'+conf+'%;border-radius:3px;background:'+(conf>=60?'var(--green)':conf>=45?'var(--amber)':'var(--red)')+'"></span></span>'+fmt(conf,1)+'%</td>';
-    tb+='<td>$'+(price>100?fmt(price,2):fmt(price,4))+'</td>';
+    tb+='<td>$'+fmtPrice(price)+'</td>';
     tb+='<td>'+Math.round(alloc*100)+'%</td>';
     tb+='<td class="cell-'+(ret>=0?'up':'down')+'">'+fmt(ret)+'%</td>';
     tb+='<td class="cell-'+(dd>-3?'up':dd>-5?'warn':'down')+'">'+fmt(dd)+'%</td>';
-    if(pos&&pos.sl)tb+='<td class="cell-mono">$'+fmt(pos.sl,2)+' / $'+fmt(pos.tp,2)+'</td>';
+    if(pos&&pos.sl)tb+='<td class="cell-mono">$'+fmtPrice(pos.sl)+' / $'+fmtPrice(pos.tp)+'</td>';
     else tb+='<td class="cell-mono">\u2014</td></tr>';
   }
   document.getElementById('signalsBody').innerHTML=tb;
