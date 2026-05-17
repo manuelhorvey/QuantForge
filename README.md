@@ -4,150 +4,164 @@
 ![Status](https://img.shields.io/badge/status-paper%20trading%20%7C%20research-blue)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
-QuantForge is a modular quantitative research framework for studying **macro-conditioned trading systems** across FX and equities.
+QuantForge is a modular quantitative research framework for studying **macro-conditioned trading systems** across FX, equities, and crypto. It runs a **live paper-trading engine** with a web dashboard and supports walk-forward validation for systematic strategy research.
 
-The current active research track focuses on **XLF (Financial Select Sector SPDR ETF)** using a minimal 4-feature macro + price model developed after a year-long EURUSD research phase.
-
-This is a **research and paper-trading system**, not a production trading bot.
+**This is a research and paper-trading system, not a production trading bot.**
 
 ---
 
-## Research Questions
+## Live Paper Trading
 
-- Does macro signal (rate differentials, yield expectations) transfer from FX to equities?
-- Can a minimal macro-price feature stack produce stable out-of-sample performance?
-- When does macro context actually translate into tradeable directional edge?
+The paper-trading engine runs 24/7 with three assets:
 
----
+| Asset | Ticker | Allocation | Features |
+|---|---|---|---|
+| XLF | `XLF` | 40% | rate_diff, 2y_yield_delta_63, xlf_mom_63, xlf_vs_spy_63 |
+| BTC | `BTC-USD` | 35% | rate_diff, 2y_yield_delta_63, btc_mom_63, btc_vs_spy_63 |
+| NZDJPY | `NZDJPY=X` | 25% | vix_ma21, vix_delta_5, us_jp_10y_spread, nzdjpy_mom_21 |
 
-# Current Model (Active Equity Track)
+### Run
 
-Universe:
-
-- XLF
-- SPY (benchmark)
-
-### Feature Set
-
-```python
-XLF_FEATURES = [
-    "rate_diff",
-    "2y_yield_delta_63",
-    "xlf_mom_63",
-    "xlf_vs_spy_63",
-]
+```bash
+./monitor_all
 ```
 
-| Feature | Role |
-|---|---|
-| rate_diff | Macro regime (policy divergence) |
-| 2y_yield_delta_63 | Forward rate expectations |
-| xlf_mom_63 | Momentum (market response) |
-| xlf_vs_spy_63 | Relative strength |
+Dashboard: `http://127.0.0.1:5000`
+
+- Engine refresh: 30 min
+- UI refresh: 30 sec
+
+### Dashboard
+
+Serves a dark-themed command center with:
+- Portfolio summary cards (total value, return, unrealized P&L, trades)
+- Per-asset signal cards with confidence bars and position details (entry, SL, TP, P&L)
+- Execution tickets table
+- Live metrics per asset (profit factor, win rate, signal distribution, mean confidence)
+- Halt condition monitors (max drawdown, monthly PF, signal drought, prob drift)
+- Advisory bar (retrain schedule, deployment status)
+
+---
+
+## Research Track
+
+The primary validated research asset is **XLF (Financial Select Sector SPDR ETF)** using a minimal 4-feature XGBoost model. Walk-forward studies also exist for EURUSD, USDJPY, NZDJPY, GC (Gold), and QQQ.
 
 ### Model
 
-- XGBoost multiclass classifier  
-- 300 trees  
-- max depth: 2  
-- learning rate: 0.02  
+- XGBoost multiclass classifier (BUY / NEUTRAL / SELL)
+- 300 trees, max depth 2, learning rate 0.02
 - Triple-barrier labeling (pt_sl=2, vb=20)
+- Volatility-scaled position sizing
+
+### Run Walk-Forward
+
+```bash
+python equity/walk_forward_xlf.py
+```
+
+### Macro-Only Diagnostic
+
+```bash
+python equity/diagnostic_xlf_macro.py
+```
+
+### Research Results (XLF Walk-Forward)
+
+**Configuration:** Train 5yr / Test 1yr / Step 1yr
+
+| Year | PF | Net Return |
+|---|---|---:|
+| 2019 | 1.07 | +3.25% |
+| 2020 | 1.03 | +5.12% |
+| 2021 | 1.29 | +25.14% |
+| 2022 | 0.98 | -6.25% |
+| 2023 | 1.23 | +17.24% |
+| 2024 | 1.34 | +21.95% |
+
+Average (2019–2024): **+11.08%**
 
 ---
 
-# System Architecture
+## Advanced Model Architecture
+
+Beyond the minimal paper-trading models, the research framework includes:
+
+| Module | Description |
+|---|---|
+| `HybridRegimeEnsemble` | Global backbone + regime-specific expert heads + protected macro expert head (0.45 fixed blend) |
+| `RegimeClassifier` | Classifies markets into TREND / RANGE / VOLATILE / NEUTRAL |
+| `MacroExpertHead` | Macro-only expert trained on rate differentials and yield features |
+| `MeanReversionModel` | Specialized for RANGE regimes (RSI, Bollinger Band reversals) |
+| `BreakoutModel` | Specialized for VOLATILE regimes (momentum, breakout continuation) |
+
+---
+
+## Validity State Machine
+
+A hysteresis-based capital allocation state machine with temporal smoothing and regime persistence lock. Transforms validity scores into:
+
+| State | Exposure |
+|---|---|
+| GREEN | 100% |
+| YELLOW | 50% |
+| RED | 0% |
+
+Features inertia smoothing, regime persistence locking, and configurable entry/exit thresholds to prevent rapid state flipping.
+
+---
+
+## System Architecture
 
 ```mermaid
 flowchart TD
     A[Raw OHLCV + Macro Data] --> B[Feature Engineering]
     B --> C[Triple Barrier Labeling]
     C --> D[XGBoost Model]
-
     D --> E[Signal Generation]
     E --> F[Paper Trading Engine]
     F --> G[Risk & PnL Tracking]
     G --> H[Dashboard UI]
-
-    A --> B
+    F --> I[Halt Condition Checks]
 ```
 
 ---
 
-# Research Results (XLF Walk-Forward)
+## Repository Structure
 
-### Configuration
-
-- Train: 5 years  
-- Test: 1 year  
-- Step: 1 year  
-
-| Year | PF | Exp | L/S | Statistical Note |
-|---|---:|---:|---:|---|
-| 2019 | 1.07 | +0.000229 | 175/77 | - |
-| 2020 | 1.03 | +0.000304 | 253/0 | - |
-| 2021 | 1.29 | +0.001179 | 211/24 | - |
-| 2022 | 0.98 | -0.000150 | 197/54 | noise (p=0.571) |
-| 2023 | 1.23 | +0.000801 | 91/159 | borderline (p=0.111) |
-| 2024 | 1.34 | +0.000978 | 125/127 | weak signal (p=0.047) |
-
-### Annual Net Returns
-
-| Year | XLF Net |
-|---|---:|
-| 2019 | +3.25% |
-| 2020 | +5.12% |
-| 2021 | +25.14% |
-| 2022 | -6.25% |
-| 2023 | +17.24% |
-| 2024 | +21.95% |
-
-Average (2019–2024): **+11.08%**
-
----
-
-# Key Findings
-
-### 1. Macro signal transfers, but imperfectly
-
-Macro features capture regime context but do not fully determine directional equity returns.
+```text
+QuantForge/
+├── paper_trading/       # Live paper-trading engine + dashboard server
+│   ├── engine.py        # AssetEngine, PaperTradingEngine, signal generation
+│   ├── monitor.py       # Main loop: pulls data, refreshes signals, starts server
+│   └── serve.py         # HTTP server serving the web dashboard
+├── equity/              # Walk-forward research (XLF, EURUSD, USDJPY, NZDJPY, GC, QQQ)
+├── backtests/           # Walk-forward validator, performance metrics, expectancy audit
+├── models/              # Hybrid ensemble, regime classifier, expert heads
+│   ├── ensemble/        # Model router
+│   ├── regime/          # Regime classifier
+│   ├── trend/           # Baseline XGBoost
+│   ├── mean_reversion/  # Mean-reversion model
+│   └── volatility/      # Breakout model
+├── features/            # Feature engineering: base, regime, structural, interaction, pair-specific
+├── labels/              # Triple-barrier labeling
+├── signals/             # Signal generation, thresholding, filtering
+├── risk/                # Position sizing, drawdown controls, exposure limits
+├── monitoring/          # Validity state machine, drift detection, MLflow logger
+├── data/                # Raw + processed macro data, live state
+│   ├── loaders/         # yfinance + FRED data downloaders
+│   ├── raw/             # Downloaded OHLCV parquet files
+│   ├── processed/       # Engineered features, labeled data, macro factors
+│   └── live/            # Live state.json, dashboard.json, logs
+├── diagnostics/         # Model validity, signal integrity, regime audits, sweeps
+├── portfolio/           # HRP allocator, risk parity, correlation clustering (stubs)
+├── execution/           # Broker interface, order manager (stubs)
+├── configs/             # YAML configuration for paper trading, forex, crypto
+├── tests/               # pytest suite (engine, position sizing, triple barrier, state machine)
+└── quantforge/          # Package init, logging setup
+```
 
 ---
-
-### 2. Simplicity outperforms complexity (in this regime)
-
-A 4-feature model currently generalizes better than:
-
-- hybrid ensembles
-- regime classifiers
-- high-dimensional feature sets
-
----
-
-### 3. Feature separation matters
-
-**Environment features (removed):**
-
-- yield_slope
-- real_yield_10y
-
-**Directional features (kept):**
-
-- momentum
-- relative strength
-- rate expectation changes
-
----
-
-### 4. 2022 is structural, not stochastic
-
-Performance breakdown is attributed to:
-
-- bull-biased training window (2017–2021)
-- regime shift into rate tightening cycle
-
----
-
-# Reproducibility
 
 ## Setup
 
@@ -164,110 +178,58 @@ export PYTHONPATH=$PYTHONPATH:.
 
 ---
 
-## Run Walk-Forward
+## Tests
 
 ```bash
-python equity/walk_forward_xlf.py
-```
-
-Expected:
-
-```text
-2024 PF ≈ 1.34
-2024 p(PF<1.0) ≈ 0.047
+pytest tests/
 ```
 
 ---
 
-## Macro-only diagnostic
+## Key Findings
 
-```bash
-python equity/diagnostic_xlf_macro.py
-```
+1. **Macro signal transfers across assets, but imperfectly** — macro features capture regime context but don't fully determine directional returns.
 
----
+2. **Simplicity outperforms complexity (in this regime)** — the 4-feature XGBoost generalizes better than hybrid ensembles, regime classifiers, or high-dimensional feature sets.
 
-# Live Paper Trading
+3. **Feature separation matters** — environment features (yield_slope, real_yield) hurt; directional features (momentum, relative strength, rate expectations) help.
 
-```bash
-python -m paper_trading.monitor
-```
-
-Dashboard:
-
-```
-http://127.0.0.1:5000
-```
-
-Updates:
-
-- engine: 30 min
-- UI: 30 sec
+4. **2022 was structural, not stochastic** — performance breakdown driven by bull-biased training window and regime shift into rate tightening.
 
 ---
 
-# Repository Structure
+## Roadmap
 
-```text
-QuantForge/
-├── equity/              # Active research (XLF, QQQ)
-├── paper_trading/       # Live simulation engine
-├── data/                # Raw + processed macro data
-├── labels/              # Triple barrier labeling
-├── models/             # XGBoost + experiments
-├── risk/               # Position sizing + controls
-├── diagnostics/        # Legacy EURUSD research
-├── execution/          # Broker stubs (future)
-└── legacy/             # Archived EURUSD phase
-```
+### Near Term
+- Broker integration (Alpaca / IBKR)
+- Slippage + spread modeling
+- Live cost tracking
+- Multi-asset portfolio allocator
+
+### Medium Term
+- Multi-asset risk engine
+- Real-time streaming dashboard (WebSocket)
+- Drift detection + model retraining triggers
 
 ---
 
-# Roadmap
+## Limitations
 
-## Near Term
-
-- XLE transfer test
-- XLI transfer test
-- slippage + spread modeling
-- live cost tracking
-
-## Medium Term
-
-- broker integration (Alpaca/IBKR)
-- portfolio allocator
-- multi-asset risk engine
+- Paper trading only — no live broker execution
+- Limited validated asset universe
+- No portfolio optimizer yet
+- Stale data on weekends for equity/FX assets
 
 ---
 
-# Limitations
+## Disclaimer
 
-- single primary validated asset (XLF)
-- no live broker execution
-- limited asset universe
-- no portfolio optimizer yet
+Research and educational use only. Not financial advice. Markets are stochastic and adversarial. Past performance ≠ future results.
 
 ---
 
-# Disclaimer
-
-Research and educational use only.
-
-Not financial advice.
-
-Markets are stochastic and adversarial.
-
-Past performance ≠ future results.
-
----
-
-# Author
+## Author
 
 Built by **MktOwl**
 
-Focus:
-
-- macro-driven systematic trading
-- walk-forward validation
-- real-time paper trading systems
-- quantitative research engineering
+Focus: macro-driven systematic trading, walk-forward validation, real-time paper trading systems, quantitative research engineering.
