@@ -48,6 +48,7 @@ HALT = dict(_cfg.get('halt', {
 XLF_FEATURES = ['rate_diff', '2y_yield_delta_63', 'xlf_mom_63', 'xlf_vs_spy_63']
 BTC_FEATURES = ['rate_diff', '2y_yield_delta_63', 'btc_mom_63', 'btc_vs_spy_63']
 NZDJPY_FEATURES = ['vix_ma21', 'vix_delta_5', 'us_jp_10y_spread', 'nzdjpy_mom_21']
+USDCAD_FEATURES = ['rate_diff', 'dxy_mom_21', 'vix_ma21', 'usdcad_mom_21']
 
 
 def load_macro():
@@ -145,6 +146,9 @@ class AssetEngine:
             a['btc_vs_spy_63'] = a['btc_mom_63'] - ref['close'].pct_change(63)
         elif self.name == 'NZDJPY':
             a['nzdjpy_mom_21'] = df['close'].pct_change(21)
+        elif self.name == 'USDCAD':
+            a['dxy_mom_21'] = a['dxy'].pct_change(21)
+            a['usdcad_mom_21'] = df['close'].pct_change(21)
 
         a['label'] = (labeled.loc[a.index, 'label'] + 1).astype(int)
         return a.dropna(subset=self.features + ['label'])
@@ -494,8 +498,10 @@ def _build_paper_portfolio():
                 'halt': HALT, 'config': {}},
         'BTC': {'ticker': 'BTC-USD', 'features': BTC_FEATURES, 'alloc': 0.35,
                 'halt': {'drawdown': -0.15, 'monthly_pf': 0.70, 'signal_drought': 30, 'prob_drift': 0.15}, 'config': {'vol_scalar': True}},
-        'NZDJPY': {'ticker': 'NZDJPY=X', 'features': NZDJPY_FEATURES, 'alloc': 0.25,
+        'NZDJPY': {'ticker': 'NZDJPY=X', 'features': NZDJPY_FEATURES, 'alloc': 0.20,
                    'halt': {'drawdown': -0.06, 'monthly_pf': 0.70, 'signal_drought': 30, 'prob_drift': 0.15}, 'config': {}},
+        'USDCAD': {'ticker': 'USDCAD=X', 'features': USDCAD_FEATURES, 'alloc': 0.15,
+                   'halt': HALT, 'config': {}},
     }
 
 
