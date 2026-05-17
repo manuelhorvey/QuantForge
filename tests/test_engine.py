@@ -59,5 +59,7 @@ class TestConfig:
     def test_paper_portfolio_structure(self):
         assert "XLF" in PAPER_PORTFOLIO
         assert "BTC" in PAPER_PORTFOLIO
-        assert PAPER_PORTFOLIO["XLF"]["alloc"] == 0.60
-        assert PAPER_PORTFOLIO["BTC"]["alloc"] == 0.40
+        assert "NZDJPY" in PAPER_PORTFOLIO
+        assert PAPER_PORTFOLIO["XLF"]["alloc"] == 0.40
+        assert PAPER_PORTFOLIO["BTC"]["alloc"] == 0.35
+        assert PAPER_PORTFOLIO["NZDJPY"]["alloc"] == 0.25
