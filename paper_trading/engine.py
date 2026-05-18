@@ -22,7 +22,10 @@ TRADE_JOURNAL_PATH = os.path.join(BASE, 'data', 'live', 'trade_journal.parquet')
 CONFIDENCE_BUCKET_PATH = os.path.join(BASE, 'data', 'live', 'confidence_buckets.parquet')
 EQUITY_HISTORY_PATH = os.path.join(BASE, 'data', 'live', 'equity_history.json')
 LOG_PATH = os.path.join(BASE, 'data', 'live', 'engine.log')
+CACHE_DIR = os.path.join(BASE, 'data', 'live', 'cache')
 CONFIG_PATH = os.path.join(BASE, 'configs', 'paper_trading.yaml')
+
+os.makedirs(CACHE_DIR, exist_ok=True)
 
 os.makedirs(MODEL_DIR, exist_ok=True)
 os.makedirs(os.path.dirname(STATE_PATH), exist_ok=True)
@@ -91,18 +94,37 @@ def norm_index(df):
     return df
 
 
+def _cache_path(ticker):
+    safe_name = ticker.replace('=', '_').replace('-', '_')
+    return os.path.join(CACHE_DIR, f'{safe_name}.parquet')
+
+
 def safe_download(ticker, **kwargs):
-    for attempt in range(3):
+    delays = [5, 15, 45]
+    for attempt, delay in enumerate(delays, 1):
         try:
             df = yf.download(ticker, **kwargs)
             if not df.empty:
+                path = _cache_path(ticker)
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                df.to_parquet(path)
                 return df
-            logger.warning(f"Empty data returned for {ticker} (attempt {attempt+1}/3)")
+            logger.warning(f"{ticker} empty response attempt {attempt}/3")
         except Exception as e:
-            logger.warning(f"Download failed for {ticker} (attempt {attempt+1}/3): {e}")
-        if attempt < 2:
-            time.sleep(5)
-    logger.error(f"All retries failed for {ticker}")
+            logger.warning(f"{ticker} download error attempt {attempt}/3: {e}")
+        if attempt < len(delays):
+            time.sleep(delay)
+    logger.error(f"{ticker} failed after 3 attempts — using cached data")
+    path = _cache_path(ticker)
+    if os.path.exists(path):
+        try:
+            df = pd.read_parquet(path)
+            if not df.empty:
+                logger.info(f"{ticker} using cached data from {path}")
+                return df
+        except Exception as e:
+            logger.warning(f"{ticker} cache read error: {e}")
+    logger.error(f"{ticker} no cached data available")
     return pd.DataFrame()
 
 

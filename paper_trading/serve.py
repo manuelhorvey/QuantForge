@@ -119,7 +119,15 @@ def serve(port=DEFAULT_PORT, shutdown_event=None):
                 try:
                     with open(LOG_PATH, 'r') as f:
                         lines = f.readlines()
-                    tail = ''.join(lines[-200:])
+                    boundary = None
+                    for i in range(len(lines) - 1, -1, -1):
+                        if 'Server stopped.' in lines[i]:
+                            boundary = i + 1
+                            break
+                    if boundary is not None:
+                        tail = ''.join(lines[boundary:][-200:])
+                    else:
+                        tail = ''.join(lines[-200:])
                     self.send_response(200)
                     self.send_header('Content-Type', 'text/plain; charset=utf-8')
                     self.send_header('Cache-Control', 'no-cache')
@@ -129,6 +137,7 @@ def serve(port=DEFAULT_PORT, shutdown_event=None):
                 except FileNotFoundError:
                     self.send_response(200)
                     self.send_header('Content-Type', 'text/plain; charset=utf-8')
+                    self.send_header('Cache-Control', 'no-cache')
                     self.send_header('Access-Control-Allow-Origin', '*')
                     self.end_headers()
                     self.wfile.write(b'[no log file yet]')
