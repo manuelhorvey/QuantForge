@@ -36,12 +36,13 @@ The paper-trading engine runs continuously with the following allocation across 
 
 - Engine refresh: every 30 minutes
 - UI refresh: every 30 seconds
+- Yahoo Finance resilience: exponential backoff (5s/15s/45s) + parquet cache fallback
 
 ### Dashboard Features
 
 - Portfolio summary (Total Value, Return, Unrealized P&L, Trade Count)
 - Per-asset signal cards with confidence meters, position details, and P&L
-- Live execution log
+- Session-scoped execution log (auto-cleaned on restart)
 - Performance metrics (Profit Factor, Win Rate, Sharpe, Mean Confidence)
 - Validity & Halt condition monitors
 - Regime status and advisory bar
@@ -71,7 +72,7 @@ Primary validated assets across 6 asset classes using walk-forward validation. T
 | USDCAD | tb20  | 5/8     | 1.24   | 0.61       | 62%         | —                 |
 | BTC    | tb20  | 4/8     | 1.04   | 0.09       | 50%         | —                 |
 
-See [ADR-015](docs/adr/ADR-015-asset-specific-label-horizons.md) for fwd60 methodology and [ADR-016](docs/adr/ADR-016-gold-validation.md) for GC=F validation.
+See [ADR-015](docs/adr/ADR-015-asset-specific-label-horizons.md) for fwd60 methodology and [ADR-016](docs/adr/ADR-016-gold-validation.md) for GC=F validation. See [ADR-017](docs/adr/ADR-017-inference-lookahead-investigation.md) for inference integrity.
 
 ---
 
@@ -94,7 +95,7 @@ See [ADR-015](docs/adr/ADR-015-asset-specific-label-horizons.md) for fwd60 metho
 |---------------------------|-----------|
 | AssetEngine | Per-asset XGBoost (depth=2, 300 trees, lr=0.02), 4 macro features, tb20 or fwd60 label routing |
 | PaperTradingEngine | Orchestrates 6 assets, volatility-scaled sizing, halt conditions, P&L tracking |
-| Flask Dashboard | Real-time web UI with portfolio summary, signal cards, execution log, performance metrics |
+| Dashboard (stdlib http.server) | Real-time web UI with portfolio summary, signal cards, session-scoped log, performance metrics |
 
 ---
 
@@ -148,18 +149,19 @@ flowchart TD
 
 ```text
 QuantForge/
-├── paper_trading/       # Live engine + Flask dashboard
-│   ├── serve.py         # Flask web server
+├── paper_trading/       # Live engine + stdlib HTTP dashboard
+│   ├── serve.py         # stdlib HTTP server
 │   ├── engine.py        # Paper trading engine
 │   ├── monitor.py       # Entry point (data → signal → trade loop)
 │   ├── frontend/        # Dashboard UI (index.html, script.js, style.css)
-│   └── models/          # 37 serialised XGBoost model pickles
+│   └── models/          # 6 serialised XGBoost model pickles
 ├── scripts/             # Training & validation runners
 │   ├── walk_forward_all.py
 │   ├── train_all_assets.py
 │   ├── gc_walk_forward.py
 │   └── ...
 ├── equity/              # Walk-forward research scripts
+├── archive/             # Retired model source code
 ├── backtests/           # Walk-forward engine, metrics, simulations
 ├── models/              # Research models
 │   ├── regime/          # Regime classifier
@@ -178,7 +180,7 @@ QuantForge/
 │   ├── loaders/         # yfinance, FRED, COT downloaders
 │   ├── raw/             # Raw OHLCV parquet files
 │   ├── processed/       # Feature-engineered datasets & walk-forward results
-│   ├── live/            # Runtime engine state, equity history, logs
+│   ├── live/            # Runtime engine state, equity history, logs, yfinance cache
 │   └── weekly_pipeline.py
 ├── diagnostics/         # Model audits, sweeps, SHAP analysis, isolation tests
 ├── portfolio/           # HRP allocator, risk parity, correlation clusters
@@ -186,7 +188,7 @@ QuantForge/
 ├── configs/             # YAML configs (paper trading, forex) + driver atlas
 ├── tests/               # Pytest test suite (7 test files)
 ├── docs/                # Project documentation, runbook, system overview
-│   └── adr/             # Architecture Decision Records (ADR-000 through ADR-016)
+│   └── adr/             # Architecture Decision Records (ADR-000 through ADR-017)
 ├── adr/                 # Additional ADRs (ADR-011 known issues)
 ├── notebooks/           # (placeholder — no notebooks yet)
 ├── .github/
@@ -208,7 +210,7 @@ Project documentation and architecture decisions live alongside the code:
 | Path | Description |
 |------|-------------|
 | [`docs/`](docs/) | Project documentation — guides, references, deep-dives |
-| [`docs/adr/`](docs/adr/) | Architecture Decision Records — key design decisions and their rationale (ADR-000 through ADR-016) |
+| [`docs/adr/`](docs/adr/) | Architecture Decision Records — key design decisions and their rationale (ADR-000 through ADR-017) |
 | [`adr/`](adr/) | Supplementary ADRs — known issues and deferred decisions |
 
 ADR entries follow the standard [Michael Nygard template](https://github.com/joelparkerhenderson/architecture-decision-record) and are numbered sequentially.
@@ -284,6 +286,7 @@ Blocked pending data acquisition: EURUSD, GBPUSD (need CFTC COT weekly positioni
 - EURUSD and GBPUSD blocked — requires COT positioning data
 - Model validity depends on PSI distribution stability
 - Paper trading uses simple 4-feature XGBoost per asset; research ensemble (`HybridRegimeEnsemble`) not yet deployed
+- Yahoo Finance data can be rate-limited; engine mitigates with exponential backoff (5s/15s/45s) + parquet cache fallback
 
 ---
 
