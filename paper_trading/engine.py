@@ -110,7 +110,7 @@ def fetch_ref(ticker):
 
 
 class AssetEngine:
-    def __init__(self, ticker, name, features, allocation, halt_config=None, config=None):
+    def __init__(self, ticker, name, features, allocation, halt_config=None, config=None, expected_prob_conf=0.45):
         self.ticker = ticker
         self.name = name
         self.features = features
@@ -118,6 +118,7 @@ class AssetEngine:
         self.initial_capital = CONFIG['capital'] * allocation
         self.halt_config = halt_config or HALT
         self.config = config or {}
+        self.expected_prob_conf = expected_prob_conf
         self.model = None
         self.signal_data = None
         self.peak_value = self.initial_capital
@@ -369,6 +370,12 @@ class AssetEngine:
                     self.peak_value = self.current_value
                 return
 
+        # If a position is open and no SL/TP was hit, track only position-based PnL
+        # (entry vs current). The position PnL will be booked on close via
+        # _close_position. Skip the signal-based path to avoid double counting.
+        if self.position:
+            return
+
         # Daily PnL from previous signal
         sig = self.signal_data['signal'].iloc[-2]
         direction = 1 if sig == 2 else (-1 if sig == 0 else 0)
@@ -482,10 +489,20 @@ class AssetEngine:
             if days_since > drought_days:
                 reasons.append(f'Signal drought: {days_since}d > {drought_days}d')
                 drought_ok = False
+        # Prob drift: halt if mean confidence has drifted from expected baseline
+        drift_ok = True
+        prob_drift_limit = hc.get('prob_drift', 0.15)
+        metrics = self.get_metrics()
+        mean_conf = metrics.get('mean_confidence', 0) / 100
+        drift = abs(mean_conf - self.expected_prob_conf)
+        if drift > prob_drift_limit:
+            reasons.append(f'Confidence drift: {drift:.3f} > {prob_drift_limit:.2f}')
+            drift_ok = False
         return {'halted': len(reasons) > 0, 'reasons': reasons,
                 'drawdown_ok': dd > hc['drawdown'],
                 'monthly_pf_ok': metrics['monthly_pf'] is None or metrics['monthly_pf'] >= hc['monthly_pf'],
-                'drought_ok': drought_ok}
+                'drought_ok': drought_ok,
+                'drift_ok': drift_ok}
 
 
 def _build_paper_portfolio():
