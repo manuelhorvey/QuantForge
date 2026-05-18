@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuantForge &middot; Command Center</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="container">
+
+<div class="header">
+  <div class="header-left">
+    <div class="header-logo">Q</div>
+    <div class="header-title">QuantForge <span>/ Command Center</span></div>
+    <span class="pill" id="liveBadge">Paper Trading</span>
+  </div>
+  <div class="header-right">
+    <div class="header-status">
+      <span class="status-dot" id="statusDot"></span>
+      <span class="status-text" id="statusText">Initializing...</span>
+    </div>
+    <span class="header-time"><span id="currentDate">&mdash;</span> <span id="currentTime">&mdash;</span></span>
+    <span class="pill" id="daysBadge">0 days</span>
+    <span class="pill" id="sessionBadge" style="background:var(--amber-dim);color:var(--amber);border-color:var(--amber-border)">Session: --</span>
+  </div>
+</div>
+
+<div id="loadingState" class="loading">
+  <div class="spinner"></div>
+  <div class="loading-title">Connecting to paper trading engine...</div>
+  <div class="loading-sub" id="loadingDetail">waiting for signal data</div>
+</div>
+
+<div id="dashboardContent" style="display:none;">
+
+  <div class="portfolio-row" id="portfolioRow"></div>
+
+  <div class="section">
+    <div class="section-title">Assets</div>
+    <span class="section-badge" id="assetCount">0 active</span>
+  </div>
+  <div class="grid-4" id="assetGrid"></div>
+
+  <div class="section">
+    <div class="section-title">Execution Tickets</div>
+    <span class="section-badge">Signals</span>
+  </div>
+  <div class="table-wrap">
+  <table><thead><tr>
+    <th>Asset</th><th>Regime</th><th>Signal</th><th>Confidence</th><th>Price</th><th>Alloc</th><th>Return</th><th>Drawdown</th><th>SL / TP</th>
+  </tr></thead><tbody id="signalsBody"></tbody></table>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Live Metrics</div>
+    <span class="section-badge">Performance</span>
+  </div>
+  <div class="grid-3" id="metricsGrid"></div>
+
+  <div class="section">
+    <div class="section-title">Trade Feed</div>
+    <span class="section-badge" id="tradeFeedCount">Recent</span>
+  </div>
+  <div class="table-wrap">
+  <table><thead><tr>
+    <th>Time</th><th>Asset</th><th>Direction</th><th>Entry</th><th>Exit</th><th>P&L%</th><th>Bars</th><th>Result</th>
+  </tr></thead><tbody id="tradeFeedBody"><tr><td colspan="8" class="trade-empty">No trades closed yet</td></tr></tbody></table>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Halt Conditions</div>
+    <span class="section-badge">Safety</span>
+  </div>
+  <div class="grid-4" id="haltGrid"></div>
+
+  <div class="footer">
+    <div class="footer-text" id="footerText">Loading...</div>
+    <span class="footer-badge">Paper Trading</span>
+  </div>
+
+</div>
+</div>
+
+<script src="/script.js"></script>
+</body>
+</html>
