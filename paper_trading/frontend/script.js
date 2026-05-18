@@ -101,7 +101,7 @@ function render(state){
     var entry=null,stop=null,tp=null,upnl=null;
     var pos=m.position;
     if(pos){entry=pos.entry;stop=pos.sl;tp=pos.tp;upnl=pos.unrealized_pnl}
-    var val=m.current_value||0,ret=m.total_return||0,dd=m.drawdown||0;
+    var val=m.current_value||0,ret=m.mtm_return!=null?m.mtm_return:(m.total_return||0),dd=m.drawdown||0;
     var confColor=conf>=60?'var(--green)':conf>=45?'var(--amber)':'var(--red)';
     var price=s?s.close_price:null;
     var prevPos=prevPositions[name],isNewEntry=pos&&pos.entry&&(!prevPos||prevPos.entry!==pos.entry);

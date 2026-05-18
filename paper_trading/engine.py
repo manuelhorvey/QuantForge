@@ -473,13 +473,19 @@ class AssetEngine:
                 'unrealized_pnl': round(self._position_pnl(self.current_price), 2) if self.position and self.current_price is not None else 0.0,
             }
 
+        pnl_pct = self._position_pnl(self.current_price) / 100 if self.position and self.current_price is not None else 0
+        mtm_value = self.current_value + self.current_value * pnl_pct * CONFIG['position_size']
+        mtm_return = (mtm_value - self.initial_capital) / self.initial_capital * 100 if self.initial_capital > 0 else 0
+
         mean_pl = np.mean([p['prob_long'] for p in self.prob_history]) if self.prob_history else 0
         mean_ps = np.mean([p['prob_short'] for p in self.prob_history]) if self.prob_history else 0
 
         return {
             'asset': self.name,
             'current_value': round(self.current_value, 2),
+            'mtm_value': round(mtm_value, 2),
             'total_return': round(total_return * 100, 2),
+            'mtm_return': round(mtm_return, 2),
             'drawdown': round(dd * 100, 2),
             'profit_factor': round(pf, 2),
             'win_rate': round(win_rate * 100, 2),
