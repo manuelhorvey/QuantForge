@@ -4,8 +4,12 @@ import numpy as np
 import xgboost as xgb
 import yfinance as yf
 import pickle, os, json, math, yaml
+import copy, time
+import pytz
 from datetime import datetime
 from labels.triple_barrier import apply_triple_barrier
+
+ET = pytz.timezone('US/Eastern')
 
 logger = logging.getLogger("quantforge.engine")
 
@@ -83,10 +87,25 @@ def norm_index(df):
     return df
 
 
+def safe_download(ticker, **kwargs):
+    for attempt in range(3):
+        try:
+            df = yf.download(ticker, **kwargs)
+            if not df.empty:
+                return df
+            logger.warning(f"Empty data returned for {ticker} (attempt {attempt+1}/3)")
+        except Exception as e:
+            logger.warning(f"Download failed for {ticker} (attempt {attempt+1}/3): {e}")
+        if attempt < 2:
+            time.sleep(5)
+    logger.error(f"All retries failed for {ticker}")
+    return pd.DataFrame()
+
+
 def fetch_live(ticker, min_days=250):
-    end = datetime.now()
+    end = datetime.now(tz=ET)
     start = (end - pd.Timedelta(days=min_days)).strftime('%Y-%m-%d')
-    df = yf.download(ticker, start=start, end=end.strftime('%Y-%m-%d'), auto_adjust=True, progress=False)
+    df = safe_download(ticker, start=start, end=end.strftime('%Y-%m-%d'), auto_adjust=True, progress=False)
     if df.empty:
         raise ValueError(f'No live data for {ticker}')
     df = flatten(df)
@@ -95,9 +114,9 @@ def fetch_live(ticker, min_days=250):
 
 
 def fetch_history(ticker, years=10):
-    end = datetime.now()
+    end = datetime.now(tz=ET)
     start = f'{end.year - years}-01-01'
-    df = yf.download(ticker, start=start, end=end.strftime('%Y-%m-%d'), auto_adjust=True, progress=False)
+    df = safe_download(ticker, start=start, end=end.strftime('%Y-%m-%d'), auto_adjust=True, progress=False)
     if df.empty:
         raise ValueError(f'No history for {ticker}')
     df = flatten(df)
@@ -126,7 +145,7 @@ class AssetEngine:
         self.signal_data = None
         self.peak_value = self.initial_capital
         self.current_value = self.initial_capital
-        self.start_time = datetime.now()
+        self.start_time = datetime.now(tz=ET)
         self.last_signal_date = None
         self.trades = []
         self.prob_history = []
@@ -226,7 +245,7 @@ class AssetEngine:
 
     def refresh_price(self):
         try:
-            df = yf.download(self.ticker, period='5d', auto_adjust=True, progress=False)
+            df = safe_download(self.ticker, period='5d', auto_adjust=True, progress=False)
             if not df.empty:
                 df = flatten(df)
                 self.current_price = float(df['close'].iloc[-1])
@@ -483,7 +502,7 @@ class AssetEngine:
         df.to_parquet(TRADE_JOURNAL_PATH)
 
     def _log_confidence_buckets(self):
-        bucket = {'asset': self.name, 'date': str(datetime.now().date())}
+        bucket = {'asset': self.name, 'date': str(datetime.now(tz=ET).date())}
         for p in self.prob_history[-20:]:
             conf = p['confidence']
             bucket.setdefault(f'count_{int(conf/10)*10}_{int(conf/10+1)*10}', 0)
@@ -509,7 +528,7 @@ class AssetEngine:
         drought_ok = True
         drought_days = hc.get('signal_drought', 30)
         if self.last_signal_date is not None:
-            days_since = (datetime.now().date() - pd.Timestamp(self.last_signal_date).date()).days
+            days_since = (datetime.now(tz=ET).date() - pd.Timestamp(self.last_signal_date).date()).days
             if days_since > drought_days:
                 reasons.append(f'Signal drought: {days_since}d > {drought_days}d')
                 drought_ok = False
@@ -537,7 +556,9 @@ def _build_paper_portfolio():
             ticker = spec.get('ticker', f'{name}')
             features = spec.get('features', [])
             alloc = spec.get('allocation', 0)
-            halt = dict(spec.get('halt', HALT))
+            user_halt = spec.get('halt', {})
+            halt = copy.deepcopy(HALT)
+            halt.update(user_halt)
             config = spec.get('config', {})
             pf[name] = {'ticker': ticker, 'features': features, 'alloc': alloc,
                         'halt': halt, 'config': config}
@@ -566,7 +587,7 @@ assert abs(_total_alloc - 1.0) < 0.01, f"Portfolio allocations sum to {_total_al
 class PaperTradingEngine:
     def __init__(self):
         self.assets = {}
-        self.start_date = datetime.now()
+        self.start_date = datetime.now(tz=ET)
         self.last_update = None
         for name, spec in PAPER_PORTFOLIO.items():
             self.assets[name] = AssetEngine(
@@ -591,7 +612,7 @@ class PaperTradingEngine:
                 results[name] = signal
             except Exception as e:
                 results[name] = {'asset': name, 'error': str(e)}
-        self.last_update = datetime.now()
+        self.last_update = datetime.now(tz=ET)
         return results
 
     def get_state(self):
@@ -608,7 +629,7 @@ class PaperTradingEngine:
         tv = sum(a.current_value for a in self.assets.values())
         tc = sum(a.initial_capital for a in self.assets.values())
         tr = (tv - tc) / tc * 100 if tc > 0 else 0
-        dr = (datetime.now() - self.start_date).days
+        dr = (datetime.now(tz=ET) - self.start_date).days
 
         return {
             'portfolio': {
