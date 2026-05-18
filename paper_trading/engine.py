@@ -449,20 +449,20 @@ class AssetEngine:
         total_return = (self.current_value - self.initial_capital) / self.initial_capital if self.initial_capital > 0 else 0
 
         monthly_pfs = []
-        if self.trades:
-            td = pd.DataFrame(self.trades)
-            td['month'] = pd.to_datetime(td['date']).dt.to_period('M')
+        if self.trade_log:
+            td = pd.DataFrame(self.trade_log)
+            td['month'] = pd.to_datetime(td['exit_date']).dt.to_period('M')
             for m, g in td.groupby('month'):
                 profits = g[g['pnl'] > 0]['pnl'].sum()
                 losses = abs(g[g['pnl'] < 0]['pnl'].sum())
                 monthly_pfs.append({'month': str(m), 'pf': profits / losses if losses > 0 else float('inf')})
         monthly_pf = monthly_pfs[-1]['pf'] if monthly_pfs else None
 
-        total_profits = sum(t['pnl'] for t in self.trades if t['pnl'] > 0)
-        total_losses = abs(sum(t['pnl'] for t in self.trades if t['pnl'] < 0))
+        total_profits = sum(t['pnl'] for t in self.trade_log if t['pnl'] > 0)
+        total_losses = abs(sum(t['pnl'] for t in self.trade_log if t['pnl'] < 0))
         pf = total_profits / total_losses if total_losses > 0 else (float('inf') if total_profits > 0 else 0)
 
-        win_rate = len([t for t in self.trades if t['pnl'] > 0]) / len(self.trades) if self.trades else 0
+        win_rate = len([t for t in self.trade_log if t['pnl'] > 0]) / len(self.trade_log) if self.trade_log else 0
         sc = {'BUY': 0, 'SELL': 0, 'FLAT': 0}
         for p in self.prob_history:
             sc[p['signal']] = sc.get(p['signal'], 0) + 1
@@ -495,7 +495,7 @@ class AssetEngine:
             'drawdown': round(dd * 100, 2),
             'profit_factor': round(pf, 2),
             'win_rate': round(win_rate * 100, 2),
-            'n_trades': len(self.trades),
+            'n_trades': len(self.trade_log),
             'n_signals': len(self.prob_history),
             'signal_distribution': sc,
             'mean_confidence': round(float(mean_conf), 2),
@@ -649,7 +649,7 @@ class PaperTradingEngine:
         open_positions = 0
         closed_trades = 0
         for a in self.assets.values():
-            closed_trades += len(a.trades)
+            closed_trades += len(a.trade_log)
             if a.position and a.current_price is not None:
                 open_positions += 1
                 pnl_pct = a._position_pnl(a.current_price)
