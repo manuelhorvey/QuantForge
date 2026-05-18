@@ -291,22 +291,21 @@ function cssClass(s){if(!s)return'flat';var u=String(s).toUpperCase();return u==
 function fd(d){return new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
 function ft(d){return new Date(d).toLocaleTimeString('en-US',{hour12:false})}
 
-function getSession(){
+function getSession(state){
+  var assets = state ? state.assets : (stateData ? stateData.assets : {});
   var now=new Date(),et=new Date(now.toLocaleString('en-US',{timeZone:'America/New_York'}));
   var day=et.getDay(),hour=et.getHours(),min=et.getMinutes(),t=hour*60+min;
   var fxOpen=t>=0&&t<1440;
   var sessions=[];
-  if(day===6){
-    sessions.push({name:'NZDJPY','open':false});sessions.push({name:'USDCAD','open':false});sessions.push({name:'CADJPY','open':false});sessions.push({name:'GC','open':false});sessions.push({name:'EURAUD','open':false});sessions.push({name:'BTC','open':true});
-  }else if(day===0){
-    sessions.push({name:'NZDJPY','open':t>=1020});sessions.push({name:'USDCAD','open':t>=1020});sessions.push({name:'CADJPY','open':t>=1020});sessions.push({name:'GC','open':t>=1020});sessions.push({name:'EURAUD','open':t>=1020});sessions.push({name:'BTC','open':true});
-  }else{
-    sessions.push({name:'NZDJPY','open':fxOpen});
-    sessions.push({name:'USDCAD','open':fxOpen});
-    sessions.push({name:'CADJPY','open':fxOpen});
-    sessions.push({name:'GC','open':fxOpen});
-    sessions.push({name:'EURAUD','open':fxOpen});
-    sessions.push({name:'BTC','open':true});
+  for(var name in assets){
+    var isCrypto = name.indexOf('BTC') !== -1 || name.indexOf('ETH') !== -1;
+    if(day===6){
+      sessions.push({name:name,'open':isCrypto});
+    }else if(day===0){
+      sessions.push({name:name,'open':isCrypto?true:t>=1020});
+    }else{
+      sessions.push({name:name,'open':isCrypto?true:fxOpen});
+    }
   }
   return sessions;
 }
@@ -405,7 +404,7 @@ function render(state){
     '<div class="halt-card pass"><div class="halt-icon">&#9650;</div><div class="halt-label">Prob Drift</div><div class="halt-value pass">&lt; '+fmt(hc.prob_drift*100,0)+'%</div></div>';
 
   var today=new Date(),gate=new Date(today);gate.setMonth(gate.getMonth()+6);
-  var sessionInfo=getSession();
+  var sessionInfo=getSession(state);
   var openList=sessionInfo.filter(function(s){return s.open}).map(function(s){return s.name}).join(', ');
   document.getElementById('footerText').innerHTML=
     '<strong>Next retrain:</strong> '+fd(new Date(today.getFullYear()+1,0,1))+
@@ -420,7 +419,7 @@ function render(state){
   document.getElementById('statusText').textContent='Live Market Feed Active';
   document.getElementById('statusText').className='status-text';
 
-  var sessionInfo=getSession();
+  var sessionInfo=getSession(state);
   var openList=sessionInfo.filter(function(s){return s.open}).map(function(s){return s.name}).join(', ');
   var closedList=sessionInfo.filter(function(s){return !s.open}).map(function(s){return s.name}).join(', ');
   var badgeEl=document.getElementById('sessionBadge');
