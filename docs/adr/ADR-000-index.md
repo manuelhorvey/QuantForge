@@ -27,6 +27,9 @@ Architecture Decision Records for the QuantForge quantitative trading framework.
 | 012 | [Three-Asset Portfolio — XLF, BTC, NZDJPY](ADR-012-three-asset-portfolio.md) | Accepted | 2024-Q3 |
 | 013 | [Bootstrap Validation as Deployment Gate](ADR-013-bootstrap-validation.md) | Accepted | 2024-Q3 |
 | 014 | [Zero Manual Overrides Policy During Paper Trading](ADR-014-zero-overrides-policy.md) | Accepted | 2024-Q4 |
+| 015 | [Asset-Specific Label Horizons (tb20 vs fwd60)](ADR-015-asset-specific-label-horizons.md) | Accepted | 2025-Q1 |
+| 016 | [GC=F Gold Validation](ADR-016-gold-validation.md) | Accepted | 2025-Q2 |
+| 017 | [Inference Path Lookahead Investigation](ADR-017-inference-lookahead-investigation.md) | Accepted | 2026-05 |
 
 ## By Topic
 

@@ -114,7 +114,7 @@ def run_walk_forward():
         interact.index.tz_localize(None)).intersection(
         labeled.index.tz_localize(None))
     common_no_tz = feat_idx.intersection(macro.index)
-    common_tz = common_no_tz.tz_localize('Europe/London')
+    common_tz = common_no_tz.tz_localize('US/Eastern')
 
     X = pd.concat([
         base.loc[common_tz].drop('label', axis=1),

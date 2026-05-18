@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import xgboost as xgb
 import yfinance as yf
-import pickle, os, json, math, yaml
+import pickle, os, json, math, yaml, fcntl
 import copy, time
 import pytz
 from datetime import datetime
@@ -695,8 +695,12 @@ class PaperTradingEngine:
             'start_time': self.start_date.isoformat(),
         }
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w') as f:
+        tmp_path = path + '.tmp'
+        with open(tmp_path, 'w') as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
             json.dump(self._sanitize(state), f, indent=2, default=str)
+            fcntl.flock(f, fcntl.LOCK_UN)
+        os.replace(tmp_path, path)
 
         self._append_equity_history(state)
         return state

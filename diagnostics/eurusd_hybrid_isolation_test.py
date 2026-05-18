@@ -93,7 +93,7 @@ def run_isolation_test():
     common_no_tz = feat_idx.intersection(macro_idx_no_tz)
 
     # Build X with tz-aware index
-    common_tz = common_no_tz.tz_localize('Europe/London')
+    common_tz = common_no_tz.tz_localize('US/Eastern')
     X = pd.concat([
         base.loc[common_tz].drop('label', axis=1),
         regime_meta.loc[common_tz][['P_trend', 'P_range', 'P_volatile', 'regime_confidence']],
