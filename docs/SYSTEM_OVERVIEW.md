@@ -32,16 +32,18 @@ Raw Data Layer                  Feature Layer                Model Layer
     │  GREEN (1.0) ←→ YELLOW (0.5) ←→ RED (0.0)              │
     │  Hysteresis + temporal smoothing + regime lock          │
     └─────────────────────────┬───────────────────────────────┘
-                              │
-                              ▼
-    ┌─────────────────────────────────────────────────────────┐
-    │              Paper Trading Engine                        │
-    │  3x AssetEngine (XLF 40%, BTC 35%, NZDJPY 25%)          │
-    │  ├─ Live inference every 30 min                          │
-    │  ├─ Vol-scaled position sizing                          │
-    │  ├─ SL/TP management                                    │
-    │  └─ PnL tracking (state.json)                           │
-    └─────────────────────────┬───────────────────────────────┘
+              │
+               ▼
+     ┌─────────────────────────────────────────────────────────┐
+     │              Paper Trading Engine                        │
+     │  6x AssetEngine (6 assets, 5 driver clusters)            │
+     │  ├─ BTC tb20    GC=F fwd60   EURAUD tb20                │
+     │  ├─ NZDJPY tb20 CADJPY fwd60 USDCAD tb20                │
+     │  ├─ Live inference every 30 min                          │
+     │  ├─ Vol-scaled position sizing                          │
+     │  ├─ SL/TP management                                    │
+     │  └─ PnL tracking (state.json)                           │
+     └─────────────────────────┬───────────────────────────────┘
                               │
                               ▼
     ┌─────────────────────────────────────────────────────────┐
@@ -130,7 +132,8 @@ Features are computed independently per module and concatenated by common index.
 - Updates live state (history.parquet, state.json)
 
 **PaperTradingEngine** (orchestrator)
-- Manages 3 AssetEngine instances (XLF, BTC, NZDJPY)
+- Manages 6 AssetEngine instances (BTC, GC=F, EURAUD, NZDJPY, CADJPY, USDCAD)
+- Two label architectures: tb20 (triple-barrier) and fwd60 (60-day forward return)
 - Collects per-asset state into portfolio view
 - Runs every 30 minutes (configurable)
 - Exposes state via JSON for dashboard

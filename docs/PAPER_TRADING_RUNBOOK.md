@@ -20,11 +20,14 @@ Operational procedures for the paper trading system. This document is for the pe
 
 ### Assets
 
-| Asset | Weight | Ticker | Drawdown Limit | Vol Scaling |
-|-------|--------|--------|----------------|-------------|
-| XLF | 40% | XLF | -8% | No |
-| BTC-USD | 35% | BTC-USD | -15% | Yes (target 30%) |
-| NZDJPY=X | 25% | NZDJPY=X | -6% | No |
+| Asset | Weight | Ticker | Drawdown Limit | Vol Scaling | Label |
+|-------|--------|--------|----------------|-------------|-------|
+| BTC | 20% | BTC-USD | -15% | Yes (target 30%) | tb20 |
+| GC=F | 20% | GC=F | -8% | No | fwd60 |
+| EURAUD | 22% | EURAUD=X | -8% | No | tb20 |
+| NZDJPY | 15% | NZDJPY=X | -6% | No | tb20 |
+| CADJPY | 13% | CADJPY=X | -8% | No | fwd60 |
+| USDCAD | 10% | USDCAD=X | -8% | No | tb20 |
 
 ### Halt Parameters (global defaults, overridable per asset)
 
@@ -58,7 +61,7 @@ The script:
 **What to verify on the dashboard:**
 
 - Portfolio total value and daily return are updating
-- All three assets show a signal (BUY/SELL/FLAT) with confidence
+- All six assets show a signal (BUY/SELL/FLAT) with confidence
 - Current price is within ~0.5% of market price
 - No asset is in halt (check asset cards for RED status)
 - Drawdown % is not approaching the per-asset limit
@@ -67,9 +70,12 @@ The script:
 
 After startup, verify log output shows:
 ```
-XLF: BUY  conf=XX%  @ $XX.XX
-BTC: SELL conf=XX%  @ $XX.XX
+BTC: BUY  conf=XX%  @ $XX.XX
+GC=F: BUY conf=XX%  @ $XX.XX
+EURAUD: SELL conf=XX%  @ $XX.XX
 NZDJPY: BUY conf=XX%  @ $XX.XX
+CADJPY: FLAT conf=XX% @ $XX.XX
+USDCAD: BUY conf=XX%  @ $XX.XX
 Portfolio: $XXXXX (XX%)
 ```
 
@@ -117,11 +123,14 @@ for name, a in s['assets'].items():
 
 **Expectations:**
 
-| Asset | BUY/SELL Ratio | Mean Confidence |
-|-------|----------------|-----------------|
-| XLF | ~1:1 | 65-85% |
-| BTC | ~1:1 | 60-80% |
-| NZDJPY | ~1:1 | 55-75% |
+| Asset | Label | BUY/SELL Ratio | Mean Confidence |
+|-------|-------|----------------|-----------------|
+| BTC | tb20 | ~1:1 | 60-80% |
+| GC=F | fwd60 | ~1:1 | 55-75% |
+| EURAUD | tb20 | ~1:1 | 55-75% |
+| NZDJPY | tb20 | ~1:1 | 55-75% |
+| CADJPY | fwd60 | ~1:1 | 55-75% |
+| USDCAD | tb20 | ~1:1 | 55-75% |
 
 **If ratio exceeds 3:1 in either direction**, investigate macro context. A sustained imbalance may indicate:
 - A structural regime shift (e.g., persistent tightening)
@@ -355,10 +364,10 @@ Items to build after paper trading confirms the system works.
 
 | Item | Description | Depends On |
 |------|-------------|------------|
-| GC=F integration | Inflation breakevens data, walk-forward with 20yr history | COT pipeline |
+| AUDJPY integration | Deferred until post-November (r=0.87 with NZDJPY) | Portfolio evaluation |
 | Weekly timeframe models | Lower frequency for macro-only signals | Feature engineering |
 | Meta-labeling filter | Second-stage trade filter to reduce trade count | More training data |
-| Sector rotation extension | Apply driver atlas to other equity sectors | XLF paper trading results |
+| Sector rotation extension | Apply driver atlas to other equity sectors | Paper trading results |
 | Regime classifier V2 | Reduce volatility gate false positives | More regime diversity in data |
 
 ### P2 — Future Research
@@ -381,20 +390,25 @@ Project Root/
 │   └── paper_trading.yaml        # Asset config, halt conditions, weights
 ├── data/
 │   ├── live/
-│   │   ├── state.json            # Current portfolio and asset state
-│   │   ├── history.parquet       # Full signal history
-│   │   └── daily_log.csv         # Daily PnL summary (append)
+│   │   └── state.json            # Current portfolio and asset state
 │   └── processed/
 │       ├── macro_factors.parquet # FRED macro data
-│       └── training_features.parquet  # Feature snapshot at last retrain
+│       └── walkforward_summary.csv  # 30-asset walk-forward ranking
 ├── paper_trading/
 │   ├── engine.py                 # AssetEngine, PaperTradingEngine
-│   ├── monitor.py                # Main loop, dashboard server
-│   ├── serve.py                  # HTTP server for dashboard
+│   ├── serve.py                  # HTTP server + dashboard
 │   └── models/
-│       ├── XLF_model.pkl         # Serialized XGBoost models
 │       ├── BTC_model.pkl
-│       └── NZDJPY_model.pkl
+│       ├── GC_model.pkl
+│       ├── EURAUD_model.pkl
+│       ├── NZDJPY_model.pkl
+│       ├── CADJPY_model.pkl
+│       └── USDCAD_model.pkl
+├── scripts/
+│   ├── train_all_assets.py       # 30-asset training pipeline
+│   ├── walk_forward_all.py       # Walk-forward for all assets
+│   ├── cadjpy_walk_forward.py    # CADJPY-specific fwd60 validation
+│   └── gc_walk_forward.py        # GC=F-specific fwd60 validation
 ├── risk/
 │   └── position_sizing.py        # Volatility-scaled sizing
 ├── monitoring/
@@ -407,10 +421,10 @@ Project Root/
 | Symptom | Likely Cause | Check |
 |---------|-------------|-------|
 | Dashboard not loading | Port 5000 in use | `fuser 5000/tcp` |
-| Stale prices | yfinance rate limited | `python -c "import yfinance as yf; d=yf.download('XLF',period='1d'); print(d)"` |
+| Stale prices | yfinance rate limited | `python -c "import yfinance as yf; d=yf.download('BTC-USD',period='1d'); print(d)"` |
 | Model pickle missing | First run or retrain failed | `ls -la paper_trading/models/` |
 | All assets showing FLAT with low conf | Macro data stale | Check `data/processed/macro_factors.parquet` modification date |
 | Portfolio value not changing | Process not running | `ps aux | grep monitor.py` |
-| XLF showing short bias during rally | yield_slope feature added back | Check features in `configs/paper_trading.yaml` |
 | BTC drawdown > 15% | Normal for BTC (limit is -15%) | Let it run unless RED state persists > 5 days |
 | NZDJPY entering RED state | VIX spike or yield spread inversion | Check VIX level and US-JP 10y spread |
+| GC=F showing flat/neutral bias | Real yields not updating on weekends | Normal — gold macro features are daily |

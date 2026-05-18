@@ -210,8 +210,8 @@ export PYTHONPATH=$PYTHONPATH:.
 ## Quick Start
 
 ```bash
-# Run walk-forward research
-python equity/walk_forward_xlf.py
+# Run 30-asset walk-forward research
+python scripts/walk_forward_all.py
 
 # Start live paper trading + dashboard
 ./monitor_all
@@ -221,25 +221,26 @@ python equity/walk_forward_xlf.py
 
 ## Roadmap
 
-### Near Term (Q3 2026)
+### Near Term (H2 2026)
 
-- Full broker integration (Alpaca / Interactive Brokers)
+- Broker integration (Alpaca / Interactive Brokers)
 - Realistic slippage & spread modeling
 - HRP / risk-parity portfolio allocator
 - Enhanced drift detection & auto-retraining triggers
+- AUDJPY re-evaluation post-November
 
 ### Medium Term
 
 - Real-time WebSocket dashboard
 - Multi-timeframe signal fusion
-- Expanded asset universe
 - Meta-labeling layer
+- EURUSD/GBPUSD with COT data pipeline
 
 ---
 
 ## Research backlog
 
-Assets pending validation: AUDJPY (deferred post-November — r=0.87 with NZDJPY), GBPUSD (needs COT data), ETH-USD (momentum_crypto cluster), XLU/XLRE (yield_equity cluster).
+Assets pending validation: AUDJPY (deferred post-November — r=0.87 with NZDJPY), ETH-USD (momentum_crypto cluster), XLU/XLRE (yield_equity cluster).
 
 Blocked pending data acquisition: EURUSD, GBPUSD (need CFTC COT weekly positioning data).
 
@@ -248,11 +249,10 @@ Blocked pending data acquisition: EURUSD, GBPUSD (need CFTC COT weekly positioni
 ## Limitations
 
 - Paper trading only (no real capital at risk)
-- Limited number of fully validated assets
 - Weekend data staleness for equities/FX
 - No live execution or order management yet
-- EURUSD and 27 other FX pairs untradeable with current feature set — requires COT/positioning data
-- Model only valid when PSI confirms distribution stability; 2022–2025 produced RED validity on EURUSD system
+- EURUSD and GBPUSD blocked — requires COT positioning data
+- Model validity depends on PSI distribution stability
 
 ---
 

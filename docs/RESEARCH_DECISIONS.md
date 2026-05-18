@@ -72,7 +72,7 @@ Compares feature distributions between training and inference periods. Currently
 
 Evaluates 28 FX pairs and 10 equity sectors against a standard feature template to identify which driver clusters produce signal.
 
-**Key finding:** Five driver clusters identified: yield_equity (XLF), momentum_crypto (BTC), carry_fx (NZDJPY), usd_macro (EURUSD — blocked), real_asset (GC=F — blocked). Assets within the same cluster share feature engineering patterns. NZDJPY improved from 0/7 to 5/7 positive windows after switching from generic to cluster-specific features.
+**Key finding:** Six driver clusters identified: momentum_crypto (BTC), carry_fx (NZDJPY), oil_carry (CADJPY), usd_macro (USDCAD), real_asset (GC=F), eur_cross (EURAUD). Assets within the same cluster share feature engineering patterns. NZDJPY improved from 0/7 to 5/7 positive windows after switching from generic to cluster-specific features. GC=F was unblocked via fwd60 label architecture (see ADR-016).
 
 ### Signal Correlation Analysis
 
@@ -104,9 +104,9 @@ The 32-feature model achieved max confidence 0.54 with 4:1 long bias (ADR-005). 
 
 ### Near-Zero Correlation Portfolio
 
-Three assets from independent driver clusters (yield_equity, momentum_crypto, carry_fx) produce max pairwise PnL correlation 0.055. Portfolio Sharpe estimate: 0.69 minimum vs 0.40 for XLF alone. Simultaneous failure: 9/251 days (3.6%).
+Six assets from independent driver clusters (momentum_crypto, real_asset, eur_cross, carry_fx, oil_carry, usd_macro) produce max pairwise signal |r| < 0.40, with most pairs < 0.20. True diversification across 5 distinct macro risk factors.
 
-**Why it works:** True diversification requires independent risk factors, not just different tickers. XLF, BTC, and NZDJPY respond to different macro drivers and fail under different conditions. The portfolio benefit exists because the assets are economically independent, not just statistically uncorrelated.
+**Why it works:** True diversification requires independent risk factors, not just different tickers. BTC responds to liquidity conditions, GC=F to real yields and inflation, EURAUD to EUR/AUD rate differentials, NZDJPY to carry trade dynamics, CADJPY to oil and Canada-Japan spreads, USDCAD to USD momentum. The portfolio benefit exists because the assets are economically independent, not just statistically uncorrelated.
 
 ### Expanding Window With Recency Weighting
 
@@ -126,13 +126,13 @@ Expanding window outperforms rolling on every metric. Recency weighting (linear 
 
 **Estimated effort:** 1-2 weeks for data pipeline + 2-3 weeks for validation.
 
-### GC=F (Gold Futures) — Blocked Pending Inflation Data and Regime Diversity
+### GC=F (Gold Futures) — RESOLVED via fwd60 Label Architecture
 
-**Blocking issue:** Two problems. First, gold's primary drivers are real yields and inflation expectations — we have the real yield data but not inflation breakevens (TIPS breakeven: 10y Treasury yield minus 10y TIPS yield). Second, gold's training data lacks regime diversity — the 2016-2024 period is mostly a gold bull market, producing the same L/S ratio problem as SPY (11.00:1).
+**Resolution:** GC=F was unblocked by switching from tb20 (triple-barrier) to fwd60 (60-day forward return classification). The fwd60 label captures gold's macro-trend behavior better than the mean-reversion-oriented tb20. Combined with real yield delta, breakeven delta, DXY momentum, and gold momentum features, the model passed 6/6 walk-forward windows with avg Sharpe 1.212 and cumulative +96.3%. See [ADR-016](../docs/adr/ADR-016-gold-validation.md).
 
-**Data needed:** a) St. Louis FRED series T10YIE (10-year breakeven inflation rate), b) longer history for gold (ideally 2000-present to include the 2013-2015 bear market), c) macro features specific to real assets (real rate regime, inflation regime, central bank gold reserve data).
+**Data used:** FRED series T10YIE (breakeven inflation) is available and included as `breakeven_delta_63`. Longer history and regime diversity turned out to be unnecessary — fwd60's wider label horizon (60 vs 20 bars) provides sufficient signal even in the bull-biased 2016-2024 period.
 
-**Estimated effort:** 1 week for data + 2 weeks for validation. The regime diversity problem may require accepting a longer walk-forward with more frequent retraining.
+**Lesson:** Some assets need a different label architecture, not more data. GC=F was not a data problem — it was a labeling problem.
 
 ### Interactive Brokers / Alpaca Integration — In Progress
 
@@ -144,8 +144,8 @@ Expanding window outperforms rolling on every metric. Recency weighting (linear 
 
 ### Risk-Parity Portfolio Allocation — In Progress
 
-**Blocking issue:** The portfolio/ module has HRP and risk parity implementations marked "in progress." Current allocation uses fixed weights (40/35/25).
+**Blocking issue:** The portfolio/ module has HRP and risk parity implementations marked "in progress." Current allocation uses fixed weights across 6 assets (BTC 20%, GC=F 20%, EURAUD 22%, NZDJPY 15%, CADJPY 13%, USDCAD 10%).
 
-**Data needed:** Validated correlation and volatility models for the three-asset portfolio. The current 0.055 max correlation may be period-specific and needs ongoing monitoring. Requires: a) rolling correlation estimator, b) volatility forecasting, c) rebalancing schedule, d) backtest against fixed-weight baseline.
+**Data needed:** Validated correlation and volatility models for the six-asset portfolio. The current max |r| < 0.40 may be period-specific and needs ongoing monitoring. Requires: a) rolling correlation estimator, b) volatility forecasting, c) rebalancing schedule, d) backtest against fixed-weight baseline.
 
 **Estimated effort:** 2-3 weeks for implementation + 2 weeks for validation.

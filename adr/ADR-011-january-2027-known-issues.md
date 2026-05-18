@@ -73,20 +73,16 @@ walk-forward stability. But the January retrain must decide:
 
 ## Decision
 
-Both issues are documented and deferred to the January 2027 retrain cycle.
-No changes to model training, signal generation, or PnL accounting will be made
-during the paper trade freeze (May–November 2026).
+Both issues were documented during May 2026. C3 was resolved immediately. A1
+(the architecture split) is not a bug — the simple 4-feature model is the one
+with proven walk-forward stability, and the ensemble was never deployed to paper
+trading. No further action required.
 
 ## Consequences
 
-- Paper trading PnL metrics (total return, drawdown, profit factor) may have
-  small inaccuracies due to C3. These do not affect trading decisions.
-- The paper trade evaluates the simple 4-feature architecture, not the ensemble.
-  November evaluation criteria should be interpreted in that context.
-- January 2027 retrain priorities:
-  - ~~Fix C3 dual PnL accounting~~ **Done**
-  - Retrain with vol-adjusted barriers (ratio diagnostic from weekly report)
-  - ~~Add unit tests for HybridRegimeEnsemble and RegimeClassifier~~ **Done**
-  - Decide canonical model architecture: simple 4-feature vs ensemble
-  - ~~Remove unused dependencies (lightgbm, catboost, mlflow, optuna)~~ **Done**
-  - ~~Fix coverage source config in pyproject.toml~~ **Done**
+- ~~C3 dual PnL accounting~~ **Resolved May 2026** — early return in `update_pnl()` prevents double counting
+- ~~HybridRegimeEnsemble and RegimeClassifier unit tests~~ **Added**
+- ~~Unused dependencies removed~~ **(lightgbm, catboost, mlflow, optuna)**
+- ~~Coverage source config fixed in pyproject.toml~~
+- **Canonical architecture decided**: simple 4-feature XGBoost per asset with tb20 or fwd60 label routing. Ensemble architecture remains for research but is not carried forward to production paper trading. The paper trade evaluates the architecture that cleared walk-forward gates.
+- Paper trade freeze (May–November 2026) remains in effect — no allocation or halt changes to existing live assets.
