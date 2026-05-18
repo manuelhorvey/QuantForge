@@ -627,6 +627,15 @@ class PaperTradingEngine:
         self.assets = {}
         self.start_date = datetime.now(tz=ET)
         self.last_update = None
+        if os.path.exists(STATE_PATH):
+            try:
+                with open(STATE_PATH, 'r') as f:
+                    saved = json.load(f)
+                eng_status = saved.get('engine_status', {})
+                if eng_status.get('start_time'):
+                    self.start_date = datetime.fromisoformat(eng_status['start_time'])
+            except Exception:
+                pass
         for name, spec in PAPER_PORTFOLIO.items():
             self.assets[name] = AssetEngine(
                 spec['ticker'], name, spec['features'], spec['alloc'],

@@ -85,7 +85,7 @@ function render(state){
 
   var openPos=p.open_positions||0,closedPos=p.closed_trades||0;
   var realizedPct=p.realized_return!=null?p.realized_return:0;
-  var runtimeStr=days>0?days+' days':(p.runtime_hours?Math.floor(p.runtime_hours)+'h '+Math.round((p.runtime_hours%1)*60)+'m':'0m');
+  var runtimeStr=days>0?days+' days':(p.runtime_hours!=null?Math.floor(p.runtime_hours)+'h '+Math.round((p.runtime_hours%1)*60)+'m':'0m');
 
   document.getElementById('portfolioRow').innerHTML=
     '<div class="portfolio-card accent"><div class="portfolio-label">Portfolio Value</div><div class="portfolio-value" style="color:var(--accent)">$'+fmt(totalValue,2)+'</div><div class="portfolio-sub">Capital: $'+fmt(capital,2)+'</div></div>'+
