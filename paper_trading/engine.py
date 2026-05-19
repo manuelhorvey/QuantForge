@@ -8,27 +8,34 @@ import copy, time
 import pytz
 from datetime import datetime
 from labels.triple_barrier import apply_triple_barrier
+from paper_trading.state_store import StateStore, EngineSnapshot, _SKIP_JOURNAL, sanitize
+from paper_trading.decision import TradeDecision, PositionIntent
+from paper_trading.position_manager import PositionManager
+from monitoring.validity_state_machine import ValidityStateMachine as _ValidityStateMachine, ValidityState as _ValidityState
+from enum import Enum
+
+
+class ExecutionState(Enum):
+    ACTIVE = "ACTIVE"
+    PAUSED = "PAUSED"
+    HALTED = "HALTED"
 
 ET = pytz.timezone('US/Eastern')
 
 logger = logging.getLogger("quantforge.engine")
 
-_SKIP_JOURNAL = object()
-
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MODEL_DIR = os.path.join(os.path.dirname(__file__), 'models')
-STATE_PATH = os.path.join(BASE, 'data', 'live', 'state.json')
-TRADE_JOURNAL_PATH = os.path.join(BASE, 'data', 'live', 'trade_journal.parquet')
-CONFIDENCE_BUCKET_PATH = os.path.join(BASE, 'data', 'live', 'confidence_buckets.parquet')
-EQUITY_HISTORY_PATH = os.path.join(BASE, 'data', 'live', 'equity_history.json')
+_STORE = StateStore(BASE)
+STATE_PATH = _STORE.state_path
+TRADE_JOURNAL_PATH = _STORE.trade_journal_path
+CONFIDENCE_BUCKET_PATH = _STORE.confidence_bucket_path
+EQUITY_HISTORY_PATH = _STORE.equity_history_path
+CACHE_DIR = _STORE.cache_dir
 LOG_PATH = os.path.join(BASE, 'data', 'live', 'engine.log')
-CACHE_DIR = os.path.join(BASE, 'data', 'live', 'cache')
+MODEL_DIR = os.path.join(os.path.dirname(__file__), 'models')
 CONFIG_PATH = os.path.join(BASE, 'configs', 'paper_trading.yaml')
 
-os.makedirs(CACHE_DIR, exist_ok=True)
-
 os.makedirs(MODEL_DIR, exist_ok=True)
-os.makedirs(os.path.dirname(STATE_PATH), exist_ok=True)
 
 
 def _load_config():
@@ -95,8 +102,7 @@ def norm_index(df):
 
 
 def _cache_path(ticker):
-    safe_name = ticker.replace('=', '_').replace('-', '_')
-    return os.path.join(CACHE_DIR, f'{safe_name}.parquet')
+    return _STORE.cache_path(ticker)
 
 
 def safe_download(ticker, **kwargs):
@@ -105,9 +111,7 @@ def safe_download(ticker, **kwargs):
         try:
             df = yf.download(ticker, **kwargs)
             if not df.empty:
-                path = _cache_path(ticker)
-                os.makedirs(os.path.dirname(path), exist_ok=True)
-                df.to_parquet(path)
+                _STORE.save_cache(ticker, df)
                 return df
             logger.warning(f"{ticker} empty response attempt {attempt}/3")
         except Exception as e:
@@ -115,15 +119,10 @@ def safe_download(ticker, **kwargs):
         if attempt < len(delays):
             time.sleep(delay)
     logger.error(f"{ticker} failed after 3 attempts — using cached data")
-    path = _cache_path(ticker)
-    if os.path.exists(path):
-        try:
-            df = pd.read_parquet(path)
-            if not df.empty:
-                logger.info(f"{ticker} using cached data from {path}")
-                return df
-        except Exception as e:
-            logger.warning(f"{ticker} cache read error: {e}")
+    df = _STORE.load_cache(ticker)
+    if df is not None:
+        logger.info(f"{ticker} using cached data from {_STORE.cache_path(ticker)}")
+        return df
     logger.error(f"{ticker} no cached data available")
     return pd.DataFrame()
 
@@ -158,7 +157,7 @@ def fetch_ref(ticker):
 
 
 class AssetEngine:
-    def __init__(self, ticker, name, features, allocation, halt_config=None, config=None, expected_prob_conf=0.45, journal_path=None):
+    def __init__(self, ticker, name, features, allocation, halt_config=None, config=None, expected_prob_conf=0.45, state_store=None, journal_path=None):
         self.ticker = ticker
         self.name = name
         self.features = features
@@ -180,10 +179,14 @@ class AssetEngine:
         self.position = None
         self.trade_log = []
         self.current_price = None
-        if journal_path is _SKIP_JOURNAL:
-            self.journal_path = None
+        self.pos_mgr = PositionManager(self.initial_capital, CONFIG['position_size'])
+        self.validity_sm = _ValidityStateMachine()
+        if state_store is not None:
+            self.state_store = state_store
+        elif journal_path is _SKIP_JOURNAL:
+            self.state_store = None
         else:
-            self.journal_path = journal_path or TRADE_JOURNAL_PATH
+            self.state_store = _STORE
 
     def _build_features(self, df, ref, macro):
         if self.name == 'CADJPY' or self.name == 'GC':
@@ -252,37 +255,22 @@ class AssetEngine:
         if pd.isna(vol) or pd.isna(entry_price) or entry_price == 0:
             logger.error('%s: invalid entry_price=%s or vol=%s', self.name, entry_price, vol)
             return
-        if side == 'long':
-            sl = entry_price * (1 - vol * 2)
-            tp = entry_price * (1 + vol * 2)
-        else:
-            sl = entry_price * (1 + vol * 2)
-            tp = entry_price * (1 - vol * 2)
+        intent = PositionIntent.from_price_and_vol(side, entry_price, entry_date, vol)
+        self.pos_mgr.open(intent)
         self.position = {
-            'side': side, 'entry': entry_price,
-            'sl': sl, 'tp': tp,
-            'entry_date': entry_date,
-            'vol': vol,
+            'side': intent.side, 'entry': intent.entry_price,
+            'sl': intent.stop_loss, 'tp': intent.take_profit,
+            'entry_date': intent.entry_date, 'vol': intent.vol,
         }
 
     def _close_position(self, exit_price, exit_date, reason):
-        if self.position is None:
+        trade = self.pos_mgr.close(exit_price, exit_date, reason)
+        if trade is None:
             return
-        side = self.position['side']
-        entry = self.position['entry']
-        if pd.isna(entry) or pd.isna(exit_price) or entry == 0 or exit_price == 0:
-            logger.error('%s: invalid close entry=%s exit=%s', self.name, entry, exit_price)
-            return
-        ret = (exit_price / entry - 1) if side == 'long' else (entry / exit_price - 1)
-        pnl = self.current_value * ret * CONFIG['position_size']
-        trade = {
-            'asset': self.name, 'side': side, 'entry': entry, 'exit': exit_price,
-            'entry_date': self.position['entry_date'], 'exit_date': exit_date,
-            'return': ret, 'pnl': pnl, 'reason': reason,
-        }
-        self.trade_log.append(trade)
-        self.current_value += pnl
+        trade['asset'] = self.name
         self.position = None
+        self.current_value = self.pos_mgr.current_value
+        self.trade_log = list(self.pos_mgr.trade_log)
         self._save_trade_journal(trade)
 
     def refresh_price(self):
@@ -332,6 +320,10 @@ class AssetEngine:
             pickle.dump(model, f)
 
     def generate_signal(self, threshold=0.45):
+        return self._generate_and_apply(threshold)
+
+    def _generate_and_apply(self, threshold=0.45):
+        self._ensure_position_synced()
         if not self._trained:
             self.train()
 
@@ -377,57 +369,78 @@ class AssetEngine:
         confidence = max(latest['prob_long'], latest['prob_short'])
         confidence_pct = round(float(confidence * 100), 2)
 
-        # Position management: open/close based on signal vs current position
-        today = str(latest.name.date())
-        current_side = self.position['side'] if self.position else None
-        new_side = 'long' if signal_type == 'BUY' else ('short' if signal_type == 'SELL' else None)
+        decision = TradeDecision(
+            asset=self.name,
+            signal=signal_type,
+            label=int(latest['signal']),
+            confidence=confidence_pct,
+            prob_long=round(float(latest['prob_long']), 4),
+            prob_short=round(float(latest['prob_short']), 4),
+            prob_neutral=round(float(latest['prob_neutral']), 4),
+            close_price=round(float(latest['close']), 4),
+            timestamp=str(latest.name.date()),
+            position_size=float(pos_size),
+        )
+
+        self._apply_decision(decision, df)
+        return self._decision_to_dict(decision)
+
+    def _apply_decision(self, decision: TradeDecision, df):
+        today = decision.timestamp
+        current_side = self.pos_mgr.current_side()
+        new_side = 'long' if decision.signal == 'BUY' else ('short' if decision.signal == 'SELL' else None)
 
         if new_side != current_side:
-            if self.position:
-                self._close_position(float(latest['close']), today, 'signal_flip')
+            if self.pos_mgr.has_position():
+                self._close_position(decision.close_price, today, 'signal_flip')
             if new_side:
-                self._open_position(new_side, float(latest['close']), today, df)
+                self._open_position(new_side, decision.close_price, today, df)
 
         self.prob_history.append({
             'date': today,
-            'prob_long': round(float(latest['prob_long'] * 100), 2),
-            'prob_short': round(float(latest['prob_short'] * 100), 2),
-            'signal': signal_type,
-            'confidence': confidence_pct,
-            'close_price': round(float(latest['close']), 4),
+            'prob_long': round(decision.prob_long * 100, 2),
+            'prob_short': round(decision.prob_short * 100, 2),
+            'signal': decision.signal,
+            'confidence': decision.confidence,
+            'close_price': decision.close_price,
         })
         self._log_confidence_buckets()
 
-        entry = self.position['entry'] if self.position else None
-        sl = self.position['sl'] if self.position else None
-        tp = self.position['tp'] if self.position else None
-        pos_side = self.position['side'] if self.position else None
-
+    def _decision_to_dict(self, decision: TradeDecision):
+        pos = self.pos_mgr.position
         return {
             'asset': self.name,
-            'signal': signal_type,
-            'confidence': confidence_pct,
-            'close_price': round(float(latest['close']), 4),
-            'date': today,
-            'label': int(latest['signal']),
+            'signal': decision.signal,
+            'confidence': decision.confidence,
+            'close_price': decision.close_price,
+            'date': decision.timestamp,
+            'label': decision.label,
             'position': {
-                'side': pos_side,
-                'entry': round(entry, 4) if entry else None,
-                'sl': round(sl, 4) if sl else None,
-                'tp': round(tp, 4) if tp else None,
-                'current_pnl': round(self._position_pnl(float(latest['close'])), 4) if self.position else None,
-            } if self.position else None,
+                'side': pos.side if pos else None,
+                'entry': round(pos.entry_price, 4) if pos else None,
+                'sl': round(pos.stop_loss, 4) if pos else None,
+                'tp': round(pos.take_profit, 4) if pos else None,
+                'current_pnl': round(self._position_pnl(decision.close_price), 4) if pos else None,
+            } if pos else None,
         }
 
     def _position_pnl(self, current_price):
-        if self.position is None:
-            return 0.0
-        if self.position['side'] == 'long':
-            return (current_price / self.position['entry'] - 1) * 100
-        else:
-            return (self.position['entry'] / current_price - 1) * 100
+        return self.pos_mgr.position_pnl(current_price)
+
+    def _ensure_position_synced(self):
+        if self.position is not None and not self.pos_mgr.has_position():
+            intent = PositionIntent(
+                side=self.position['side'],
+                entry_price=self.position['entry'],
+                entry_date=self.position.get('entry_date', ''),
+                stop_loss=self.position['sl'],
+                take_profit=self.position['tp'],
+                vol=self.position.get('vol', 0.01),
+            )
+            self.pos_mgr.open(intent)
 
     def update_pnl(self):
+        self._ensure_position_synced()
         if self.signal_data is None or len(self.signal_data) < 2:
             return
         last_bar = str(self.signal_data.index[-1].date())
@@ -438,23 +451,8 @@ class AssetEngine:
         today_close = float(close.iloc[-1])
 
         # Check SL/TP for open position
-        if self.position:
-            side = self.position['side']
-            sl = self.position['sl']
-            tp = self.position['tp']
-            if pd.isna(sl) or pd.isna(tp) or pd.isna(today_close):
-                return
-            hit = None
-            if side == 'long':
-                if today_close <= sl:
-                    hit = ('sl', sl)
-                elif today_close >= tp:
-                    hit = ('tp', tp)
-            else:
-                if today_close >= sl:
-                    hit = ('sl', sl)
-                elif today_close <= tp:
-                    hit = ('tp', tp)
+        if self.pos_mgr.has_position():
+            hit = self.pos_mgr.check_sl_tp(today_close)
             if hit:
                 self._close_position(hit[1], last_bar, hit[0])
                 if self.current_value > self.peak_value:
@@ -464,7 +462,7 @@ class AssetEngine:
         # If a position is open and no SL/TP was hit, track only position-based PnL
         # (entry vs current). The position PnL will be booked on close via
         # _close_position. Skip the signal-based path to avoid double counting.
-        if self.position:
+        if self.pos_mgr.has_position():
             return
 
         # Daily PnL from previous signal
@@ -475,10 +473,10 @@ class AssetEngine:
         ret = (today_close / prev_close - 1) if len(close) >= 2 and prev_close != 0 and not pd.isna(today_close) and not pd.isna(prev_close) else 0
         if pd.isna(ret) or np.isinf(ret):
             ret = 0
-        pnl = self.current_value * direction * ret * CONFIG['position_size'] * pos_size
-        self.current_value += pnl
-        if self.current_value > self.peak_value:
-            self.peak_value = self.current_value
+        pnl = self.pos_mgr.compute_daily_pnl(direction, ret, pos_size)
+        self.pos_mgr.apply_pnl(pnl)
+        self.current_value = self.pos_mgr.current_value
+        self.peak_value = self.pos_mgr.peak_value
         if direction != 0:
             self.trades.append({
                 'date': last_bar,
@@ -488,6 +486,7 @@ class AssetEngine:
             })
 
     def get_metrics(self):
+        self._ensure_position_synced()
         cv = self.current_value if not pd.isna(self.current_value) else self.initial_capital
         pv = self.peak_value if not pd.isna(self.peak_value) else cv
         dd = (cv - pv) / pv if pv > 0 else 0
@@ -515,18 +514,18 @@ class AssetEngine:
         mean_conf = 0 if pd.isna(mean_conf) else mean_conf
 
         pos_info = None
-        if self.position:
+        if self.pos_mgr.has_position():
             upnl = self._position_pnl(self.current_price) if self.current_price is not None and not pd.isna(self.current_price) else 0.0
             pos_info = {
-                'side': self.position['side'],
-                'entry': round(self.position['entry'], 4),
-                'sl': round(self.position['sl'], 4),
-                'tp': round(self.position['tp'], 4),
-                'current_vol': round(self.position['vol'], 6),
+                'side': self.pos_mgr.position.side,
+                'entry': round(self.pos_mgr.position.entry_price, 4),
+                'sl': round(self.pos_mgr.position.stop_loss, 4),
+                'tp': round(self.pos_mgr.position.take_profit, 4),
+                'current_vol': round(self.pos_mgr.position.vol, 6),
                 'unrealized_pnl': round(upnl, 2),
             }
 
-        pnl_pct = self._position_pnl(self.current_price) / 100 if self.position and self.current_price is not None and not pd.isna(self.current_price) else 0
+        pnl_pct = self._position_pnl(self.current_price) / 100 if self.pos_mgr.has_position() and self.current_price is not None and not pd.isna(self.current_price) else 0
         mtm_value = cv + cv * pnl_pct * CONFIG['position_size']
         mtm_return = (mtm_value - self.initial_capital) / self.initial_capital * 100 if self.initial_capital > 0 else 0
 
@@ -558,13 +557,8 @@ class AssetEngine:
         }
 
     def _save_trade_journal(self, trade):
-        if self.journal_path is None:
-            return
-        df = pd.DataFrame([trade])
-        if os.path.exists(self.journal_path):
-            existing = pd.read_parquet(self.journal_path)
-            df = pd.concat([existing, df], ignore_index=True)
-        df.to_parquet(self.journal_path)
+        if self.state_store is not None:
+            self.state_store.append_trade(trade)
 
     def _log_confidence_buckets(self):
         bucket = {'asset': self.name, 'date': str(datetime.now(tz=ET).date())}
@@ -574,11 +568,23 @@ class AssetEngine:
             bucket[f'count_{int(conf/10)*10}_{int(conf/10+1)*10}'] += 1
         bucket['mean_conf'] = np.mean([p['confidence'] for p in self.prob_history[-20:]]) if self.prob_history else 0
         bucket['n_signals'] = min(20, len(self.prob_history))
-        df = pd.DataFrame([bucket])
-        if os.path.exists(CONFIDENCE_BUCKET_PATH):
-            existing = pd.read_parquet(CONFIDENCE_BUCKET_PATH)
-            df = pd.concat([existing, df], ignore_index=True)
-        df.to_parquet(CONFIDENCE_BUCKET_PATH)
+        if self.state_store is not None:
+            self.state_store.append_confidence_bucket(bucket)
+
+    def update_validity(self):
+        halt = self.check_halt_conditions()
+        score = 0.80
+        if not halt['drawdown_ok']:
+            score -= 0.25
+        if not halt['monthly_pf_ok']:
+            score -= 0.20
+        if not halt['drought_ok']:
+            score -= 0.15
+        if not halt['drift_ok']:
+            score -= 0.15
+        score = max(0.0, min(1.0, score))
+        result = self.validity_sm.transition(score, pd.Timestamp.now())
+        return result
 
     def check_halt_conditions(self):
         metrics = self.get_metrics()
@@ -655,35 +661,49 @@ assert abs(_total_alloc - 1.0) < 0.01, f"Portfolio allocations sum to {_total_al
 
 
 class PaperTradingEngine:
-    def __init__(self):
+    def __init__(self, state_store=None):
+        self.state_store = state_store or _STORE
         self.assets = {}
         self.start_date = datetime.now(tz=ET)
         self.last_update = None
         saved_positions = {}
-        if os.path.exists(STATE_PATH):
-            try:
-                with open(STATE_PATH, 'r') as f:
-                    saved = json.load(f)
-                eng_status = saved.get('engine_status', {})
-                if eng_status.get('start_time'):
-                    self.start_date = datetime.fromisoformat(eng_status['start_time'])
-                saved_positions = saved.get('open_positions', {})
-            except Exception:
-                pass
+        snapshot = self.state_store.load_snapshot()
+        if snapshot is not None:
+            eng_status = snapshot.engine_status or {}
+            if eng_status.get('start_time'):
+                self.start_date = datetime.fromisoformat(eng_status['start_time'])
+            saved_positions = snapshot.open_positions or {}
         for name, spec in PAPER_PORTFOLIO.items():
             self.assets[name] = AssetEngine(
                 spec['ticker'], name, spec['features'], spec['alloc'],
                 halt_config=spec['halt'], config=spec['config'],
+                state_store=self.state_store,
             )
         for name, pos_data in saved_positions.items():
             if name in self.assets:
                 asset = self.assets[name]
-                asset.position = pos_data['position']
+                pos_dict = pos_data.get('position')
+                if pos_dict:
+                    asset.position = pos_dict
+                    intent = PositionIntent(
+                        side=pos_dict['side'],
+                        entry_price=pos_dict['entry'],
+                        entry_date=pos_dict['entry_date'],
+                        stop_loss=pos_dict['sl'],
+                        take_profit=pos_dict['tp'],
+                        vol=pos_dict['vol'],
+                    )
+                    asset.pos_mgr.open(intent)
                 cv = pos_data.get('current_value')
-                asset.current_value = cv if cv is not None else asset.initial_capital
+                if cv is not None:
+                    asset.current_value = cv
+                    asset.pos_mgr.current_value = cv
                 pv = pos_data.get('peak_value')
-                asset.peak_value = pv if pv is not None else asset.current_value
+                if pv is not None:
+                    asset.peak_value = pv
+                    asset.pos_mgr.peak_value = pv
                 asset.trade_log = pos_data.get('trade_log', [])
+                asset.pos_mgr.trade_log = list(pos_data.get('trade_log', []))
                 asset.prob_history = pos_data.get('prob_history', [])
 
     def initialize(self):
@@ -708,14 +728,31 @@ class PaperTradingEngine:
 
     def get_state(self):
         ad = {}
+        overall_validity = 0.0
+        any_halted = False
         for name, asset in self.assets.items():
             asset.refresh_price()
             metrics = asset.get_metrics()
             halt = asset.check_halt_conditions()
+            validity = asset.update_validity()
+            overall_validity += validity.get('exposure', 0.0)
+            if halt['halted']:
+                any_halted = True
             signal = dict(asset.prob_history[-1]) if asset.prob_history else None
             if signal and metrics.get('current_price'):
                 signal['close_price'] = metrics['current_price']
-            ad[name] = {'metrics': metrics, 'halt': halt, 'last_signal': signal}
+            ad[name] = {
+                'metrics': metrics,
+                'halt': halt,
+                'validity_state': validity.get('state', 'YELLOW'),
+                'validity_exposure': validity.get('exposure', 0.5),
+                'last_signal': signal,
+                'execution_state': 'HALTED' if halt['halted'] else 'ACTIVE',
+            }
+        n = len(self.assets) or 1
+        exec_state = ExecutionState.HALTED if any_halted else (
+            ExecutionState.PAUSED if (overall_validity / n) < 0.5 else ExecutionState.ACTIVE
+        )
 
         realized_total = sum(
             a.current_value if not pd.isna(a.current_value) else a.initial_capital
@@ -728,7 +765,7 @@ class PaperTradingEngine:
         closed_trades = 0
         for a in self.assets.values():
             closed_trades += len(a.trade_log)
-            if a.position and a.current_price is not None and not pd.isna(a.current_price):
+            if a.pos_mgr.has_position() and a.current_price is not None and not pd.isna(a.current_price):
                 open_positions += 1
                 pnl_pct = a._position_pnl(a.current_price)
                 if not pd.isna(pnl_pct):
@@ -761,47 +798,47 @@ class PaperTradingEngine:
                 'deployment_cleared': True,
                 'open_positions': open_positions,
                 'closed_trades': closed_trades,
+                'execution_state': exec_state.value,
+                'average_validity_exposure': round(overall_validity / n, 4),
             },
             'assets': ad,
             'halt_conditions': HALT,
         }
 
-    def _sanitize(self, obj):
-        if isinstance(obj, dict):
-            return {k: self._sanitize(v) for k, v in obj.items()}
-        elif isinstance(obj, list):
-            return [self._sanitize(v) for v in obj]
-        elif isinstance(obj, (float, np.floating)) and (math.isinf(obj) or math.isnan(obj)):
-            return None
-        return obj
-
-    def save_state(self, path=None):
-        path = path or STATE_PATH
+    def save_state(self):
         state = self.get_state()
-        state['engine_status'] = {
-            'initialized': True,
-            'last_update': self.last_update.strftime('%Y-%m-%d %H:%M:%S') if self.last_update else None,
-            'start_time': self.start_date.isoformat(),
-        }
-        state['open_positions'] = {}
+        snapshot = EngineSnapshot(
+            schema_version=EngineSnapshot.__dataclass_fields__['schema_version'].default,
+            timestamp=datetime.now(tz=ET).isoformat(),
+            portfolio=state.get('portfolio'),
+            assets=state.get('assets'),
+            open_positions={},
+            engine_status={
+                'initialized': True,
+                'last_update': self.last_update.strftime('%Y-%m-%d %H:%M:%S') if self.last_update else None,
+                'start_time': self.start_date.isoformat(),
+            },
+            halt_conditions=state.get('halt_conditions'),
+        )
         for name, asset in self.assets.items():
-            if asset.position:
-                state['open_positions'][name] = {
-                    'position': asset.position,
-                    'current_value': asset.current_value,
-                    'peak_value': asset.peak_value,
-                    'trade_log': asset.trade_log,
+            if asset.pos_mgr.has_position():
+                pos = asset.pos_mgr.position
+                snapshot.open_positions[name] = {
+                    'position': {
+                        'side': pos.side,
+                        'entry': pos.entry_price,
+                        'sl': pos.stop_loss,
+                        'tp': pos.take_profit,
+                        'entry_date': pos.entry_date,
+                        'vol': pos.vol,
+                    },
+                    'current_value': asset.pos_mgr.current_value,
+                    'peak_value': asset.pos_mgr.peak_value,
+                    'trade_log': asset.pos_mgr.trade_log,
                     'prob_history': asset.prob_history,
                 }
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        tmp_path = path + '.tmp'
-        with open(tmp_path, 'w') as f:
-            fcntl.flock(f, fcntl.LOCK_EX)
-            json.dump(self._sanitize(state), f, indent=2, default=str)
-            fcntl.flock(f, fcntl.LOCK_UN)
-        os.replace(tmp_path, path)
-
         self._append_equity_history(state)
+        self.state_store.save_snapshot(snapshot)
         return state
 
     def _append_equity_history(self, state):
@@ -835,15 +872,4 @@ class PaperTradingEngine:
                 for name, a in state.get('assets', {}).items()
             },
         }
-        os.makedirs(os.path.dirname(EQUITY_HISTORY_PATH), exist_ok=True)
-        history = []
-        if os.path.exists(EQUITY_HISTORY_PATH):
-            try:
-                with open(EQUITY_HISTORY_PATH, 'r') as f:
-                    history = json.load(f)
-            except (json.JSONDecodeError, ValueError):
-                history = []
-        history.append(record)
-        history = self._sanitize(history[-2000:])
-        with open(EQUITY_HISTORY_PATH, 'w') as f:
-            json.dump(history, f, indent=2, allow_nan=False)
+        self.state_store.append_equity_history(record)

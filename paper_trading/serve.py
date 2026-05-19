@@ -1,12 +1,15 @@
 import sys, os, json
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-STATE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'live', 'state.json')
-TRADE_JOURNAL_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'live', 'trade_journal.parquet')
+from paper_trading.state_store import StateStore
+
+_STORE = StateStore(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+STATE_PATH = _STORE.state_path
+TRADE_JOURNAL_PATH = _STORE.trade_journal_path
+EQUITY_HISTORY_PATH = _STORE.equity_history_path
 DEFAULT_PORT = 5000
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), 'frontend')
-EQUITY_HISTORY_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'live', 'equity_history.json')
 LOG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'live', 'engine.log')
 
 MIME_TYPES = {

@@ -9,18 +9,6 @@ STATE_PATH = os.path.join(BASE, 'data', 'live', 'state.json')
 HISTORY_PATH = os.path.join(BASE, 'data', 'live', 'history.parquet')
 REPORT_PATH = os.path.join(BASE, 'data', 'live', 'dashboard.json')
 
-HALT = {
-    'xlf_drawdown': -0.08,
-    'btc_drawdown': -0.15,
-    'nzdjpy_drawdown': -0.06,
-    'portfolio_dd': -0.10,
-    'monthly_pf': 0.70,
-    'prob_drift': 0.15,
-    'signal_drought': 21,
-    'correlation_spike': 0.50,
-}
-
-
 def load_state():
     if os.path.exists(STATE_PATH):
         with open(STATE_PATH) as f:
@@ -51,60 +39,35 @@ def check_halts(state, hist):
     flags = []
     assets = state.get('assets', {})
     portfolio = state.get('portfolio', {})
+    halt_config = state.get('halt_conditions', {})
 
-    # Asset-level drawdown halts
-    for name, key in [('XLF', 'xlf_drawdown'), ('BTC', 'btc_drawdown'), ('NZDJPY', 'nzdjpy_drawdown')]:
-        asset = assets.get(name, {})
-        metrics = asset.get('metrics', {})
-        dd = metrics.get('drawdown', 0) / 100
-        limit = HALT[key]
-        if dd <= limit:
-            flags.append({'asset': name, 'type': 'drawdown',
-                          f'current': round(dd, 4), 'limit': limit})
-            print(f'  ⚠ HALT: {name} drawdown {dd:.1%} <= {limit:.0%}')
+    # Use halt conditions directly from engine state
+    for name, asset_data in assets.items():
+        halt = asset_data.get('halt', {})
+        if halt.get('halted'):
+            for reason in halt.get('reasons', []):
+                flags.append({'asset': name, 'type': 'engine_halt', 'reason': reason})
 
-    # Portfolio-level drawdown
-    total_value = portfolio.get('total_value', 0)
-    capital = portfolio.get('capital', 100000)
-    port_dd = (total_value - capital) / capital if capital > 0 else 0
-    if port_dd <= HALT['portfolio_dd']:
-        flags.append({'asset': 'PORTFOLIO', 'type': 'portfolio_dd',
-                      'current': round(port_dd, 4), 'limit': HALT['portfolio_dd']})
-        print(f'  ⚠ HALT: Portfolio DD {port_dd:.1%} <= {HALT["portfolio_dd"]:.0%}')
+    # Portfolio-level execution state
+    exec_state = portfolio.get('execution_state', 'ACTIVE')
+    if exec_state == 'HALTED':
+        flags.append({'asset': 'PORTFOLIO', 'type': 'execution_state', 'state': exec_state})
 
-    # Correlation spike
-    corr = compute_pnl_correlation(hist)
-    if corr is not None:
-        triu = corr.values[np.triu_indices_from(corr.values, k=1)]
-        max_corr = max(abs(triu)) if len(triu) > 0 else 0
-        if max_corr >= HALT['correlation_spike']:
-            flags.append({'asset': 'PORTFOLIO', 'type': 'correlation_spike',
-                          'current': round(max_corr, 3), 'limit': HALT['correlation_spike']})
-            print(f'  ⚠ HALT: Portfolio PnL corr spike {max_corr:.3f} >= {HALT["correlation_spike"]:.2f}')
-
-    # Prob drift
-    for name in ['XLF', 'BTC', 'NZDJPY']:
-        asset = assets.get(name, {})
-        metrics = asset.get('metrics', {})
-        mean_conf = metrics.get('mean_confidence', 0) / 100
-        expected_conf = {'XLF': 0.45, 'BTC': 0.45, 'NZDJPY': 0.45}
-        drift = abs(mean_conf - expected_conf.get(name, 0.45))
-        if drift > HALT['prob_drift']:
-            flags.append({'asset': name, 'type': 'prob_drift',
-                          'current': round(drift, 3), 'limit': HALT['prob_drift']})
-            print(f'  ⚠ HALT: {name} confidence drift {drift:.3f} > {HALT["prob_drift"]:.2f}')
-
-    # Signal drought
-    for name in ['XLF', 'BTC', 'NZDJPY']:
+    # Signal drought (dashboard uses different threshold as early warning)
+    drought_warning = halt_config.get('signal_drought', 30)
+    early_warn = max(1, drought_warning - 7)
+    for name in ['BTC', 'NZDJPY', 'CADJPY', 'USDCAD', 'GC', 'EURAUD']:
         asset = assets.get(name, {})
         metrics = asset.get('metrics', {})
         last_signal = metrics.get('last_signal_date')
         if last_signal:
-            days_since = (datetime.now() - datetime.strptime(last_signal, '%Y-%m-%d')).days
-            if days_since > HALT['signal_drought']:
-                flags.append({'asset': name, 'type': 'signal_drought',
-                              'current': days_since, 'limit': HALT['signal_drought']})
-                print(f'  ⚠ HALT: {name} no signal for {days_since}d > {HALT["signal_drought"]}d')
+            try:
+                days_since = (datetime.now() - datetime.strptime(last_signal, '%Y-%m-%d')).days
+                if days_since > early_warn:
+                    flags.append({'asset': name, 'type': 'drought_warning',
+                                  'current': days_since, 'warning_at': early_warn})
+            except ValueError:
+                pass
 
     return flags
 
