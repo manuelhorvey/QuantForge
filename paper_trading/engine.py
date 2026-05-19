@@ -16,6 +16,7 @@ from monitoring.validity_state_machine import ValidityStateMachine as _ValidityS
 from enum import Enum
 from paper_trading.tracer import trace_decision, shadow_compare_signal, shadow_compare_sizing, shadow_compare_pnl, trace_diagnostic_report
 from paper_trading import diagnostics as diag
+from paper_trading.shadow_memory import store_event as _shadow_store
 from paper_trading import wrappers as _w
 from shared.registry import StrategyRegistry
 
@@ -356,7 +357,7 @@ class AssetEngine:
                 self.model, X.iloc[[-1]], self.features, proba[-1:],
             )
             _regime = diag.analyze_regime_context(df["close"])
-            trace_diagnostic_report(diag.build_shadow_report(
+            _report = diag.build_shadow_report(
                 asset=self.name,
                 timestamp=str(latest.name.date()),
                 signal_match=_sig_div["match"],
@@ -364,7 +365,9 @@ class AssetEngine:
                 model_divergence=_mod_div,
                 feature_drivers=_feat_drivers,
                 regime_context=_regime,
-            ))
+            )
+            trace_diagnostic_report(_report)
+            _shadow_store(self.name, _report)
         except Exception:
             pass
 
@@ -478,14 +481,16 @@ class AssetEngine:
                 self.pos_mgr.position_size, pos_size, pnl,
             )
             _regime = diag.analyze_regime_context(close)
-            trace_diagnostic_report(diag.build_shadow_report(
+            _report = diag.build_shadow_report(
                 asset=self.name,
                 timestamp=last_bar,
                 signal_match=True,
                 pnl_match=_pnl_decomp["match"],
                 regime_context=_regime,
                 pnl_decomposition=_pnl_decomp,
-            ))
+            )
+            trace_diagnostic_report(_report)
+            _shadow_store(self.name, _report)
         except Exception:
             pass
         self.pos_mgr.apply_pnl(pnl)

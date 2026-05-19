@@ -11,3 +11,4 @@ logs/
 paper_trading/models/
 *.pkl
 data/live/
+data/shadow_memory/
