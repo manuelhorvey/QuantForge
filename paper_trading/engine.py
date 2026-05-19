@@ -324,6 +324,7 @@ class AssetEngine:
 
         df = fetch_live(self.ticker)
         self.price_data = df
+        df['close'] = df['close'].ffill()
         self.current_price = float(df['close'].iloc[-1])
         ref = fetch_ref('SPY')
         macro = load_macro()
