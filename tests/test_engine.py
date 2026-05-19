@@ -52,13 +52,17 @@ class TestConfig:
 
     def test_xlf_features(self):
         features = FEATURE_REGISTRY["BTC-USD"].features
-        assert len(features) == 4
+        assert len(features) == 10
         assert "rate_diff" in features
+        assert "vix_delta_5" in features
+        assert "btc_mom_10" in features
 
     def test_btc_features(self):
         features = FEATURE_REGISTRY["BTC-USD"].features
-        assert len(features) == 4
+        assert len(features) == 10
         assert "rate_diff" in features
+        assert "vix_delta_5" in features
+        assert "btc_vs_spy_21" in features
 
     def test_paper_portfolio_structure(self):
         assert "BTC" in PAPER_PORTFOLIO

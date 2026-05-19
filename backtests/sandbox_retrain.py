@@ -403,7 +403,59 @@ def main(force: bool = False, target_assets: Optional[list] = None):
     print_equilibrium_report()
 
 
-def run_historical(force: bool = False, target_assets: Optional[list] = None):
+def augment_features(
+    X: pd.DataFrame,
+    ticker: str,
+    macro: pd.DataFrame,
+    ref: pd.DataFrame,
+    df: pd.DataFrame,
+    close: pd.Series,
+) -> pd.DataFrame:
+    contract = FEATURE_REGISTRY[ticker]
+    name = contract.name
+    aug = X.copy()
+    pi = pd.DatetimeIndex([pd.Timestamp(x).tz_localize(None) for x in X.index])
+    m = macro.reindex(pi, method="ffill")
+    m.index = X.index
+    c = close.reindex(X.index)
+    slug = name.lower()
+
+    if name in ("GC", "BTC", "CADJPY", "NZDJPY", "USDCAD", "EURAUD"):
+        aug["vix_delta_5"] = m["vix_delta_5"]
+        aug["dxy_mom_21"] = m["dxy_mom_21"]
+
+    if name == "BTC":
+        aug["vix_ma21"] = m["vix_ma21"]
+        aug[f"{slug}_mom_10"] = c.pct_change(10)
+        aug[f"{slug}_mom_21"] = c.pct_change(21)
+        ref_c = ref["close"].reindex(X.index)
+        spy_mom_21 = ref_c.pct_change(21)
+        aug["btc_vs_spy_21"] = aug["btc_mom_21"] - spy_mom_21
+
+    elif name == "CADJPY":
+        aug["us_jp_10y_spread"] = m["us_jp_10y_spread"]
+        aug["ca_jp_10y_spread"] = m["ca_jp_10y_spread"]
+        aug[f"{slug}_mom_63"] = c.pct_change(63)
+        aug[f"{slug}_mom_10"] = c.pct_change(10)
+
+    elif name == "GC":
+        aug["vix_ma21"] = m["vix_ma21"]
+        aug[f"{slug}_mom_21"] = c.pct_change(21)
+
+    elif name == "NZDJPY":
+        aug[f"{slug}_mom_63"] = c.pct_change(63)
+
+    elif name == "USDCAD":
+        aug[f"{slug}_mom_63"] = c.pct_change(63)
+
+    elif name == "EURAUD":
+        aug[f"{slug}_mom_63"] = c.pct_change(63)
+        aug["vix_ma21"] = m["vix_ma21"]
+
+    return aug.dropna(how="any")
+
+
+def run_historical(force: bool = False, target_assets: Optional[list] = None, augmented: bool = False, tb20_cadjpy: bool = False):
     logger.info("Loading macro data...")
     macro = load_macro_data()
     ref = fetch_history("SPY", years=15)
@@ -418,13 +470,37 @@ def run_historical(force: bool = False, target_assets: Optional[list] = None):
         contract = FEATURE_REGISTRY[ticker]
         name = contract.name
         logger.info("=" * 60)
-        logger.info("Historical: %s (%s) — %d yearly windows", ticker, name, len(test_years))
+        logger.info("Historical: %s (%s) — %d yearly windows%s", ticker, name, len(test_years),
+                     " [AUGMENTED]" if augmented else "")
+        if tb20_cadjpy and name == "CADJPY":
+            from features.contract import FeatureContract
+            contract = FeatureContract(
+                ticker=ticker, name=name,
+                label_type="tb20",
+                label_params={"pt_sl": [2, 2], "vertical_barrier": 20},
+                macro_filters=contract.macro_filters,
+                price_mom_windows=contract.price_mom_windows,
+                vs_spy_windows=contract.vs_spy_windows,
+            )
+            logger.info("  %s: using tb20 labels (pt_sl=[2,2], vb=20) instead of fwd60", name)
         logger.info("=" * 60)
         df = fetch_history(ticker)
-        X, y, _ = compute_training_data(ticker, macro, ref, df)
+        from features.builder import build_features
+        features_df = build_features(df, macro, ref, contract)
+        X = features_df[list(contract.features)]
+        y = features_df["label"]
         close = df["close"].reindex(X.index).ffill()
         if len(X) < 200:
             logger.warning("  %s: insufficient data", ticker)
+            continue
+        if augmented:
+            X_aug = augment_features(X, ticker, macro, ref, df, close)
+            logger.info("  %s: augmented %d features → %d features (%d rows)", name, X.shape[1], X_aug.shape[1], len(X_aug))
+            X = X_aug
+            y = y.reindex(X.index)
+            close = close.reindex(X.index).ffill()
+        if len(X) < 200:
+            logger.warning("  %s: insufficient data after augmentation", ticker)
             continue
         predict_fn = lambda m, x: XGBoostModel().predict(m, x)
         year_results = []
@@ -485,12 +561,21 @@ def run_historical(force: bool = False, target_assets: Optional[list] = None):
     if not all_results:
         logger.warning("No historical results generated.")
         return
+    suffix = "_augmented" if augmented else ""
+    if tb20_cadjpy:
+        suffix += "_tb20"
     out_dir = os.path.join(SANDBOX_BASE, "historical")
     os.makedirs(out_dir, exist_ok=True)
-    with open(os.path.join(out_dir, "historical_results.json"), "w") as f:
-        json.dump({"test_years": test_years, "assets": all_results}, f, indent=2, default=str)
+    out_path = os.path.join(out_dir, f"historical_results{suffix}.json")
+    with open(out_path, "w") as f:
+        json.dump({"test_years": test_years, "assets": all_results, "augmented": augmented}, f, indent=2, default=str)
+    label = "5-YEAR HISTORICAL WALK-FORWARD RESULTS"
+    if augmented:
+        label += " (AUGMENTED)"
+    if tb20_cadjpy:
+        label += " + TB20 CADJPY"
     print("\n" + "=" * 100)
-    print("5-YEAR HISTORICAL WALK-FORWARD RESULTS")
+    print(label)
     print("=" * 100)
     for name, yrs in sorted(all_results.items()):
         avg_sharpe = float(np.mean([y["sharpe"] for y in yrs]))
@@ -504,7 +589,7 @@ def run_historical(force: bool = False, target_assets: Optional[list] = None):
               f'avg(DD)={avg_dd:.3f}  avg(acc)={avg_acc:.4f}  '
               f'pos_windows={pos_windows}/{len(yrs)}')
         print(f'  {" " * 10}  {years_str}')
-    print(f'\nResults saved to {os.path.join(out_dir, "historical_results.json")}')
+    print(f'\nResults saved to {out_path}')
 
 
 if __name__ == "__main__":
@@ -513,8 +598,10 @@ if __name__ == "__main__":
     parser.add_argument("--force", action="store_true", help="Retrain even if cached model exists")
     parser.add_argument("--assets", nargs="+", help="Specific assets to retrain (default: all)")
     parser.add_argument("--historical", action="store_true", help="Run 5-year historical walk-forward evaluation")
+    parser.add_argument("--augmented", action="store_true", help="Use augmented feature set on weak assets")
+    parser.add_argument("--tb20", action="store_true", help="Switch CADJPY to tb20 labels (like NZDJPY)")
     args = parser.parse_args()
     if args.historical:
-        run_historical(force=args.force, target_assets=args.assets)
+        run_historical(force=args.force, target_assets=args.assets, augmented=args.augmented, tb20_cadjpy=args.tb20)
     else:
         main(force=args.force, target_assets=args.assets)
