@@ -27,6 +27,23 @@ for pattern in "${DISALLOWED[@]}"; do
     fi
 done
 
+# Allow safe shared interface imports
+for file in "$LIVE_DIR"/*.py; do
+    [ -f "$file" ] || continue
+    while IFS= read -r line; do
+        if echo "$line" | grep -qE "^from shared\."; then
+            module=$(echo "$line" | sed -n 's/^from shared\.\([^ ]*\).*/\1/p')
+            case "$module" in
+                model|signal|sizing|pnl|features) ;;
+                *)
+                    echo "FORBIDDEN SHARED IMPORT: $line (in $file)"
+                    HAD_ERROR=1
+                    ;;
+            esac
+        fi
+    done < "$file"
+done
+
 if [ $HAD_ERROR -ne 0 ]; then
     echo ""
     echo "ERROR: paper_trading/ (live system) must not import research/orphaned modules."

@@ -16,6 +16,11 @@ from monitoring.validity_state_machine import ValidityStateMachine as _ValidityS
 from enum import Enum
 from paper_trading.tracer import trace_decision, shadow_compare_signal, shadow_compare_sizing
 from paper_trading import wrappers as _w
+from shared.model import XGBoostModel
+from shared.signal import FixedThresholdStrategy
+from shared.sizing import VolTargetSizing
+from shared.pnl import DefaultPnLStrategy
+from shared.features import DefaultFeaturePipeline
 
 
 class ExecutionState(Enum):
@@ -167,6 +172,11 @@ class AssetEngine:
         self.current_price = None
         self.pos_mgr = PositionManager(self.initial_capital, CONFIG['position_size'])
         self.validity_sm = _ValidityStateMachine()
+        self._model_iface = XGBoostModel()
+        self._signal_strategy = FixedThresholdStrategy()
+        self._sizing_strategy = VolTargetSizing()
+        self._pnl_strategy = DefaultPnLStrategy()
+        self._feature_pipeline = DefaultFeaturePipeline()
         if state_store is not None:
             self.state_store = state_store
         elif journal_path is _SKIP_JOURNAL:
@@ -277,46 +287,30 @@ class AssetEngine:
             raise ValueError(f'All close prices are NaN for {self.name}')
         self.current_price = float(df['close'].iloc[-1])
         ref = fetch_ref('SPY')
-        macro = compute_macro_derived(pd.read_parquet(os.path.join(BASE, 'data/processed/macro_factors.parquet')))
-        features_df = self._build_features(df, ref, macro)
+        macro = self._feature_pipeline.macro_derived(pd.read_parquet(os.path.join(BASE, 'data/processed/macro_factors.parquet')))
+        features_df = self._feature_pipeline.build(df, macro, ref, self.contract)
 
         X = features_df[self.features]
         if len(X) == 0:
             raise ValueError(f'No valid feature rows after building features for {self.name}')
 
-        proba = self.model.predict_proba(X)
+        proba = self._model_iface.predict(self.model, X)
         if proba.shape[1] < 3:
             raise ValueError(f'Model returned {proba.shape[1]} classes, expected 3')
 
-        probs_long = proba[:, 2]
-        probs_short = proba[:, 0]
-        signals = pd.Series(0, index=X.index)
-        signals[probs_long > threshold] = 2
-        signals[probs_short > threshold] = 0
+        pos_size = self._sizing_strategy.compute(df['close'], self.config)
 
-        pos_size = self._vol_scalar(df) if self.config.get('vol_scalar') else 1.0
-
-        self.signal_data = pd.DataFrame({
-            'close': df['close'].reindex(X.index),
-            'signal': signals,
-            'prob_long': probs_long,
-            'prob_short': probs_short,
-            'prob_neutral': proba[:, 1],
-            'position_size': pos_size,
-        }, index=X.index)
+        result = self._signal_strategy.compute(proba, X.index, threshold, df['close'], pos_size)
+        self.signal_data = result.signal_data
 
         latest = self.signal_data.iloc[-1]
         self.last_signal_date = latest.name
 
-        signal_type = 'BUY' if latest['signal'] == 2 else ('SELL' if latest['signal'] == 0 else 'FLAT')
-        confidence = max(latest['prob_long'], latest['prob_short'])
-        confidence_pct = round(float(confidence * 100), 2)
-
         decision = TradeDecision(
             asset=self.name,
-            signal=signal_type,
-            label=int(latest['signal']),
-            confidence=confidence_pct,
+            signal=result.signal_type,
+            label=result.label,
+            confidence=result.confidence_pct,
             prob_long=round(float(latest['prob_long']), 4),
             prob_short=round(float(latest['prob_short']), 4),
             prob_neutral=round(float(latest['prob_neutral']), 4),
