@@ -28,6 +28,7 @@ from backtests.model_comparator import (
 from backtests.forward_test import run_forward_test
 from backtests.mas import compute_mas
 from backtests.model_evolution import append_trajectory, print_equilibrium_report, load_trajectory, compute_mas_velocity
+from backtests.model_promotion_engine import evaluate_promotion
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("quantforge.sandbox_retrain")
@@ -231,6 +232,19 @@ def run_one_asset(
     vel_str = f"∇={velocities[-1]:+.4f}" if velocities else ""
     logger.info("  %s MAS gradient: %s", name, vel_str)
 
+    logger.info("  Evaluating promotion protocol...")
+    promotion = evaluate_promotion(
+        asset=name,
+        mas_result=mas_result,
+        forward_result=forward_result,
+        model_result=model_result,
+        signal_result=signal_result,
+        portfolio_result=portfolio_result,
+        shadow_result=shadow_result,
+        trajectory=traj,
+    )
+    log_promotion(name, promotion)
+
     result = {
         "ticker": ticker,
         "name": name,
@@ -242,6 +256,7 @@ def run_one_asset(
         "shadow_intel": shadow_result,
         "forward_test": forward_result,
         "mas": mas_result,
+        "promotion": promotion,
         "summary": summary,
     }
 
@@ -295,6 +310,20 @@ def log_mas(name, mas_result):
     logger.info("─" * 50)
 
 
+def log_promotion(name, promotion):
+    if not promotion:
+        return
+    logger.info("─" * 50)
+    logger.info("PROMOTION for %s: %s | cond=%s | conf=%.2f",
+                 name, promotion.get("decision", "N/A"),
+                 promotion.get("conditions_met", "?"),
+                 promotion.get("confidence", 0))
+    for fm in promotion.get("failure_modes", []):
+        logger.info("  ⚠ %s", fm)
+    logger.info("  action: %s", promotion.get("recommended_action", "?"))
+    logger.info("─" * 50)
+
+
 def main(force: bool = False, target_assets: Optional[list] = None):
     logger.info("Loading macro data...")
     macro = load_macro_data()
@@ -318,6 +347,7 @@ def main(force: bool = False, target_assets: Optional[list] = None):
     overview = []
     for r in results:
         mas_r = r.get("mas", {})
+        prom = r.get("promotion", {})
         overview.append({
             "ticker": r.get("ticker"),
             "name": r.get("name"),
@@ -333,6 +363,10 @@ def main(force: bool = False, target_assets: Optional[list] = None):
             "delta_mas": mas_r.get("delta_mas"),
             "mas_decision": mas_r.get("decision"),
             "mas_sub_scores": mas_r.get("sub_scores"),
+            "promotion_decision": prom.get("decision"),
+            "promotion_confidence": prom.get("confidence"),
+            "promotion_conditions": prom.get("conditions_met"),
+            "promotion_action": prom.get("recommended_action"),
         })
 
     with open(summary_path, "w") as f:
