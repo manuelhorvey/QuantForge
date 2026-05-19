@@ -107,14 +107,21 @@ The feature algebra is governed by a **3-template grammar** that covers 100% of 
 |---------------------------|-----------|
 | FeatureContract / Registry / Builder | Canonical feature algebra — contract-driven feature computation, validation, and model path resolution |
 | StateStore | Versioned persistence boundary — EngineSnapshot, corrupt-file recovery, file locking, cache management |
+| StrategyRegistry | Per-asset strategy routing — model, signal, sizing, PnL, and feature pipeline interfaces with auto-register and validation |
+| Shared Interfaces | `shared/model.py`, `shared/signal.py`, `shared/sizing.py`, `shared/pnl.py`, `shared/features.py` — ABCs + default implementations wrapping all critical computations |
 | TradeDecision | Pure model intent dataclass — signal, confidence, provenance, no execution side-effects |
 | PositionIntent / PositionManager | Extracted position lifecycle — open, close, SL/TP check, PnL accounting, deterministic replay |
 | ValidityStateMachine | Per-asset GREEN/YELLOW/RED state with hysteresis, inertia smoothing, regime persistence lock |
 | ExecutionState | Portfolio-level ACTIVE/PAUSED/HALTED — derived from halt conditions and validity exposure |
-| AssetEngine | Per-asset XGBoost (depth=2, 300 trees, lr=0.02), contract-driven feature computation, tb20 or fwd60 label routing |
+| AssetEngine | Per-asset XGBoost (depth=2, 300 trees, lr=0.02), contract-driven feature computation, tb20 or fwd60 label routing, strategy-registry-backed |
 | PaperTradingEngine | Orchestrates 6 assets, volatility-scaled sizing, halt conditions, P&L tracking |
 | PaperBroker(BrokerInterface) | Simulated broker — yfinance fills at market price, configurable slippage/fees |
 | Dashboard (stdlib http.server) | Real-time web UI with portfolio summary, signal cards, session-scoped log, performance metrics |
+| Wrappers | `paper_trading/wrappers.py` — shadow recomputation layer: pure-function delegators to shared interfaces, used for output-identity verification |
+| Tracer | `paper_trading/tracer.py` — structured JSONL event tracing of every decision cycle + shadow comparison (signal, sizing, PnL) |
+| Diagnostics | `paper_trading/diagnostics.py` — root-cause analysis layer: signal divergence classification, model distribution tracking, one-at-a-time feature impact scoring, volatility regime context, PnL decomposition |
+| Shadow Memory | `paper_trading/shadow_memory.py` — persistent longitudinal store partitioned by asset+date (JSONL); immutable baseline with histogram-based model proba, signal mismatch, PnL error, and regime distributions |
+| Drift Scoring | `paper_trading/drift_scoring.py` — 5-dimensional drift engine: model KL divergence, signal mismatch rate, PnL MAE, feature Jaccard stability, regime consistency; `get_shadow_intelligence()` produces per-asset drift report with trend/risk/top sources |
 
 ---
 
@@ -175,8 +182,21 @@ QuantForge/
 │   ├── decision.py      # TradeDecision / PositionIntent pure dataclasses
 │   ├── position_manager.py  # Position lifecycle (open, close, SL/TP, PnL)
 │   ├── monitor.py       # Entry point (data → signal → trade loop)
+│   ├── wrappers.py      # Shadow recomputation layer (pure-function delegators)
+│   ├── tracer.py        # Structured JSONL event tracing + shadow comparison
+│   ├── diagnostics.py   # Root-cause analysis: signal divergence, model dist, feature impact, regime, PnL decomp
+│   ├── shadow_memory.py # Persistent longitudinal store, partitioned by asset+date, baseline builder
+│   ├── drift_scoring.py # 5-dim drift engine: model KL, signal mismatch, PnL MAE, feature stability, regime consistency
 │   ├── frontend/        # Dashboard UI (index.html, script.js, style.css)
 │   └── models/          # 6 serialised XGBoost model pickles
+├── shared/              # Strategy interfaces and registry
+│   ├── __init__.py
+│   ├── registry.py      # StrategyRegistry singleton — per-asset routing, auto-register, validation
+│   ├── model.py         # ModelInterface ABC + XGBoostModel wrapper
+│   ├── signal.py        # SignalStrategy ABC + FixedThresholdStrategy
+│   ├── sizing.py        # PositionSizingStrategy ABC + VolTargetSizing
+│   ├── pnl.py           # PnLStrategy ABC + DefaultPnLStrategy
+│   └── features.py      # FeaturePipeline ABC + DefaultFeaturePipeline
 ├── scripts/             # Training & validation runners
 │   ├── walk_forward_all.py
 │   ├── train_all_assets.py
@@ -211,7 +231,7 @@ QuantForge/
 ├── portfolio/           # HRP allocator, risk parity, correlation clusters
 ├── execution/           # Broker interface, order manager, portfolio sync, PaperBroker (simulated broker)
 ├── configs/             # YAML configs (paper trading, forex) + driver atlas
-├── tests/               # Pytest test suite (13 test files, 148 tests)
+├── tests/               # Pytest test suite (13 test files, 148 tests, regression-verified via shadow comparisons)
 ├── docs/                # Project documentation, runbook, system overview
 │   └── adr/             # Architecture Decision Records (ADR-000 through ADR-017)
 ├── adr/                 # Additional ADRs (ADR-011 known issues)
@@ -276,14 +296,29 @@ make test
 
 ---
 
+## Refactoring Phases (Zero-Behavior-Drift)
+
+The paper-trading engine has undergone a structural refactoring across 6 phases, each preserving byte-identical outputs:
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| **1** | Tracer + shadow comparison + baseline snapshot + live contract + dependency guard | ✓ |
+| **2** | Shared interfaces (model, signal, sizing, PnL, features) + AssetEngine migration | ✓ |
+| **3** | Strategy registry with per-asset routing + research_mode flag | ✓ |
+| **4** | Wrapper consolidation (delegate to shared interfaces) + PnL shadow + dead code removal | ✓ |
+| **5** | Shadow diagnostics layer: signal divergence, model distribution, feature impact, regime context, PnL decomposition | ✓ |
+| **6** | Persistent shadow memory (asset+date partitioned JSONL) + 5-dim drift scoring engine + baseline initialization | ✓ |
+
+The system is now **swap-ready but locked**: research models can be activated per-asset via `StrategyRegistry.register_model()` without touching engine code.
+
 ## Roadmap
 
 ### Near Term (H2 2026)
 
 - Live broker integration (Alpaca / Interactive Brokers) — PaperBroker(BrokerInterface) contract exists
 - Realistic slippage & spread modeling
-- Enhance drift detection & auto-retraining triggers
-- Deploy `HybridRegimeEnsemble` to paper trading (or decide to keep simple XGBoost)
+- Deploy `HybridRegimeEnsemble` to paper trading via registry activation (or decide to keep simple XGBoost)
+- Shadow intelligence dashboard integration — surface drift scores, regime context, and top drift sources in web UI
 - AUDJPY re-evaluation post-November — model trained, deferred pending correlation analysis
 
 ### Medium Term
@@ -310,7 +345,7 @@ Blocked pending data acquisition: EURUSD, GBPUSD (need CFTC COT weekly positioni
 - No live broker execution — PaperBroker(BrokerInterface) provides the contract; Alpaca/IBKR stubs exist
 - EURUSD and GBPUSD blocked — requires COT positioning data
 - Model validity depends on PSI distribution stability
-- Paper trading uses simple 4-feature XGBoost per asset; research ensemble (`HybridRegimeEnsemble`) not yet deployed
+- Paper trading uses simple 4-feature XGBoost per asset; research ensemble (`HybridRegimeEnsemble`) not yet deployed — registry is swap-ready but locked (a single `StrategyRegistry.register_model()` call would activate it)
 - Yahoo Finance data can be rate-limited; engine mitigates with exponential backoff (5s/15s/45s) + parquet cache fallback
 
 ---
