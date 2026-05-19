@@ -200,7 +200,7 @@ def evaluate_adversarial_manifold(
         "timestamp": datetime.now().isoformat(),
         "cmss": float(cmss),
         "max_regime_drop": float(max_drop),
-        "attractor_drift": float(drift_norm),
+        "attractor_drift": float(attractor_drift),
         "stability_class": stab_class,
         "regime_scores": {k: float(v) for k, v in regime_scores.items()},
         "normal_score": float(normal_score),
