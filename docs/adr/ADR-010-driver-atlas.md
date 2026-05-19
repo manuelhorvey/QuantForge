@@ -2,6 +2,8 @@
 
 **Status:** Accepted
 
+> **Note (May 2026):** BTC has since expanded to 10 features (added vix_delta_5, dxy_mom_21, vix_ma21, shorter momentum windows 10/21, vs_spy_21). GC=F was unblocked (see ADR-016). EURAUD, CADJPY, and USDCAD were added as full portfolio assets, with CADJPY later switched to tb20 labels (see `features/registry.py`).
+
 ## Context
 
 Early experiments applied a generic feature template to all assets: DXY momentum + asset momentum + macro features (rate_diff, yield curves). This approach produced acceptable results for XLF but failed on NZDJPY — 0 out of 7 walk-forward test windows were positive. The generic template did not fail due to poor feature engineering but due to incorrect driver selection: NZDJPY is driven by risk sentiment (VIX), bilateral yield spreads (US-JP 10-year), and carry trade dynamics, not by DXY or general momentum. The same analysis on other asset classes showed that each asset type responds to different macro drivers.

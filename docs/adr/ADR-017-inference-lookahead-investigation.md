@@ -13,10 +13,12 @@ Added a diagnostic that runs `_build_features()` live and measures the gap betwe
 
 | Asset | Label scheme | Feature gap | Verdict |
 |-------|-------------|-------------|---------|
-| CADJPY | fwd60 | 0 days | Clean |
+| CADJPY | tb20 * | 0 days | Clean |
 | GC | fwd60 | 3 days (weekend) | Clean |
 | BTC | tb20 | 3 days (weekend) | Clean |
 | NZDJPY | tb20 | 0 days | Clean |
+
+*Switched from fwd60 to tb20 in May 2026 feature augmentation. Staleness analysis applies to both label types.
 
 ## Why no staleness occurs
 

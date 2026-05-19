@@ -1,6 +1,8 @@
 # ADR-015: Asset-Specific Label Horizons
 
-**Status:** Accepted
+**Status:** Superseded (May 2026 — see below)
+
+> **Superseded by:** May 2026 feature augmentation. CADJPY was switched from fwd60 to tb20 labels after 5-year walk-forward testing showed tb20 + augmented features (us_jp_10y_spread, vix_delta_5, ca_jp_10y_spread, dxy_mom_21, cadjpy_mom_{10/21/63}) produced avg Sharpe 1.70 (vs 0.08 baseline) and 4/5 positive windows — outperforming the fwd60+spread_velocity configuration documented in this ADR. The fwd60 label was addressing weak features, not asset nature. With proper carry-pair features (rate spreads, VIX delta, DXY), tb20 generates more frequent, higher-quality signals. See `features/registry.py` for current CADJPY contract.
 
 ## Context
 

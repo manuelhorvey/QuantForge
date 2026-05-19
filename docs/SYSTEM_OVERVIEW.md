@@ -37,8 +37,8 @@ Raw Data Layer                  Feature Layer                Model Layer
      ┌─────────────────────────────────────────────────────────┐
      │              Paper Trading Engine                        │
      │  6x AssetEngine (6 assets, 5 driver clusters)            │
-     │  ├─ BTC tb20    GC=F fwd60   EURAUD tb20                │
-     │  ├─ NZDJPY tb20 CADJPY fwd60 USDCAD tb20                │
+  │  ├─ BTC tb20    GC=F fwd60   EURAUD tb20                │
+  │  ├─ NZDJPY tb20 CADJPY tb20  USDCAD tb20                │
      │  ├─ Live inference every 30 min                          │
      │  ├─ Vol-scaled position sizing                          │
      │  ├─ SL/TP management                                    │

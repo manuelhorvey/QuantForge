@@ -2,6 +2,8 @@
 
 **Status:** Accepted
 
+> **Note (May 2026):** CADJPY has since been switched from fwd60 to tb20 with augmented carry-pair features (us_jp_10y_spread, vix_delta_5, ca_jp_10y_spread, dxy_mom_21), producing avg Sharpe 1.70 vs the earlier fwd60+spread_velocity configuration. GC=F was left unchanged — its real yield / breakeven / DXY feature set remains optimal with fwd60.
+
 ## Context
 
 GC=F (gold futures) was the next asset to test after CADJPY confirmed the fwd60 label was superior for macro-trend assets (ADR-015). Gold's primary macro driver is real yield (DFII10) — trends unfold over months, making it a natural fwd60 candidate.

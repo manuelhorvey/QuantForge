@@ -26,7 +26,7 @@ Operational procedures for the paper trading system. This document is for the pe
 | GC=F | 20% | GC=F | -8% | No | fwd60 |
 | EURAUD | 22% | EURAUD=X | -8% | No | tb20 |
 | NZDJPY | 15% | NZDJPY=X | -6% | No | tb20 |
-| CADJPY | 13% | CADJPY=X | -8% | No | fwd60 |
+| CADJPY | 13% | CADJPY=X | -8% | No | tb20 |
 | USDCAD | 10% | USDCAD=X | -8% | No | tb20 |
 
 ### Halt Parameters (global defaults, overridable per asset)
@@ -129,7 +129,7 @@ for name, a in s['assets'].items():
 | GC=F | fwd60 | ~1:1 | 55-75% |
 | EURAUD | tb20 | ~1:1 | 55-75% |
 | NZDJPY | tb20 | ~1:1 | 55-75% |
-| CADJPY | fwd60 | ~1:1 | 55-75% |
+| CADJPY | tb20 | ~1:1 | 55-75% |
 | USDCAD | tb20 | ~1:1 | 55-75% |
 
 **If ratio exceeds 3:1 in either direction**, investigate macro context. A sustained imbalance may indicate:
