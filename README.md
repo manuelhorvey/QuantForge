@@ -46,6 +46,8 @@ The paper-trading engine runs continuously with the following allocation across 
 - Performance metrics (Profit Factor, Win Rate, Sharpe, Mean Confidence)
 - Validity & Halt condition monitors
 - Regime status and advisory bar
+- Risk governance dashboard (`/risk.json`, `/risk/{asset}.json`)
+- Shadow action intelligence (`/shadow-actions`, `/shadow-actions/{asset}.json`)
 
 ---
 
@@ -122,6 +124,10 @@ The feature algebra is governed by a **3-template grammar** that covers 100% of 
 | Diagnostics | `paper_trading/diagnostics.py` — root-cause analysis layer: signal divergence classification, model distribution tracking, one-at-a-time feature impact scoring, volatility regime context, PnL decomposition |
 | Shadow Memory | `paper_trading/shadow_memory.py` — persistent longitudinal store partitioned by asset+date (JSONL); immutable baseline with histogram-based model proba, signal mismatch, PnL error, and regime distributions |
 | Drift Scoring | `paper_trading/drift_scoring.py` — 5-dimensional drift engine: model KL divergence, signal mismatch rate, PnL MAE, feature Jaccard stability, regime consistency; `get_shadow_intelligence()` produces per-asset drift report with trend/risk/top sources |
+| Risk Governance | `paper_trading/risk_governance.py` — advisory risk layer: weighted composite score → LOW/MEDIUM/HIGH with risk flags, explanations, and non-binding recommended action |
+| Shadow Actions | `paper_trading/shadow_actions.py` — non-binding execution advisor: consumes drift + risk signals, produces action_type, exposure_adjustment, and recommended_guardrails |
+| Shadow Feedback | `paper_trading/shadow_feedback.py` — persistent behavioral dataset generator: append-only feedback events partitioned by asset+month; derived metrics (agreement_score, instability_index, risk_alignment) |
+| Shadow Analytics | `paper_trading/shadow_analytics.py` — offline aggregation: `build_asset_learning_profile()` (avg_agreement, drift_sensitivity, risk_overreaction_rate) + `compare_assets()` (stability ranking) |
 
 ---
 
@@ -187,6 +193,10 @@ QuantForge/
 │   ├── diagnostics.py   # Root-cause analysis: signal divergence, model dist, feature impact, regime, PnL decomp
 │   ├── shadow_memory.py # Persistent longitudinal store, partitioned by asset+date, baseline builder
 │   ├── drift_scoring.py # 5-dim drift engine: model KL, signal mismatch, PnL MAE, feature stability, regime consistency
+│   ├── risk_governance.py   # Advisory risk layer: weighted composite score + non-binding recommendations
+│   ├── shadow_actions.py    # Non-binding execution advisor: action_type, guardrails from drift+risk
+│   ├── shadow_feedback.py   # Persistent behavioral dataset generator (append-only, partitioned by asset+month)
+│   ├── shadow_analytics.py  # Offline aggregation: learning profiles, stability ranking
 │   ├── frontend/        # Dashboard UI (index.html, script.js, style.css)
 │   └── models/          # 6 serialised XGBoost model pickles
 ├── shared/              # Strategy interfaces and registry
@@ -298,7 +308,7 @@ make test
 
 ## Refactoring Phases (Zero-Behavior-Drift)
 
-The paper-trading engine has undergone a structural refactoring across 6 phases, each preserving byte-identical outputs:
+The paper-trading engine has undergone a structural refactoring across 9 phases, each preserving byte-identical outputs:
 
 | Phase | Description | Status |
 |-------|-------------|--------|
@@ -308,8 +318,11 @@ The paper-trading engine has undergone a structural refactoring across 6 phases,
 | **4** | Wrapper consolidation (delegate to shared interfaces) + PnL shadow + dead code removal | ✓ |
 | **5** | Shadow diagnostics layer: signal divergence, model distribution, feature impact, regime context, PnL decomposition | ✓ |
 | **6** | Persistent shadow memory (asset+date partitioned JSONL) + 5-dim drift scoring engine + baseline initialization | ✓ |
+| **7** | Risk governance layer: weighted composite risk score, advisory exposure_multiplier, non-binding recommended action, `/risk.json` dashboard endpoints | ✓ |
+| **8** | Shadow action layer: non-binding execution advisor with action_type (NONE/MONITOR/REDUCE/PAUSE), reason_codes, guardrails, `/shadow-actions` endpoints | ✓ |
+| **9** | Shadow feedback loop: persistent behavioral dataset generator with derived metrics (agreement_score, instability_index, risk_alignment); offline analytics toolkit (`build_asset_learning_profile`, `compare_assets`) | ✓ |
 
-The system is now **swap-ready but locked**: research models can be activated per-asset via `StrategyRegistry.register_model()` without touching engine code.
+The system is now **swap-ready but locked**: research models can be activated per-asset via `StrategyRegistry.register_model()` without touching engine code. The shadow layer spans 9 phases from basic tracing through persistent behavioral memory — purely observational, zero execution influence.
 
 ## Roadmap
 
