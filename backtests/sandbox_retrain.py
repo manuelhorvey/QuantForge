@@ -29,6 +29,7 @@ from backtests.forward_test import run_forward_test
 from backtests.mas import compute_mas
 from backtests.model_evolution import append_trajectory, print_equilibrium_report, load_trajectory, compute_mas_velocity
 from backtests.model_promotion_engine import evaluate_promotion
+from backtests.adversarial_manifold import evaluate_adversarial_manifold
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("quantforge.sandbox_retrain")
@@ -232,6 +233,13 @@ def run_one_asset(
     vel_str = f"∇={velocities[-1]:+.4f}" if velocities else ""
     logger.info("  %s MAS gradient: %s", name, vel_str)
 
+    logger.info("  Adversarial manifold projection...")
+    manifold = evaluate_adversarial_manifold(
+        asset=name, model=sandbox_model, X=X, close=close,
+        predict_fn=predict_fn,
+    )
+    logger.info("  %s CMSS=%.4f class=%s", name, manifold.get("cmss", 0), manifold.get("stability_class", "N/A"))
+
     logger.info("  Evaluating promotion protocol...")
     promotion = evaluate_promotion(
         asset=name,
@@ -256,6 +264,7 @@ def run_one_asset(
         "shadow_intel": shadow_result,
         "forward_test": forward_result,
         "mas": mas_result,
+        "adversarial_manifold": manifold,
         "promotion": promotion,
         "summary": summary,
     }
