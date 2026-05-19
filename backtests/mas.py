@@ -212,6 +212,31 @@ def score_forward(forward_result: dict) -> float:
     )
 
 
+def score_stress(forward_result: dict) -> float:
+    if "error" in forward_result:
+        return 0.0
+
+    bl_reg = forward_result.get("baseline_regime", {})
+    nw_reg = forward_result.get("new_regime", {})
+
+    delta_sharpes = []
+    delta_dds = []
+    for r in ["low_vol", "high_vol", "transition"]:
+        bl_r = bl_reg.get(r, {})
+        nw_r = nw_reg.get(r, {})
+        d_sharpe = _safe(nw_r.get("sharpe")) - _safe(bl_r.get("sharpe"))
+        d_sharpe = max(-1.0, min(1.0, d_sharpe))
+        delta_sharpes.append(d_sharpe)
+        d_dd = _safe(nw_r.get("max_drawdown")) - _safe(bl_r.get("max_drawdown"))
+        d_dd = max(0.0, min(1.0, d_dd))
+        delta_dds.append(d_dd)
+
+    mean_sharpe_delta = sum(delta_sharpes) / len(delta_sharpes) if delta_sharpes else 0.0
+    mean_dd_penalty = sum(1.0 - d for d in delta_dds) / len(delta_dds) if delta_dds else 1.0
+
+    return _clip01(0.5 * (mean_sharpe_delta + 1.0) / 2.0 + 0.5 * mean_dd_penalty)
+
+
 def compute_mas(
     model_result: dict,
     signal_result: dict,
@@ -223,7 +248,7 @@ def compute_mas(
     weights: Optional[dict] = None,
 ) -> dict:
     if weights is None:
-        weights = {"model": 0.25, "signal": 0.20, "portfolio": 0.25, "shadow": 0.15, "forward": 0.15}
+        weights = {"model": 0.22, "signal": 0.18, "portfolio": 0.20, "shadow": 0.12, "forward": 0.15, "stress": 0.13}
 
     gates_passed, gate_failures = hard_gates(
         signal_result, portfolio_result, model_result,
@@ -246,6 +271,7 @@ def compute_mas(
     m_portfolio = score_portfolio(portfolio_result)
     m_shadow = score_shadow(shadow_result)
     m_forward = score_forward(forward_result)
+    m_stress = score_stress(forward_result)
 
     mas = 100.0 * (
         weights["model"] * m_model
@@ -253,6 +279,7 @@ def compute_mas(
         + weights["portfolio"] * m_portfolio
         + weights["shadow"] * m_shadow
         + weights["forward"] * m_forward
+        + weights["stress"] * m_stress
     )
 
     if baseline_mas is not None:
@@ -260,16 +287,20 @@ def compute_mas(
     else:
         delta_mas = 0.0
 
-    if mas >= 85 and delta_mas > 2.0:
+    if mas >= 88 and m_stress > 0.6:
         decision = "ACCEPT"
-    elif mas >= 85 and delta_mas <= 0:
-        decision = "NO_IMPROVEMENT"
+    elif mas >= 85 and m_stress > 0.6:
+        decision = "DEPLOY_CANDIDATE"
+    elif mas >= 85 and delta_mas > 2.0 and m_stress > 0.6:
+        decision = "ACCEPT"
+    elif mas >= 85 and m_stress <= 0.6:
+        decision = "PROMOTE_ONLY"
     elif mas >= 70:
-        decision = "PROMOTE"
+        decision = "SHADOW_ONLY"
     elif mas >= 50:
         decision = "RESEARCH"
     else:
-        decision = "DISCARD"
+        decision = "REJECT"
 
     return {
         "mas": round(mas, 2),
@@ -283,6 +314,7 @@ def compute_mas(
             "portfolio": round(m_portfolio, 4),
             "shadow": round(m_shadow, 4),
             "forward": round(m_forward, 4),
+            "stress": round(m_stress, 4),
         },
         "weights": weights,
     }

@@ -11,6 +11,17 @@ from shared.model import XGBoostModel
 logger = logging.getLogger("quantforge.forward_test")
 
 
+def _classify_vol_regime(close: pd.Series) -> pd.Series:
+    returns = np.log(close / close.shift(1)).dropna()
+    vol = returns.rolling(10).std() * np.sqrt(252)
+    vol_pct = vol.rank(pct=True)
+    vol_pct = vol_pct.reindex(close.index).ffill().fillna(0.5)
+    regime = pd.Series("transition", index=close.index)
+    regime[vol_pct < 0.33] = "low_vol"
+    regime[vol_pct > 0.67] = "high_vol"
+    return regime
+
+
 def _sharpe_ratio(returns: np.ndarray, rf: float = 0.0) -> float:
     excess = returns - rf / 252
     if excess.std() == 0:
@@ -84,6 +95,51 @@ def _forward_metrics(
     }
 
 
+def _regime_trade_returns(signals: np.ndarray, close_arr: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    n = len(signals)
+    daily_pnl = np.full(n, np.nan)
+    pos = 0
+    entry = 0.0
+    for i in range(n):
+        if pos != 0 and signals[i] != pos:
+            ret = (close_arr[i] / entry - 1) if pos == 2 else (entry / close_arr[i] - 1)
+            daily_pnl[i] = ret
+            pos = 0
+        if pos == 0 and signals[i] != 1:
+            pos = int(signals[i])
+            daily_pnl[i] = 0.0
+            entry = float(close_arr[i])
+        elif pos == 0:
+            daily_pnl[i] = 0.0
+    equity = 100000.0 * (1 + np.nan_to_num(daily_pnl)).cumprod()
+    return daily_pnl, equity
+
+
+def _regime_metrics(proba: np.ndarray, close: pd.Series, regime: pd.Series, threshold: float = 0.45) -> dict:
+    n = len(proba)
+    signals = np.full(n, 1, dtype=int)
+    signals[proba[:, 2] > threshold] = 2
+    signals[proba[:, 0] > threshold] = 0
+    close_arr = close.values.astype(np.float64)
+    trade_pnl, equity = _regime_trade_returns(signals, close_arr)
+    regime_results = {}
+    for r in ["low_vol", "high_vol", "transition"]:
+        mask = (regime.values == r)
+        if mask.sum() < 3:
+            regime_results[r] = {"sharpe": 0.0, "max_drawdown": 0.0}
+            continue
+        r_trades = trade_pnl[mask]
+        r_trades = r_trades[~np.isnan(r_trades)]
+        r_sharpe = _sharpe_ratio(r_trades) if len(r_trades) > 1 else 0.0
+        r_equity = equity[mask]
+        r_dd = _max_drawdown(r_equity)
+        regime_results[r] = {
+            "sharpe": round(float(r_sharpe), 4),
+            "max_drawdown": round(float(r_dd), 4),
+        }
+    return regime_results
+
+
 def run_forward_test(
     ticker: str,
     X: pd.DataFrame,
@@ -138,11 +194,17 @@ def run_forward_test(
         baseline_metrics = _forward_metrics(baseline_proba, close_fwd, threshold)
         fw_metrics = _forward_metrics(fw_proba, close_fwd, threshold)
 
+        fwd_regime = _classify_vol_regime(close_fwd)
+        baseline_regime = _regime_metrics(baseline_proba, close_fwd, fwd_regime, threshold)
+        fw_regime_metrics = _regime_metrics(fw_proba, close_fwd, fwd_regime, threshold)
+
         return {
             "ticker": ticker,
             "forward_window": {"start": str(X_fwd.index[0]), "end": str(X_fwd.index[-1]), "n_rows": len(X_fwd)},
             "baseline": baseline_metrics,
             "new": fw_metrics,
+            "baseline_regime": baseline_regime,
+            "new_regime": fw_regime_metrics,
             "delta": {
                 "sharpe_diff": round(fw_metrics["sharpe"] - baseline_metrics["sharpe"], 4),
                 "hit_rate_diff": round(fw_metrics["hit_rate"] - baseline_metrics["hit_rate"], 4),

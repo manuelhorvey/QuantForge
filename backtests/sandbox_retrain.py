@@ -272,9 +272,9 @@ def log_mas(name, mas_result):
             logger.info("  ✗ %s", f)
     ss = mas_result.get("sub_scores", {})
     if ss:
-        logger.info("  model=%.4f  signal=%.4f  portfolio=%.4f  shadow=%.4f  forward=%.4f",
+        logger.info("  model=%.4f  signal=%.4f  portfolio=%.4f  shadow=%.4f  forward=%.4f  stress=%.4f",
                      ss.get("model", 0), ss.get("signal", 0), ss.get("portfolio", 0),
-                     ss.get("shadow", 0), ss.get("forward", 0))
+                     ss.get("shadow", 0), ss.get("forward", 0), ss.get("stress", 0))
     delta = mas_result.get("delta_mas")
     if delta is not None:
         logger.info("  ΔMAS = %+.2f", delta)
