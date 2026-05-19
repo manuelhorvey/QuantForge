@@ -1,9 +1,10 @@
 import pytest
 from paper_trading.engine import (
     flatten, norm_index, CONFIG, HALT,
-    XLF_FEATURES, BTC_FEATURES, PAPER_PORTFOLIO,
+    PAPER_PORTFOLIO,
     AssetEngine, _SKIP_JOURNAL,
 )
+from features.registry import FEATURE_REGISTRY
 
 
 class TestHelpers:
@@ -50,12 +51,14 @@ class TestConfig:
         assert "prob_drift" in HALT
 
     def test_xlf_features(self):
-        assert len(XLF_FEATURES) == 4
-        assert "rate_diff" in XLF_FEATURES
+        features = FEATURE_REGISTRY["BTC-USD"].features
+        assert len(features) == 4
+        assert "rate_diff" in features
 
     def test_btc_features(self):
-        assert len(BTC_FEATURES) == 4
-        assert "rate_diff" in BTC_FEATURES
+        features = FEATURE_REGISTRY["BTC-USD"].features
+        assert len(features) == 4
+        assert "rate_diff" in features
 
     def test_paper_portfolio_structure(self):
         assert "BTC" in PAPER_PORTFOLIO
@@ -77,7 +80,7 @@ class TestConfig:
 class TestUpdatePnl:
     @pytest.fixture
     def engine(self):
-        return AssetEngine("BTC", "BTC", BTC_FEATURES, PAPER_PORTFOLIO["BTC"]["alloc"],
+        return AssetEngine("BTC-USD", "BTC", FEATURE_REGISTRY["BTC-USD"], PAPER_PORTFOLIO["BTC"]["alloc"],
                            journal_path=_SKIP_JOURNAL)
 
     @pytest.fixture

@@ -8,7 +8,8 @@ import pytest
 
 from paper_trading.engine import AssetEngine
 from paper_trading.decision import PositionIntent
-from tests.test_engine import BTC_FEATURES, PAPER_PORTFOLIO, _SKIP_JOURNAL
+from tests.test_engine import PAPER_PORTFOLIO, _SKIP_JOURNAL
+from features.registry import FEATURE_REGISTRY
 
 
 class TestUpdatePnlDeterministic:
@@ -20,7 +21,7 @@ class TestUpdatePnlDeterministic:
     @pytest.fixture
     def engine(self):
         return AssetEngine(
-            "BTC-USD", "BTC", BTC_FEATURES, PAPER_PORTFOLIO["BTC"]["alloc"],
+            "BTC-USD", "BTC", FEATURE_REGISTRY["BTC-USD"], PAPER_PORTFOLIO["BTC"]["alloc"],
             journal_path=_SKIP_JOURNAL,
         )
 
