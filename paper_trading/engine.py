@@ -16,11 +16,7 @@ from monitoring.validity_state_machine import ValidityStateMachine as _ValidityS
 from enum import Enum
 from paper_trading.tracer import trace_decision, shadow_compare_signal, shadow_compare_sizing
 from paper_trading import wrappers as _w
-from shared.model import XGBoostModel
-from shared.signal import FixedThresholdStrategy
-from shared.sizing import VolTargetSizing
-from shared.pnl import DefaultPnLStrategy
-from shared.features import DefaultFeaturePipeline
+from shared.registry import StrategyRegistry
 
 
 class ExecutionState(Enum):
@@ -172,11 +168,13 @@ class AssetEngine:
         self.current_price = None
         self.pos_mgr = PositionManager(self.initial_capital, CONFIG['position_size'])
         self.validity_sm = _ValidityStateMachine()
-        self._model_iface = XGBoostModel()
-        self._signal_strategy = FixedThresholdStrategy()
-        self._sizing_strategy = VolTargetSizing()
-        self._pnl_strategy = DefaultPnLStrategy()
-        self._feature_pipeline = DefaultFeaturePipeline()
+        _reg = StrategyRegistry.get_instance()
+        self._model_iface = _reg.get_model(self.name)
+        self._signal_strategy = _reg.get_signal(self.name)
+        self._sizing_strategy = _reg.get_sizing(self.name)
+        self._pnl_strategy = _reg.get_pnl(self.name)
+        self._feature_pipeline = _reg.get_features(self.name)
+        self._research_mode = _cfg.get("research_mode", False)
         if state_store is not None:
             self.state_store = state_store
         elif journal_path is _SKIP_JOURNAL:
@@ -354,6 +352,14 @@ class AssetEngine:
             wrapper_size=_shadow_size,
             original_size=float(pos_size),
         )
+
+        _reg.validate_strategies(self.name, {
+            "_model": self._model_iface,
+            "_signal": self._signal_strategy,
+            "_sizing": self._sizing_strategy,
+            "_pnl": self._pnl_strategy,
+            "_feature_pipeline": self._feature_pipeline,
+        })
 
         return self._decision_to_dict(decision)
 
@@ -648,6 +654,8 @@ class PaperTradingEngine:
             if eng_status.get('start_time'):
                 self.start_date = datetime.fromisoformat(eng_status['start_time'])
             saved_positions = snapshot.open_positions or {}
+        _reg = StrategyRegistry.get_instance()
+        _reg.register_defaults(list(PAPER_PORTFOLIO.keys()))
         for name, spec in PAPER_PORTFOLIO.items():
             self.assets[name] = AssetEngine(
                 spec['ticker'], name, spec['contract'], spec['alloc'],

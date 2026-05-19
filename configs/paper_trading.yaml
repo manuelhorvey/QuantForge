@@ -3,6 +3,7 @@ position_size: 0.95
 rebalance: daily
 retrain_freq: annual
 retrain_window: 5
+research_mode: false
 
 halt:
   drawdown: -0.08

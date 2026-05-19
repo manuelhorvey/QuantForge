@@ -205,7 +205,7 @@ intra-project:
   quantforge (setup_logging)
 ```
 
-**SAFE shared interfaces:** shared.model, shared.signal, shared.sizing, shared.pnl, shared.features
+**SAFE shared interfaces:** shared.model, shared.signal, shared.sizing, shared.pnl, shared.features, shared.registry
 
 **FORBIDDEN at runtime:** execution.*, portfolio.*, risk.*, signals.*,
 models.*, diagnostics.*, equity.*, backtests.*, scripts.*,
