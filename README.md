@@ -86,16 +86,36 @@ PYTHONPATH=.
 
 ### 3.3 System Execution
 
-Start full simulation system:
+Start full simulation system (builds dashboard, starts engine, serves UI):
+
+```bash
+./monitor_all
+```
+
+Or manually:
 
 ```bash
 python paper_trading/monitor.py
 ```
 
-Dashboard:
+Dashboard (React + TypeScript + Tailwind CSS):
 
 ```
 http://localhost:5000
+```
+
+Features landing page with flashlight hero reveal, 11 live components (AssetCard, EquityChart, SignalsTable, PortfolioSummary, VolRegimePanel, MetricsGrid, ConfidenceChart, TradeFeed, HaltConditions, Footer, Header), dark/light theme toggle, GSAP-powered transitions.
+
+Rebuild dashboard after frontend changes:
+
+```bash
+(cd paper_trading/dashboard && yarn build)
+```
+
+Dev mode (port 3000, proxies /state.json to port 5000):
+
+```bash
+(cd paper_trading/dashboard && yarn dev)
 ```
 
 Run backtest:
@@ -110,19 +130,21 @@ python equity/walk_forward_eurusd.py
 
 The system maintains an 11-asset continuously evaluated simulation portfolio.
 
-| Asset  | Ticker   | Label | Cluster         | Allocation |
-| ------ | -------- | ----- | --------------- | ---------- |
-| BTC    | BTC-USD  | tb20  | momentum_crypto | 14%        |
-| EURAUD | EURAUD=X | tb20  | eur_cross       | 17%        |
-| GC     | GC=F     | fwd60 | real_asset      | 15%        |
-| NZDJPY | NZDJPY=X | tb20  | carry_fx        | 11%        |
-| CADJPY | CADJPY=X | tb20  | oil_carry       | 10%        |
-| AUDJPY | AUDJPY=X | tb20  | carry_fx        | 7%         |
-| USDCAD | USDCAD=X | tb20  | usd_macro       | 7%         |
-| GBPJPY | GBPJPY=X | tb20  | carry_fx        | 6%         |
-| USDJPY | USDJPY=X | tb20  | usd_macro       | 5%         |
-| USDCHF | USDCHF=X | tb20  | usd_macro       | 4%         |
-| GBPUSD | GBPUSD=X | tb20  | usd_macro       | 4%         |
+| Asset  | Ticker   | Label | Cluster         | Allocation | sl_mult | tp_mult | R:R |
+| ------ | -------- | ----- | --------------- | ---------- | ------- | ------- | --- |
+| BTC    | BTC-USD  | tb20  | momentum_crypto | 14%        | 1.5     | 3.0     | 1:2 |
+| EURAUD | EURAUD=X | tb20  | eur_cross       | 17%        | 1.0     | 2.5     | 1:2.5 |
+| GC     | GC=F     | fwd60 | real_asset      | 15%        | 1.2     | 4.0     | 1:3.3 |
+| NZDJPY | NZDJPY=X | tb20  | carry_fx        | 11%        | 1.0     | 2.5     | 1:2.5 |
+| CADJPY | CADJPY=X | tb20  | oil_carry       | 10%        | 0.8     | 3.5     | 1:4.4 |
+| AUDJPY | AUDJPY=X | tb20  | carry_fx        | 7%         | 1.0     | 2.5     | 1:2.5 |
+| USDCAD | USDCAD=X | tb20  | usd_macro       | 7%         | 1.0     | 2.5     | 1:2.5 |
+| GBPJPY | GBPJPY=X | tb20  | carry_fx        | 6%         | 1.0     | 2.5     | 1:2.5 |
+| USDJPY | USDJPY=X | tb20  | usd_macro       | 5%         | 1.0     | 2.5     | 1:2.5 |
+| USDCHF | USDCHF=X | tb20  | usd_macro       | 4%         | 1.0     | 2.5     | 1:2.5 |
+| GBPUSD | GBPUSD=X | tb20  | usd_macro       | 4%         | 1.0     | 2.5     | 1:2.5 |
+
+> `sl_mult` and `tp_mult` are configured in `configs/paper_trading.yaml`. Stop-loss = vol × sl_mult, take-profit = vol × tp_mult. The resulting R:R = tp_mult / sl_mult. Each asset's triple-barrier training labels (`pt_sl` in `features/registry.py`) must match these runtime multipliers — enforced by startup validation in `PaperTradingEngine.initialize()`.
 
 Execution is fully simulated via a broker abstraction layer using Yahoo Finance market data.
 
@@ -162,10 +184,10 @@ Each asset is mapped to a **driver-specific feature subspace** to prevent cross-
 
 ### 6.2 Labeling Regimes
 
-* **tb20**: Triple-barrier event labeling (20-bar horizon)
-* **fwd60**: 60-day forward return classification
+* **tb20**: Triple-barrier event labeling (20-bar horizon). Take-profit and stop-loss levels are set per-asset via `ASSET_LABEL_PARAMS` in `features/registry.py` — the `pt_sl` array `[tp_mult, sl_mult]` must match runtime `tp_mult`/`sl_mult` from `configs/paper_trading.yaml`.
+* **fwd60**: 60-day forward return classification with fixed threshold.
 
-Label selection is asset-specific and regime-derived.
+Label selection is asset-specific and regime-derived. Training/execution alignment is enforced by startup validation.
 
 ---
 
@@ -234,6 +256,61 @@ Separation is enforced between:
 * Asset-level allocation constraints
 * Drawdown-based risk halting
 * Mark-to-market PnL tracking
+
+### 8.4 Per-Asset Risk Multipliers
+
+Stop-loss and take-profit distances are set per asset via `configs/paper_trading.yaml`:
+
+```yaml
+assets:
+  BTC:
+    sl_mult: 1.5    # stop = entry × (1 − vol × 1.5)
+    tp_mult: 3.0    # take-profit = entry × (1 + vol × 3.0)
+```
+
+The `PositionIntent.from_price_and_vol()` factory in `paper_trading/decision.py` accepts these parameters and computes SL/TP from current volatility:
+
+```python
+# Long: sl = entry × (1 − vol × sl_mult), tp = entry × (1 + vol × tp_mult)
+# Short: sl = entry × (1 + vol × sl_mult), tp = entry × (1 − vol × tp_mult)
+```
+
+This replaces the original hardcoded 1:1 ratio with asset-tuned values (e.g., CADJPY at 0.8×/3.5× for carry trends, GC at 1.2×/4.0× for macro gold runs).
+
+### 8.5 Configuration
+
+The engine reads `configs/paper_trading.yaml`:
+
+| Key | Default | Description |
+| --- | ------- | ----------- |
+| `capital` | 100000 | Starting capital |
+| `position_size` | 0.95 | Fraction of capital per position |
+| `rebalance` | daily | Rebalance frequency |
+| `halt.drawdown` | -0.08 | Global drawdown halt threshold |
+| `halt.monthly_pf` | 0.70 | Monthly profit factor minimum |
+| `halt.signal_drought` | 30 | Max days without signal |
+| `halt.prob_drift` | 0.15 | Max confidence drift from expected |
+| `research_mode` | false | Enables shadow-only execution |
+| `assets.<name>.allocation` | — | Portfolio weight (must sum to 1.0) |
+| `assets.<name>.sl_mult` | 1.0 | Stop-loss volatility multiplier |
+| `assets.<name>.tp_mult` | 2.5 | Take-profit volatility multiplier |
+| `assets.<name>.config.vol_scalar` | false | Enable volatility scaling (BTC only) |
+
+Asset-level `halt` settings override global defaults.
+
+### 8.6 Training Alignment Validation
+
+On startup, `PaperTradingEngine.initialize()` asserts runtime multipliers match training labels:
+
+```python
+ASSET_LABEL_PARAMS = {
+    "BTC": {"pt": 3.0, "sl": 1.5},
+    "CADJPY": {"pt": 3.5, "sl": 0.8},
+    ...
+}
+```
+
+If `configs/paper_trading.yaml` has `BTC: sl_mult: 1.5` but `ASSET_LABEL_PARAMS["BTC"]["sl"]` is `1.0`, the engine raises `AssertionError` at startup. This prevents silent training/execution misalignment — the triple-barrier labels used during model training must produce the same SL/TP distances the engine uses at runtime.
 
 ---
 
