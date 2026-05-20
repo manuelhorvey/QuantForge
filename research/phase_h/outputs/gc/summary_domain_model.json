@@ -1,0 +1,14 @@
+{
+  "label": "domain_model",
+  "n_sweep_points": 36,
+  "best_sharpe": {
+    "sl_mult": 0.3,
+    "tp_mult": 2.25,
+    "sharpe": 2.9008,
+    "pf": 1.7822,
+    "n_trades": 1198
+  },
+  "plateau_pct": 0.1389,
+  "max_sharpe": 2.9008,
+  "n_valid_configs": 36
+}

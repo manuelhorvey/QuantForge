@@ -1,0 +1,47 @@
+{
+  "BTC": {
+    "label_type": "tbvol",
+    "n_features": 10,
+    "fx_transfer": {
+      "source": "EURAUD",
+      "n_shared_features": 4,
+      "signal_dist": {
+        "short": 3107,
+        "neutral": 0,
+        "long": 1092
+      }
+    },
+    "domain_model": {
+      "n_oos_bars": 2695,
+      "direction_accuracy": 0.4928,
+      "timing_sharpe": 0.0,
+      "replay_sharpe": 0.5145820592773919
+    },
+    "geometry_domain": {
+      "max_sharpe": 1.0067,
+      "best_sl": 0.3,
+      "best_tp": 3.0,
+      "plateau_width": 0.0833
+    },
+    "geometry_fx_transfer": {
+      "max_sharpe": 0.4412,
+      "platueau_width": 0.0556
+    }
+  },
+  "GC": {
+    "label_type": "fwd_return",
+    "n_features": 4,
+    "domain_model": {
+      "n_oos_bars": 2608,
+      "direction_accuracy": 0.5263,
+      "timing_sharpe": 0.0,
+      "replay_sharpe": 1.5119749547017622
+    },
+    "geometry_domain": {
+      "max_sharpe": 2.9008,
+      "best_sl": 0.3,
+      "best_tp": 2.25,
+      "plateau_width": 0.1389
+    }
+  }
+}

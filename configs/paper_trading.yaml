@@ -124,8 +124,8 @@ assets:
   USDCHF:
     ticker: USDCHF=X
     allocation: 0.04
-    sl_mult: 1.0
-    tp_mult: 2.5
+    sl_mult: 0.75
+    tp_mult: 2.25
     features: [rate_diff, dxy_mom_21, vix_ma21, vix_delta_5, usdchf_mom_21, usdchf_mom_63]
     halt:
       drawdown: -0.08

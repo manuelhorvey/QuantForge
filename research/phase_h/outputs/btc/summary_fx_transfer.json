@@ -1,0 +1,14 @@
+{
+  "label": "fx_transfer",
+  "n_sweep_points": 36,
+  "best_sharpe": {
+    "sl_mult": 0.3,
+    "tp_mult": 2.25,
+    "sharpe": 0.4412,
+    "pf": 1.0969,
+    "n_trades": 2311
+  },
+  "plateau_pct": 0.0556,
+  "max_sharpe": 0.4412,
+  "n_valid_configs": 36
+}

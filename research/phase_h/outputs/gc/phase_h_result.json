@@ -1,0 +1,71 @@
+{
+  "target": "GC",
+  "label_type": "fwd_return",
+  "label_params": {
+    "horizon": 120,
+    "threshold": 0.03
+  },
+  "n_features": 4,
+  "features": [
+    "real_yield_delta_63",
+    "breakeven_delta_63",
+    "dxy_mom_63",
+    "gc_mom_63"
+  ],
+  "mode_a_fx_transfer": {
+    "status": "failed",
+    "reason": "insufficient_feature_overlap"
+  },
+  "mode_b_domain_model": {
+    "status": "ok",
+    "n_oos_bars": 2608,
+    "n_years": 11,
+    "signal": {
+      "n_total": 2608,
+      "n_directional": 2354,
+      "n_long": 1246,
+      "n_short": 1108,
+      "n_neutral": 254,
+      "long_pct": 52.9,
+      "directional_accuracy": 0.5263,
+      "flip_rate": 0.1517,
+      "timing_sharpe": 0.0,
+      "mean_confidence": 60.96
+    },
+    "replay_medium": {
+      "sl_mult": 0.75,
+      "tp_mult": 2.25,
+      "n_trades": 871,
+      "valid": true,
+      "pf": 1.2618061907440756,
+      "win_rate": 0.330654420206659,
+      "expectancy": 0.0012074881255870426,
+      "sharpe": 1.5119749547017622,
+      "max_dd": -0.2649673760126052,
+      "avg_hold_bars": 2.7818599311136625,
+      "stop_hit_freq": 0.6394948335246843,
+      "payoff_asym": 2.5499000104619864,
+      "top5_concentration": 0.047068061594916444,
+      "sharpe_stability": 2.4211989247435395,
+      "avg_win": 0.017600348931370864,
+      "avg_loss": 0.006902368272935559,
+      "n_winners": 288,
+      "n_losers": 582
+    }
+  },
+  "mode_c_geometry_sweep_domain": {
+    "label": "domain_model",
+    "n_sweep_points": 36,
+    "best_sharpe": {
+      "sl_mult": 0.3,
+      "tp_mult": 2.25,
+      "sharpe": 2.9008,
+      "pf": 1.7822,
+      "n_trades": 1198
+    },
+    "plateau_pct": 0.1389,
+    "max_sharpe": 2.9008,
+    "n_valid_configs": 36
+  },
+  "mode_c_geometry_sweep_fx": null
+}

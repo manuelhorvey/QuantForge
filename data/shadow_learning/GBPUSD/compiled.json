@@ -25,8 +25,129 @@
         "risk_sensitivity": 0.5,
         "action_coherence": 1.0
       }
+    },
+    {
+      "timestamp": "2026-05-20T02:34:35.641753",
+      "event_count": 2,
+      "learning_profile": {
+        "behavioral_stability": 0.95,
+        "drift_resilience": 0.9,
+        "signal_consistency": 0.975,
+        "risk_sensitivity": 0.5,
+        "action_coherence": 1.0
+      }
+    },
+    {
+      "timestamp": "2026-05-20T02:47:40.767616",
+      "event_count": 3,
+      "learning_profile": {
+        "behavioral_stability": 0.95,
+        "drift_resilience": 0.9,
+        "signal_consistency": 0.975,
+        "risk_sensitivity": 0.5,
+        "action_coherence": 1.0
+      }
+    },
+    {
+      "timestamp": "2026-05-20T03:04:46.390771",
+      "event_count": 4,
+      "learning_profile": {
+        "behavioral_stability": 0.95,
+        "drift_resilience": 0.9,
+        "signal_consistency": 0.975,
+        "risk_sensitivity": 0.5,
+        "action_coherence": 1.0
+      }
+    },
+    {
+      "timestamp": "2026-05-20T03:17:19.105498",
+      "event_count": 5,
+      "learning_profile": {
+        "behavioral_stability": 0.95,
+        "drift_resilience": 0.9,
+        "signal_consistency": 0.975,
+        "risk_sensitivity": 0.5,
+        "action_coherence": 1.0
+      }
+    },
+    {
+      "timestamp": "2026-05-20T03:19:58.484535",
+      "event_count": 6,
+      "learning_profile": {
+        "behavioral_stability": 0.95,
+        "drift_resilience": 0.9,
+        "signal_consistency": 0.975,
+        "risk_sensitivity": 0.5,
+        "action_coherence": 1.0
+      }
+    },
+    {
+      "timestamp": "2026-05-20T03:24:41.496346",
+      "event_count": 7,
+      "learning_profile": {
+        "behavioral_stability": 0.95,
+        "drift_resilience": 0.9,
+        "signal_consistency": 0.975,
+        "risk_sensitivity": 0.5,
+        "action_coherence": 1.0
+      }
+    },
+    {
+      "timestamp": "2026-05-20T03:27:01.186587",
+      "event_count": 8,
+      "learning_profile": {
+        "behavioral_stability": 0.95,
+        "drift_resilience": 0.9,
+        "signal_consistency": 0.975,
+        "risk_sensitivity": 0.5,
+        "action_coherence": 1.0
+      }
+    },
+    {
+      "timestamp": "2026-05-20T03:28:56.093734",
+      "event_count": 9,
+      "learning_profile": {
+        "behavioral_stability": 0.95,
+        "drift_resilience": 0.9,
+        "signal_consistency": 0.975,
+        "risk_sensitivity": 0.5,
+        "action_coherence": 1.0
+      }
+    },
+    {
+      "timestamp": "2026-05-20T03:34:55.162948",
+      "event_count": 10,
+      "learning_profile": {
+        "behavioral_stability": 0.95,
+        "drift_resilience": 0.9,
+        "signal_consistency": 0.975,
+        "risk_sensitivity": 0.5,
+        "action_coherence": 1.0
+      }
+    },
+    {
+      "timestamp": "2026-05-20T03:48:56.456300",
+      "event_count": 11,
+      "learning_profile": {
+        "behavioral_stability": 0.95,
+        "drift_resilience": 0.9,
+        "signal_consistency": 0.975,
+        "risk_sensitivity": 0.5,
+        "action_coherence": 1.0
+      }
+    },
+    {
+      "timestamp": "2026-05-20T03:49:51.894120",
+      "event_count": 12,
+      "learning_profile": {
+        "behavioral_stability": 0.95,
+        "drift_resilience": 0.9,
+        "signal_consistency": 0.975,
+        "risk_sensitivity": 0.5,
+        "action_coherence": 1.0
+      }
     }
   ],
-  "last_updated": "2026-05-20T01:34:19.199118",
+  "last_updated": "2026-05-20T03:49:51.894120",
   "asset": "GBPUSD"
 }

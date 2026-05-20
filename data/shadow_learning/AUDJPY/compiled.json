@@ -1,18 +1,20 @@
 {
   "learning_profile": {
-    "behavioral_stability": 0.9453,
-    "drift_resilience": 0.8938,
-    "signal_consistency": 0.9727,
+    "behavioral_stability": 0.947,
+    "drift_resilience": 0.896,
+    "signal_consistency": 0.9735,
     "risk_sensitivity": 0.5,
     "action_coherence": 1.0
   },
-  "latent_patterns": [],
+  "latent_patterns": [
+    "HIGH_DRIFT_PERIODS_CORRELATE_WITH_SIGNAL_FLIPS"
+  ],
   "shadow_insights": {
     "top_instability_drivers": [
       "regime"
     ],
     "dominant_failure_mode": "none_detected",
-    "execution_fragility_score": 0.1094
+    "execution_fragility_score": 0.1059
   },
   "history": [
     {
@@ -25,8 +27,129 @@
         "risk_sensitivity": 0.5,
         "action_coherence": 1.0
       }
+    },
+    {
+      "timestamp": "2026-05-20T02:34:34.857919",
+      "event_count": 2,
+      "learning_profile": {
+        "behavioral_stability": 0.9459,
+        "drift_resilience": 0.8946,
+        "signal_consistency": 0.973,
+        "risk_sensitivity": 0.5,
+        "action_coherence": 1.0
+      }
+    },
+    {
+      "timestamp": "2026-05-20T02:47:39.971424",
+      "event_count": 3,
+      "learning_profile": {
+        "behavioral_stability": 0.9462,
+        "drift_resilience": 0.895,
+        "signal_consistency": 0.9731,
+        "risk_sensitivity": 0.5,
+        "action_coherence": 1.0
+      }
+    },
+    {
+      "timestamp": "2026-05-20T03:04:45.579228",
+      "event_count": 4,
+      "learning_profile": {
+        "behavioral_stability": 0.9464,
+        "drift_resilience": 0.8952,
+        "signal_consistency": 0.9732,
+        "risk_sensitivity": 0.5,
+        "action_coherence": 1.0
+      }
+    },
+    {
+      "timestamp": "2026-05-20T03:17:15.548059",
+      "event_count": 5,
+      "learning_profile": {
+        "behavioral_stability": 0.9465,
+        "drift_resilience": 0.8953,
+        "signal_consistency": 0.9732,
+        "risk_sensitivity": 0.5,
+        "action_coherence": 1.0
+      }
+    },
+    {
+      "timestamp": "2026-05-20T03:19:54.922370",
+      "event_count": 6,
+      "learning_profile": {
+        "behavioral_stability": 0.9466,
+        "drift_resilience": 0.8955,
+        "signal_consistency": 0.9733,
+        "risk_sensitivity": 0.5,
+        "action_coherence": 1.0
+      }
+    },
+    {
+      "timestamp": "2026-05-20T03:24:37.612742",
+      "event_count": 7,
+      "learning_profile": {
+        "behavioral_stability": 0.9467,
+        "drift_resilience": 0.8956,
+        "signal_consistency": 0.9733,
+        "risk_sensitivity": 0.5,
+        "action_coherence": 1.0
+      }
+    },
+    {
+      "timestamp": "2026-05-20T03:26:57.193534",
+      "event_count": 8,
+      "learning_profile": {
+        "behavioral_stability": 0.9468,
+        "drift_resilience": 0.8957,
+        "signal_consistency": 0.9734,
+        "risk_sensitivity": 0.5,
+        "action_coherence": 1.0
+      }
+    },
+    {
+      "timestamp": "2026-05-20T03:28:52.357220",
+      "event_count": 9,
+      "learning_profile": {
+        "behavioral_stability": 0.9468,
+        "drift_resilience": 0.8958,
+        "signal_consistency": 0.9734,
+        "risk_sensitivity": 0.5,
+        "action_coherence": 1.0
+      }
+    },
+    {
+      "timestamp": "2026-05-20T03:34:54.109400",
+      "event_count": 10,
+      "learning_profile": {
+        "behavioral_stability": 0.9469,
+        "drift_resilience": 0.8959,
+        "signal_consistency": 0.9735,
+        "risk_sensitivity": 0.5,
+        "action_coherence": 1.0
+      }
+    },
+    {
+      "timestamp": "2026-05-20T03:48:51.841622",
+      "event_count": 11,
+      "learning_profile": {
+        "behavioral_stability": 0.947,
+        "drift_resilience": 0.896,
+        "signal_consistency": 0.9735,
+        "risk_sensitivity": 0.5,
+        "action_coherence": 1.0
+      }
+    },
+    {
+      "timestamp": "2026-05-20T03:49:47.822699",
+      "event_count": 12,
+      "learning_profile": {
+        "behavioral_stability": 0.947,
+        "drift_resilience": 0.896,
+        "signal_consistency": 0.9735,
+        "risk_sensitivity": 0.5,
+        "action_coherence": 1.0
+      }
     }
   ],
-  "last_updated": "2026-05-20T01:34:18.432824",
+  "last_updated": "2026-05-20T03:49:47.822699",
   "asset": "AUDJPY"
 }

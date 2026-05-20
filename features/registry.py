@@ -10,7 +10,7 @@ ASSET_LABEL_PARAMS: dict[str, dict[str, float]] = {
     "USDCAD": {"pt": 2.25, "sl": 0.75},
     "GBPJPY": {"pt": 2.5, "sl": 1.0},
     "USDJPY": {"pt": 2.5, "sl": 1.0},
-    "USDCHF": {"pt": 2.5, "sl": 1.0},
+    "USDCHF": {"pt": 2.25, "sl": 0.75},
     "GBPUSD": {"pt": 2.5, "sl": 1.0},
 }
 
