@@ -37,6 +37,13 @@ from research.risk.execution_physics import (
     compute_composite_vol_index, classify_regimes, regime_aware_bootstrap,
     compute_exposure_telemetry, TelemetryResult, plot_exposure_telemetry,
 )
+from research.risk.synthetic_stress import (
+    inject_synthetic_blocks,
+    validate_tail_statistics,
+    print_validation_results,
+    regime_fraction_report,
+    STRESS_BLOCK_LIBRARY,
+)
 
 logger = logging.getLogger("quantforge.risk.survival")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -55,6 +62,7 @@ BLOCK_LENGTH = 21
 RUIN_THRESHOLD = -0.40
 CONF_LEVELS = [0.95, 0.99]
 PORTFOLIO_CAPITAL = 100_000
+SYNTHETIC_INJECTION_RATE = 0.25  # fraction of series length to add as synthetic crisis blocks
 
 # ── variant definitions ────────────────────────────────────────────────
 VARIANTS = {
@@ -77,6 +85,11 @@ VARIANTS = {
         'label': 'BTC Regime-Gated',
         'description': 'BTC only active in favorable volatility regimes',
         'modify_alloc': None,  # handled separately via regime filtering
+    },
+    'synthetic_stress': {
+        'label': 'Full Portfolio + Synthetic Stress Injection',
+        'description': 'All 11 assets with synthetic CRISIS blocks injected into bootstrap',
+        'modify_alloc': None,
     },
 }
 
@@ -367,10 +380,13 @@ def generate_portfolio_paths(asset_data: dict, allocations: dict,
                               seed: int = 42, variant: str = 'full',
                               execution_config: ExecutionConfig = None,
                               deleverage: bool = False,
-                              regimes: np.ndarray = None) -> dict:
+                              regimes: np.ndarray = None,
+                              synthetic_injection_rate: float = 0.0) -> dict:
     """Generate portfolio equity paths using correlated bootstrap.
 
     For the 'btc_gated' variant, uses regime-filtered bootstrap for BTC.
+    When synthetic_injection_rate > 0, pre-pends synthetic stress blocks
+    to extend CRISIS regime coverage.
 
     Returns:
         {
@@ -379,6 +395,7 @@ def generate_portfolio_paths(asset_data: dict, allocations: dict,
             'allocations': normalized allocations,
             'n_days': int,
             'variant': str,
+            'n_synthetic_days': int,
         }
     """
     if n_days is None:
@@ -391,9 +408,54 @@ def generate_portfolio_paths(asset_data: dict, allocations: dict,
     if not active_assets:
         raise ValueError('No active assets in variant')
 
+    n_synthetic_days = 0
+
+    # Inject synthetic stress blocks into return series if requested
+    if synthetic_injection_rate > 0:
+        series_dict = {n: adata['daily_returns'].values
+                       for n, adata in active_assets.items()}
+        extended = inject_synthetic_blocks(
+            series_dict, injection_rate=synthetic_injection_rate,
+            seed=seed + 7777)
+        # Determine how many synthetic days were added
+        n_orig = min(len(v) for v in series_dict.values())
+        n_ext = min(len(v) for v in extended.values())
+        n_synthetic_days = n_ext - n_orig
+
+        # Re-compute regimes on extended data if regime bootstrap was active
+        if regimes is not None:
+            extended_composite = compute_composite_vol_index(
+                extended, window=BLOCK_LENGTH)
+            extended_regimes = classify_regimes(extended_composite)
+            # Override first n_synthetic_days to CRISIS (they are stress by construction)
+            extended_regimes[:n_synthetic_days] = VolRegime.CRISIS
+            regimes = extended_regimes
+
+        # Rebuild active_assets with extended series
+        for n, adata in active_assets.items():
+            adata['daily_returns'] = pd.Series(extended[n][n_synthetic_days:],
+                                                index=adata['daily_returns'].index)
+            # Pre-pend synthetic portion as a synthetic return Series
+            syn_index = pd.date_range(
+                end=adata['daily_returns'].index[0] - pd.Timedelta(days=1),
+                periods=n_synthetic_days, freq='D')
+            full_index = pd.DatetimeIndex(np.concatenate([syn_index, adata['daily_returns'].index]))
+            full_series = pd.Series(extended[n], index=full_index)
+            adata['daily_returns'] = full_series
+
+        logger.info('Synthetic stress injection: %d days added (%.1f%% of original)',
+                     n_synthetic_days,
+                     100 * n_synthetic_days / max(1, n_orig))
+
+        # Log regime fractions after injection
+        if regimes is not None:
+            fracs = regime_fraction_report(regimes, n_synthetic_days)
+            logger.info('Extended regime fractions: %s', fracs)
+
     # Bootstrap
     if regimes is not None:
-        series_dict = {n: adata['daily_returns'].values for n, adata in active_assets.items()}
+        series_dict = {n: adata['daily_returns'].values
+                       for n, adata in active_assets.items()}
         ret_paths = regime_aware_bootstrap(
             series_dict, regimes, n_days, n_paths,
             block_len=BLOCK_LENGTH, seed=seed)
@@ -445,6 +507,7 @@ def generate_portfolio_paths(asset_data: dict, allocations: dict,
         'allocations': norm_alloc,
         'n_days': n_days,
         'variant': variant,
+        'n_synthetic_days': n_synthetic_days,
     }
 
 
@@ -628,16 +691,30 @@ def _stress_execution_config(cfg: ExecutionConfig) -> ExecutionConfig:
 def apply_stress(asset_data: dict, allocations: dict,
                  port_result: dict, scenario: str,
                  execution_config: ExecutionConfig = None,
-                 deleverage: bool = False) -> dict:
+                 deleverage: bool = False,
+                 synthetic_injection_rate: float = 0.0) -> dict:
     """Apply a stress scenario with full correlated bootstrap."""
     sconfig = STRESS_SCENARIOS[scenario]
     n_paths = port_result['paths'].shape[0]
     n_days = port_result['n_days']
 
+    # Inject synthetic stress blocks if requested
+    active = {n: asset_data[n] for n in port_result['allocations']}
+    if synthetic_injection_rate > 0:
+        series_dict = {n: adata['daily_returns'].values
+                       for n, adata in active.items()}
+        extended = inject_synthetic_blocks(
+            series_dict, injection_rate=synthetic_injection_rate,
+            seed=43 + 7777)
+        # Replace daily_returns with the extended array for bootstrap
+        class _WrappedArray:
+            def __init__(self, arr): self.values = arr
+        for n in active:
+            active[n] = {**active[n], 'daily_returns': _WrappedArray(extended[n])}
+
     # Generate base paths using correlated bootstrap
     ret_paths = multi_asset_bootstrap(
-        {n: asset_data[n] for n in port_result['allocations']},
-        n_days, n_paths, seed=43)  # different seed for stress
+        active, n_days, n_paths, seed=43)  # different seed for stress
 
     # Inject shock
     if scenario == 'correlation_spike':
@@ -709,7 +786,8 @@ def apply_stress(asset_data: dict, allocations: dict,
 def run_stress_scenarios(asset_data: dict, allocations: dict,
                           port_result: dict,
                           execution_config: ExecutionConfig = None,
-                          deleverage: bool = False) -> dict:
+                          deleverage: bool = False,
+                          synthetic_injection_rate: float = 0.0) -> dict:
     """Run all stress scenarios."""
     scenarios = {}
     for name in STRESS_SCENARIOS:
@@ -717,7 +795,8 @@ def run_stress_scenarios(asset_data: dict, allocations: dict,
         try:
             scenarios[name] = apply_stress(
                 asset_data, allocations, port_result, name,
-                execution_config=execution_config, deleverage=deleverage)
+                execution_config=execution_config, deleverage=deleverage,
+                synthetic_injection_rate=synthetic_injection_rate)
         except Exception as e:
             logger.error('  Stress %s failed: %s', name, e)
             import traceback; traceback.print_exc()
@@ -872,7 +951,8 @@ def run_variant(asset_data: dict, base_allocations: dict,
                 variant_name: str, n_paths: int, n_days: int, seed: int,
                 execution_config: ExecutionConfig = None,
                 deleverage: bool = False,
-                regimes: np.ndarray = None) -> dict:
+                regimes: np.ndarray = None,
+                synthetic_injection_rate: float = 0.0) -> dict:
     """Run full simulation for a single portfolio variant."""
     alloc = base_allocations
     vdef = VARIANTS.get(variant_name, {})
@@ -880,9 +960,17 @@ def run_variant(asset_data: dict, base_allocations: dict,
     if vdef.get('modify_alloc') is not None:
         alloc = vdef['modify_alloc'](alloc)
 
+    # Apply synthetic stress injection if variant is synthetic_stress
+    effective_rate = synthetic_injection_rate
+    if variant_name == 'synthetic_stress' and synthetic_injection_rate <= 0:
+        effective_rate = SYNTHETIC_INJECTION_RATE
+
     logger.info('=' * 60)
     logger.info('Variant: %s', vdef.get('label', variant_name))
     logger.info('Assets: %d, total alloc: %.2f', len(alloc), sum(alloc.values()))
+    if effective_rate > 0:
+        logger.info('Synthetic stress injection: %.0f%% of original series length',
+                     100 * effective_rate)
     logger.info('=' * 60)
 
     # Generate portfolio paths
@@ -892,7 +980,8 @@ def run_variant(asset_data: dict, base_allocations: dict,
         variant=variant_name,
         execution_config=execution_config,
         deleverage=deleverage,
-        regimes=regimes)
+        regimes=regimes,
+        synthetic_injection_rate=effective_rate)
 
     # Compute metrics
     base_metrics = compute_risk_metrics(port_result)
@@ -906,7 +995,8 @@ def run_variant(asset_data: dict, base_allocations: dict,
     # Stress scenarios
     stress_metrics = run_stress_scenarios(
         asset_data, alloc, port_result,
-        execution_config=execution_config, deleverage=deleverage)
+        execution_config=execution_config, deleverage=deleverage,
+        synthetic_injection_rate=effective_rate)
 
     return {
         'variant': variant_name,
@@ -916,6 +1006,7 @@ def run_variant(asset_data: dict, base_allocations: dict,
         'metrics': base_metrics,
         'asset_metrics': asset_metrics,
         'stress_metrics': stress_metrics,
+        'n_synthetic_days': port_result.get('n_synthetic_days', 0),
     }
 
 
@@ -1287,6 +1378,11 @@ def main():
                         help='Use regime-aware block bootstrap')
     parser.add_argument('--exposure-telemetry', action='store_true',
                         help='Track exposure scaling and deleveraging diagnostics')
+    parser.add_argument('--synthetic-stress', type=float, default=0.0, nargs='?',
+                        const=SYNTHETIC_INJECTION_RATE,
+                        help=f'Inject synthetic crisis blocks (default rate: {SYNTHETIC_INJECTION_RATE})')
+    parser.add_argument('--validate-tails', action='store_true',
+                        help='Run tail validation against historical crisis benchmarks')
     args = parser.parse_args()
 
     n_paths = args.paths
@@ -1331,12 +1427,14 @@ def main():
 
     # 2. Run each variant
     variant_results = {}
+    synthetic_injection_rate = args.synthetic_stress or 0.0
     for vname in variants:
         logger.info('Running variant: %s', vname)
         result = run_variant(asset_data, base_allocations, vname,
                               n_paths, n_days, args.seed,
                               execution_config=execution_config,
-                              deleverage=deleverage, regimes=regimes)
+                              deleverage=deleverage, regimes=regimes,
+                              synthetic_injection_rate=synthetic_injection_rate)
         variant_results[vname] = result
 
         # Save individual variant results
@@ -1345,12 +1443,14 @@ def main():
                 'n_paths': n_paths, 'n_days': n_days,
                 'years': args.years, 'ruin_threshold': RUIN_THRESHOLD,
                 'block_length': BLOCK_LENGTH, 'variant': vname,
+                'synthetic_injection_rate': synthetic_injection_rate,
             },
             'portfolio': result['metrics'],
             'assets': result['asset_metrics'],
             'stress_scenarios': {
                 k: v for k, v in result['stress_metrics'].items()
             },
+            'n_synthetic_days': result.get('n_synthetic_days', 0),
         }
         vpath = os.path.join(RISK_DIR, f'survival_results_{vname}.json')
         with open(vpath, 'w') as f:
@@ -1429,6 +1529,23 @@ def main():
     with open(cpath, 'w') as f:
         json.dump(comparison, f, indent=2)
     logger.info('Consolidated comparison saved to %s', cpath)
+
+    # 9. Tail validation against historical crisis benchmarks
+    if args.validate_tails and 'full' in variant_results:
+        logger.info('Running bootstrap tail validation...')
+        port_eq = variant_results['full']['port_result']['paths']
+        val_results = validate_tail_statistics(port_eq)
+        print_validation_results(val_results)
+        vpath = os.path.join(RISK_DIR, 'tail_validation.json')
+        with open(vpath, 'w') as f:
+            json.dump([{
+                'metric': r.metric,
+                'historical_value': r.historical_value,
+                'simulated_p50': r.simulated_p50,
+                'plausible': r.plausible,
+                'note': r.note,
+            } for r in val_results], f, indent=2)
+        logger.info('Tail validation saved to %s', vpath)
 
     logger.info('Done.')
 
