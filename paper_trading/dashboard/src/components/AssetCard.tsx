@@ -97,16 +97,52 @@ const AssetCard: React.FC<Props> = React.memo(({ name }) => {
       </div>
 
       {info.pos && (
-        <div className="mt-2 pt-2 border-t border-default text-[11px] text-tertiary flex justify-between">
-          <span className="flex items-center gap-1.5">
-            <span className={`w-1.5 h-1.5 rounded-full ${info.pos.side === 'long' ? 'bg-emerald-500' : 'bg-red-500'}`} />
-            {info.pos.side.toUpperCase()} @ ${formatAssetPrice(info.pos.entry)}
-          </span>
-          {info.pos.unrealized_pnl != null && (
-            <span className={`font-mono ${info.pos.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-              {info.pos.unrealized_pnl >= 0 ? '+' : ''}{info.pos.unrealized_pnl.toFixed(2)}%
+        <div className="mt-2 pt-2 border-t border-default space-y-1.5">
+          <div className="flex justify-between text-[11px] text-tertiary">
+            <span className="flex items-center gap-1.5">
+              <span className={`w-1.5 h-1.5 rounded-full ${info.pos.side === 'long' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+              {info.pos.side.toUpperCase()} @ ${formatAssetPrice(info.pos.entry)}
             </span>
-          )}
+            {info.pos.unrealized_pnl != null && (
+              <span className={`font-mono ${info.pos.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {info.pos.unrealized_pnl >= 0 ? '+' : ''}{info.pos.unrealized_pnl.toFixed(2)}%
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3 text-[10px]">
+            {(() => {
+              const isLong = info.pos!.side === 'long'
+              const cur = info.price ?? info.pos!.entry
+              const tpDist = isLong
+                ? ((info.pos!.tp - cur) / cur) * 100
+                : ((cur - info.pos!.tp) / cur) * 100
+              const slDist = isLong
+                ? ((cur - info.pos!.sl) / cur) * 100
+                : ((info.pos!.sl - cur) / cur) * 100
+              return (
+                <>
+                  {info.pos!.tp != null && info.pos!.tp !== 0 && (
+                    <span className="flex items-center gap-1 text-tertiary">
+                      <span className="w-1 h-1 rounded-full bg-emerald-500" />
+                      TP {formatAssetPrice(info.pos!.tp)}
+                      <span className="text-emerald-400 font-mono">
+                        ↑{tpDist.toFixed(2)}%
+                      </span>
+                    </span>
+                  )}
+                  {info.pos!.sl != null && info.pos!.sl !== 0 && (
+                    <span className="flex items-center gap-1 text-tertiary">
+                      <span className="w-1 h-1 rounded-full bg-red-500" />
+                      SL {formatAssetPrice(info.pos!.sl)}
+                      <span className="font-mono text-red-400">
+                        ↓{slDist.toFixed(2)}%
+                      </span>
+                    </span>
+                  )}
+                </>
+              )
+            })()}
+          </div>
         </div>
       )}
 

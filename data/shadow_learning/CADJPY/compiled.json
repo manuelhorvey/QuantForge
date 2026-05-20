@@ -1,0 +1,32 @@
+{
+  "learning_profile": {
+    "behavioral_stability": 0.9475,
+    "drift_resilience": 0.8966,
+    "signal_consistency": 0.9738,
+    "risk_sensitivity": 0.5,
+    "action_coherence": 1.0
+  },
+  "latent_patterns": [],
+  "shadow_insights": {
+    "top_instability_drivers": [
+      "regime"
+    ],
+    "dominant_failure_mode": "none_detected",
+    "execution_fragility_score": 0.105
+  },
+  "history": [
+    {
+      "timestamp": "2026-05-20T01:34:18.264784",
+      "event_count": 1,
+      "learning_profile": {
+        "behavioral_stability": 0.9475,
+        "drift_resilience": 0.8966,
+        "signal_consistency": 0.9738,
+        "risk_sensitivity": 0.5,
+        "action_coherence": 1.0
+      }
+    }
+  ],
+  "last_updated": "2026-05-20T01:34:18.264784",
+  "asset": "CADJPY"
+}
