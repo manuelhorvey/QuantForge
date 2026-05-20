@@ -8,7 +8,7 @@ from paper_trading.shadow_feedback import read_feedback
 from paper_trading.shadow_learning import compile_shadow_learning, load_compiled
 
 
-PAPER_PORTFOLIO = ["BTC", "NZDJPY", "CADJPY", "USDCAD", "GC", "EURAUD"]
+PAPER_PORTFOLIO = ["BTC", "NZDJPY", "CADJPY", "USDCAD", "GC", "EURAUD", "AUDJPY", "GBPJPY", "USDJPY", "USDCHF", "GBPUSD"]
 
 
 def build_asset_learning_profile(asset: str, months: int = 3) -> Optional[dict]:

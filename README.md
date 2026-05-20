@@ -109,16 +109,21 @@ python equity/walk_forward_eurusd.py
 
 ## 4. LIVE SIMULATION PORTFOLIO
 
-The system maintains a 6-asset continuously evaluated simulation portfolio.
+The system maintains an 11-asset continuously evaluated simulation portfolio.
 
 | Asset  | Ticker   | Label | Cluster         | Allocation |
 | ------ | -------- | ----- | --------------- | ---------- |
-| BTC    | BTC-USD  | tb20  | momentum_crypto | 20%        |
-| Gold   | GC=F     | fwd60 | real_asset      | 20%        |
-| EURAUD | EURAUD=X | tb20  | eur_cross       | 22%        |
-| NZDJPY | NZDJPY=X | tb20  | carry_fx        | 15%        |
-| CADJPY | CADJPY=X | tb20  | oil_carry       | 13%        |
-| USDCAD | USDCAD=X | tb20  | usd_macro       | 10%        |
+| BTC    | BTC-USD  | tb20  | momentum_crypto | 14%        |
+| EURAUD | EURAUD=X | tb20  | eur_cross       | 17%        |
+| GC     | GC=F     | fwd60 | real_asset      | 15%        |
+| NZDJPY | NZDJPY=X | tb20  | carry_fx        | 11%        |
+| CADJPY | CADJPY=X | tb20  | oil_carry       | 10%        |
+| AUDJPY | AUDJPY=X | tb20  | carry_fx        | 7%         |
+| USDCAD | USDCAD=X | tb20  | usd_macro       | 7%         |
+| GBPJPY | GBPJPY=X | tb20  | carry_fx        | 6%         |
+| USDJPY | USDJPY=X | tb20  | usd_macro       | 5%         |
+| USDCHF | USDCHF=X | tb20  | usd_macro       | 4%         |
+| GBPUSD | GBPUSD=X | tb20  | usd_macro       | 4%         |
 
 Execution is fully simulated via a broker abstraction layer using Yahoo Finance market data.
 

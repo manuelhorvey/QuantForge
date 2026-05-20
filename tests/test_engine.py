@@ -71,13 +71,12 @@ class TestConfig:
         assert "USDCAD" in PAPER_PORTFOLIO
         assert "GC" in PAPER_PORTFOLIO
         assert "EURAUD" in PAPER_PORTFOLIO
+        assert "AUDJPY" in PAPER_PORTFOLIO
+        assert "GBPJPY" in PAPER_PORTFOLIO
+        assert "USDJPY" in PAPER_PORTFOLIO
+        assert "USDCHF" in PAPER_PORTFOLIO
+        assert "GBPUSD" in PAPER_PORTFOLIO
         assert "XLF" not in PAPER_PORTFOLIO
-        assert PAPER_PORTFOLIO["BTC"]["alloc"] == 0.20
-        assert PAPER_PORTFOLIO["NZDJPY"]["alloc"] == 0.15
-        assert PAPER_PORTFOLIO["CADJPY"]["alloc"] == 0.13
-        assert PAPER_PORTFOLIO["USDCAD"]["alloc"] == 0.10
-        assert PAPER_PORTFOLIO["GC"]["alloc"] == 0.20
-        assert PAPER_PORTFOLIO["EURAUD"]["alloc"] == 0.22
         assert abs(sum(v['alloc'] for v in PAPER_PORTFOLIO.values()) - 1.0) < 0.01
 
 

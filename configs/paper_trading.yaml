@@ -14,8 +14,8 @@ halt:
 assets:
   BTC:
     ticker: BTC-USD
-    allocation: 0.20
-    features: [rate_diff, 2y_yield_delta_63, btc_mom_63, btc_vs_spy_63]
+    allocation: 0.14
+    features: [rate_diff, 2y_yield_delta_63, vix_delta_5, dxy_mom_21, vix_ma21, btc_mom_10, btc_mom_21, btc_vs_spy_21, btc_mom_63, btc_vs_spy_63]
     halt:
       drawdown: -0.15
       monthly_pf: 0.70
@@ -23,30 +23,10 @@ assets:
       prob_drift: 0.15
     config:
       vol_scalar: true
-  NZDJPY:
-    ticker: NZDJPY=X
-    allocation: 0.15
-    features: [vix_ma21, vix_delta_5, us_jp_10y_spread, nzdjpy_mom_21]
-    halt:
-      drawdown: -0.06
-      monthly_pf: 0.70
-      signal_drought: 30
-      prob_drift: 0.15
-    config: {}
-  CADJPY:
-    ticker: CADJPY=X
-    allocation: 0.13
-    features: [ca_jp_spread_mom_5, ca_jp_spread_mom_21, cadjpy_mom_21, vix_ma21]
-    halt:
-      drawdown: -0.08
-      monthly_pf: 0.70
-      signal_drought: 30
-      prob_drift: 0.15
-    config: {}
-  USDCAD:
-    ticker: USDCAD=X
-    allocation: 0.10
-    features: [rate_diff, dxy_mom_21, vix_ma21, usdcad_mom_21]
+  EURAUD:
+    ticker: EURAUD=X
+    allocation: 0.17
+    features: [rate_diff, dxy_mom_21, vix_ma21, vix_delta_5, euraud_mom_21, euraud_mom_63]
     halt:
       drawdown: -0.08
       monthly_pf: 0.70
@@ -55,7 +35,7 @@ assets:
     config: {}
   GC:
     ticker: GC=F
-    allocation: 0.20
+    allocation: 0.15
     features: [real_yield_delta_63, breakeven_delta_63, dxy_mom_63, gc_mom_63]
     halt:
       drawdown: -0.08
@@ -63,10 +43,80 @@ assets:
       signal_drought: 30
       prob_drift: 0.15
     config: {}
-  EURAUD:
-    ticker: EURAUD=X
-    allocation: 0.22
-    features: [rate_diff, dxy_mom_21, vix_ma21, euraud_mom_21]
+  NZDJPY:
+    ticker: NZDJPY=X
+    allocation: 0.11
+    features: [vix_ma21, vix_delta_5, us_jp_10y_spread, nzdjpy_mom_21]
+    halt:
+      drawdown: -0.08
+      monthly_pf: 0.70
+      signal_drought: 30
+      prob_drift: 0.15
+    config: {}
+  CADJPY:
+    ticker: CADJPY=X
+    allocation: 0.10
+    features: [vix_ma21, ca_jp_spread_mom_21, us_jp_10y_spread, vix_delta_5, ca_jp_10y_spread, dxy_mom_21, cadjpy_mom_10, cadjpy_mom_21, cadjpy_mom_63]
+    halt:
+      drawdown: -0.08
+      monthly_pf: 0.70
+      signal_drought: 30
+      prob_drift: 0.15
+    config: {}
+  AUDJPY:
+    ticker: AUDJPY=X
+    allocation: 0.07
+    features: [vix_ma21, vix_delta_5, us_jp_10y_spread, audjpy_mom_21, audjpy_mom_63]
+    halt:
+      drawdown: -0.08
+      monthly_pf: 0.70
+      signal_drought: 30
+      prob_drift: 0.15
+    config: {}
+  USDCAD:
+    ticker: USDCAD=X
+    allocation: 0.07
+    features: [rate_diff, dxy_mom_21, vix_ma21, vix_delta_5, usdcad_mom_21, usdcad_mom_63]
+    halt:
+      drawdown: -0.08
+      monthly_pf: 0.70
+      signal_drought: 30
+      prob_drift: 0.15
+    config: {}
+  GBPJPY:
+    ticker: GBPJPY=X
+    allocation: 0.06
+    features: [vix_ma21, vix_delta_5, us_jp_10y_spread, gbpjpy_mom_21, gbpjpy_mom_63]
+    halt:
+      drawdown: -0.08
+      monthly_pf: 0.70
+      signal_drought: 30
+      prob_drift: 0.15
+    config: {}
+  USDJPY:
+    ticker: USDJPY=X
+    allocation: 0.05
+    features: [vix_ma21, vix_delta_5, us_jp_10y_spread, dxy_mom_21, usdjpy_mom_21, usdjpy_mom_63]
+    halt:
+      drawdown: -0.08
+      monthly_pf: 0.70
+      signal_drought: 30
+      prob_drift: 0.15
+    config: {}
+  USDCHF:
+    ticker: USDCHF=X
+    allocation: 0.04
+    features: [rate_diff, dxy_mom_21, vix_ma21, vix_delta_5, usdchf_mom_21, usdchf_mom_63]
+    halt:
+      drawdown: -0.08
+      monthly_pf: 0.70
+      signal_drought: 30
+      prob_drift: 0.15
+    config: {}
+  GBPUSD:
+    ticker: GBPUSD=X
+    allocation: 0.04
+    features: [rate_diff, dxy_mom_21, vix_ma21, vix_delta_5, gbpusd_mom_21, gbpusd_mom_63]
     halt:
       drawdown: -0.08
       monthly_pf: 0.70

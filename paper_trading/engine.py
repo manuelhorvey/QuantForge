@@ -692,17 +692,27 @@ def _build_paper_portfolio():
                         'halt': halt, 'config': config}
         return pf
     return {
-        'BTC': {'ticker': 'BTC-USD', 'contract': FEATURE_REGISTRY['BTC-USD'], 'alloc': 0.20,
+        'BTC': {'ticker': 'BTC-USD', 'contract': FEATURE_REGISTRY['BTC-USD'], 'alloc': 0.14,
                 'halt': {'drawdown': -0.15, 'monthly_pf': 0.70, 'signal_drought': 30, 'prob_drift': 0.15}, 'config': {'vol_scalar': True}},
-        'NZDJPY': {'ticker': 'NZDJPY=X', 'contract': FEATURE_REGISTRY['NZDJPY=X'], 'alloc': 0.15,
+        'NZDJPY': {'ticker': 'NZDJPY=X', 'contract': FEATURE_REGISTRY['NZDJPY=X'], 'alloc': 0.11,
                    'halt': {'drawdown': -0.06, 'monthly_pf': 0.70, 'signal_drought': 30, 'prob_drift': 0.15}, 'config': {}},
-        'CADJPY': {'ticker': 'CADJPY=X', 'contract': FEATURE_REGISTRY['CADJPY=X'], 'alloc': 0.13,
+        'CADJPY': {'ticker': 'CADJPY=X', 'contract': FEATURE_REGISTRY['CADJPY=X'], 'alloc': 0.10,
                    'halt': HALT, 'config': {}},
-        'USDCAD': {'ticker': 'USDCAD=X', 'contract': FEATURE_REGISTRY['USDCAD=X'], 'alloc': 0.10,
+        'USDCAD': {'ticker': 'USDCAD=X', 'contract': FEATURE_REGISTRY['USDCAD=X'], 'alloc': 0.07,
                    'halt': HALT, 'config': {}},
-        'GC': {'ticker': 'GC=F', 'contract': FEATURE_REGISTRY['GC=F'], 'alloc': 0.20,
+        'GC': {'ticker': 'GC=F', 'contract': FEATURE_REGISTRY['GC=F'], 'alloc': 0.15,
                'halt': HALT, 'config': {}},
-        'EURAUD': {'ticker': 'EURAUD=X', 'contract': FEATURE_REGISTRY['EURAUD=X'], 'alloc': 0.22,
+        'EURAUD': {'ticker': 'EURAUD=X', 'contract': FEATURE_REGISTRY['EURAUD=X'], 'alloc': 0.17,
+                   'halt': HALT, 'config': {}},
+        'AUDJPY': {'ticker': 'AUDJPY=X', 'contract': FEATURE_REGISTRY['AUDJPY=X'], 'alloc': 0.07,
+                   'halt': HALT, 'config': {}},
+        'GBPJPY': {'ticker': 'GBPJPY=X', 'contract': FEATURE_REGISTRY['GBPJPY=X'], 'alloc': 0.06,
+                   'halt': HALT, 'config': {}},
+        'USDJPY': {'ticker': 'USDJPY=X', 'contract': FEATURE_REGISTRY['USDJPY=X'], 'alloc': 0.05,
+                   'halt': HALT, 'config': {}},
+        'USDCHF': {'ticker': 'USDCHF=X', 'contract': FEATURE_REGISTRY['USDCHF=X'], 'alloc': 0.04,
+                   'halt': HALT, 'config': {}},
+        'GBPUSD': {'ticker': 'GBPUSD=X', 'contract': FEATURE_REGISTRY['GBPUSD=X'], 'alloc': 0.04,
                    'halt': HALT, 'config': {}},
     }
 
