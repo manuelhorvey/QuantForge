@@ -4,6 +4,7 @@ import xgboost as xgb
 import yfinance as yf
 from pathlib import Path
 from labels.triple_barrier import apply_triple_barrier, get_volatility
+from features.publication_lags import apply_publication_lags
 
 MACRO_FEATURES = [
     'yield_slope',
@@ -45,6 +46,7 @@ def fetch_xlf(start='2016-01-01', end='2026-12-31'):
 
 def load_macro_features(price_index: pd.DatetimeIndex):
     raw = pd.read_parquet('data/processed/macro_factors.parquet')
+    raw = apply_publication_lags(raw)
     raw = raw.reindex(
         pd.date_range(raw.index.min(), raw.index.max(), freq='D')
     ).ffill()

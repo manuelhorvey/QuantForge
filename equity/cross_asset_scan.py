@@ -6,6 +6,8 @@ from labels.triple_barrier import apply_triple_barrier
 import time
 import sys
 import warnings
+from features.publication_lags import apply_publication_lags
+
 warnings.filterwarnings('ignore')
 
 SYMBOLS = [
@@ -56,6 +58,7 @@ def fetch_price_data(symbol, start='2008-01-01', end='2026-12-31'):
 
 def load_macro():
     m = pd.read_parquet('data/processed/macro_factors.parquet')
+    apply_publication_lags(m)
     m = m.reindex(pd.date_range(m.index.min(), m.index.max(), freq='D')).ffill()
     m['rate_diff'] = m['fed_funds'] - m['ecb_rate']
     m['dxy_mom_63'] = m['dxy'].pct_change(63)

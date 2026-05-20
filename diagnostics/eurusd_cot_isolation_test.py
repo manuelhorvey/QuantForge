@@ -4,6 +4,7 @@ import xgboost as xgb
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from labels.triple_barrier import apply_triple_barrier
+from features.publication_lags import apply_publication_lags
 
 TRAIN_START = "2017-05-16"
 TRAIN_END = "2022-05-16"
@@ -33,6 +34,7 @@ def load_eurusd_data():
 
 def load_macro(price_index):
     raw = pd.read_parquet("data/processed/macro_factors.parquet")
+    raw = apply_publication_lags(raw)
     raw = raw.reindex(
         pd.date_range(raw.index.min(), raw.index.max(), freq="D")
     ).ffill()

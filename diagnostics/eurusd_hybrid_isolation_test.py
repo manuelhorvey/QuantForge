@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models.hybrid_ensemble import HybridRegimeEnsemble
 from data.loaders.cot_loader import get_contract_series, align_cot_to_daily
 from features.cot_features import build_cot_features
+from features.publication_lags import apply_publication_lags
 
 TRAIN_START = "2017-05-16"
 TRAIN_END = "2022-05-16"
@@ -51,6 +52,7 @@ def load_price():
 
 def load_macro(price):
     m = pd.read_parquet("data/processed/macro_factors.parquet")
+    m = apply_publication_lags(m)
     m = m.reindex(pd.date_range(m.index.min(), m.index.max(), freq='D')).ffill()
     m = m.reindex(price.index, method='ffill')
     m['rate_diff'] = m['fed_funds'] - m['ecb_rate']

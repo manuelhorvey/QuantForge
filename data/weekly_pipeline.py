@@ -10,6 +10,7 @@ from models.regime.regime_classifier import RegimeClassifier
 from data.loaders.macro_loader import MACRO_FEATURES
 from data.loaders.cot_loader import get_contract_series, align_cot_to_daily
 from data.loaders.download_cot import download_all_years
+from features.publication_lags import apply_publication_lags
 import os
 
 DAILY_PATH     = "data/raw/EURUSD_1d.parquet"
@@ -65,6 +66,8 @@ def run_weekly_pipeline():
 
     macro_fn = lambda df: df.copy()
     macro_daily = macro_raw.copy()
+    # Apply publication lags to raw FRED series before any derived math
+    macro_daily = apply_publication_lags(macro_daily)
     macro_daily = macro_daily.reindex(macro_daily.index).ffill()
 
     macro_daily['rate_diff'] = macro_daily['fed_funds'] - macro_daily['ecb_rate']

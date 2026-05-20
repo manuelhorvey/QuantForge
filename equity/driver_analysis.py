@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 import sys
+from features.publication_lags import apply_publication_lags
 
 DRIVERS = [
     'fed_funds', 'ecb_rate', 'rate_diff', 'rate_diff_delta_3m',
@@ -24,6 +25,7 @@ def load_asset(symbol, start='2014-01-01', end='2026-12-31'):
 
 def load_macro():
     m = pd.read_parquet('data/processed/macro_factors.parquet')
+    apply_publication_lags(m)
     m = m.reindex(pd.date_range(m.index.min(), m.index.max(), freq='D')).ffill()
     m['rate_diff'] = m['fed_funds'] - m['ecb_rate']
     m['yield_slope'] = m['us_10y'] - m['us_2y']

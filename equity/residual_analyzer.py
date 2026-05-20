@@ -3,6 +3,7 @@ import numpy as np
 import xgboost as xgb
 import yfinance as yf
 from features.pair_specific import build_eurusd_features
+from features.publication_lags import apply_publication_lags
 
 
 def load_asset(symbol, start='2014-01-01', end='2026-12-31'):
@@ -19,6 +20,7 @@ def load_asset(symbol, start='2014-01-01', end='2026-12-31'):
 
 def load_macro():
     m = pd.read_parquet('data/processed/macro_factors.parquet')
+    apply_publication_lags(m)
     m = m.reindex(pd.date_range(m.index.min(), m.index.max(), freq='D')).ffill()
     m['rate_diff'] = m['fed_funds'] - m['ecb_rate']
     m = m.iloc[90:]

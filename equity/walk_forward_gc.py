@@ -3,6 +3,7 @@ import numpy as np
 import xgboost as xgb
 import yfinance as yf
 from features.pair_specific import build_gc_features
+from features.publication_lags import apply_publication_lags
 
 WF_CONFIG = {'train_years': 5, 'test_years': 1, 'step_years': 1, 'min_trades': 20}
 
@@ -20,6 +21,7 @@ def fetch_data(start='2014-01-01', end='2026-12-31'):
 
 def load_macro():
     m = pd.read_parquet('data/processed/macro_factors.parquet')
+    apply_publication_lags(m)
     m = m.reindex(pd.date_range(m.index.min(), m.index.max(), freq='D')).ffill()
     m['rate_diff'] = m['fed_funds'] - m['ecb_rate']
     m = m.iloc[90:]

@@ -13,6 +13,7 @@ from features.pair_specific import (
     build_usdjpy_features,
     build_gc_features,
 )
+from features.publication_lags import apply_publication_lags
 
 warnings.filterwarnings('ignore')
 
@@ -57,6 +58,7 @@ def fetch_ticker(symbol, start='2014-01-01', end='2026-12-31'):
 
 def load_macro():
     m = pd.read_parquet('data/processed/macro_factors.parquet')
+    apply_publication_lags(m)
     m = m.reindex(pd.date_range(m.index.min(), m.index.max(), freq='D')).ffill()
     m['rate_diff'] = m['fed_funds'] - m['ecb_rate']
     m = m.iloc[90:]

@@ -4,6 +4,7 @@ import xgboost as xgb
 import yfinance as yf
 from labels.triple_barrier import apply_triple_barrier
 from features.pair_specific import build_nzdjpy_features
+from features.publication_lags import apply_publication_lags
 
 WF_CONFIG = {'train_years': 5, 'test_years': 1, 'step_years': 1, 'min_trades': 20}
 
@@ -22,6 +23,7 @@ def yf_get(symbol, start='2014-01-01', end='2026-12-31', tz='Europe/London'):
 
 def load_macro():
     m = pd.read_parquet('data/processed/macro_factors.parquet')
+    apply_publication_lags(m)
     m = m.reindex(pd.date_range(m.index.min(), m.index.max(), freq='D')).ffill()
     m['rate_diff'] = m['fed_funds'] - m['ecb_rate']
     m = m.iloc[90:]

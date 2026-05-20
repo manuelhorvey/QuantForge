@@ -3,6 +3,7 @@ import numpy as np
 import yfinance as yf
 
 from features.cot_features import build_cot_features, EURUSD_COT_FEATURES
+from features.publication_lags import apply_lag_to_macro_derived
 
 
 def yf_download_safe(symbol, start='2008-01-01', end='2026-12-31'):
@@ -27,6 +28,7 @@ def build_nzdjpy_features(price, macro):
     Asymmetric: VIX bull/bear asymmetry = 0.428
     Optimal lag: VIX at 21 days
     """
+    macro = apply_lag_to_macro_derived(macro)
     labeled = apply_triple_barrier_caller(price, pt_sl=[2, 2], vertical_barrier=20)
     pi = labeled.index.tz_localize(None) if hasattr(labeled.index, 'tz') and labeled.index.tz is not None else labeled.index
     a = macro.reindex(pi, method='ffill')
@@ -51,6 +53,7 @@ def build_eurusd_features(price, macro, cot_weekly=None):
     Added: lagged DXY (momentum persistence), lagged gold (cross-asset flow),
            rate change sensitivity, COT leveraged fund positioning
     """
+    macro = apply_lag_to_macro_derived(macro)
     labeled = apply_triple_barrier_caller(price, pt_sl=[2, 2], vertical_barrier=20)
     pi = labeled.index.tz_localize(None) if hasattr(labeled.index, 'tz') and labeled.index.tz is not None else labeled.index
     a = macro.reindex(pi, method='ffill')
@@ -99,6 +102,7 @@ def build_usdjpy_features(price, macro):
     Primary drivers: us_10y (stability=0.941), dxy_mom_21 (stability=1.00)
     Asymmetric: VIX asymmetry = 0.26 (risk-off JPY buying)
     """
+    macro = apply_lag_to_macro_derived(macro)
     labeled = apply_triple_barrier_caller(price, pt_sl=[2, 2], vertical_barrier=20)
     pi = labeled.index.tz_localize(None) if hasattr(labeled.index, 'tz') and labeled.index.tz is not None else labeled.index
     a = macro.reindex(pi, method='ffill')
@@ -121,6 +125,7 @@ def build_gc_features(price, macro):
     Primary drivers: dxy_mom_21 (stability=1.083), us_2y (stability=0.839)
     Real yield + USD pressure
     """
+    macro = apply_lag_to_macro_derived(macro)
     labeled = apply_triple_barrier_caller(price, pt_sl=[2, 2], vertical_barrier=20)
     pi = labeled.index.tz_localize(None) if hasattr(labeled.index, 'tz') and labeled.index.tz is not None else labeled.index
     a = macro.reindex(pi, method='ffill')

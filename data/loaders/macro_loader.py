@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime
+from features.publication_lags import apply_publication_lags
 
 FRED_SERIES = {
     'fed_funds':      'FEDFUNDS',
@@ -39,6 +40,7 @@ def _fill_to_daily(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def compute_derived_features(macro: pd.DataFrame) -> pd.DataFrame:
+    macro = apply_publication_lags(macro)
     daily = _fill_to_daily(macro)
 
     daily['rate_diff'] = daily['fed_funds'] - daily['ecb_rate']

@@ -3,6 +3,12 @@ import pandas as pd
 import numpy as np
 from features.contract import FeatureContract
 from features.registry import FEATURE_REGISTRY
+from features.publication_lags import (
+    apply_publication_lags,
+    apply_lag_to_macro_derived,
+    audit_lookahead,
+    PUBLICATION_LAGS_RAW,
+)
 from labels.triple_barrier import apply_triple_barrier
 
 
@@ -19,6 +25,8 @@ def _normalize(df: pd.DataFrame) -> pd.DataFrame:
 
 def compute_macro_derived(macro_df: pd.DataFrame) -> pd.DataFrame:
     m = macro_df.copy()
+    # Shift raw FRED series forward by their publication lags before any derived math
+    m = apply_publication_lags(m)
     m = m.reindex(pd.date_range(m.index.min(), m.index.max(), freq='D')).ffill()
     m['rate_diff'] = m['fed_funds'] - m['ecb_rate']
     m['2y_yield_delta_63'] = m['us_2y'].diff(63)
@@ -53,6 +61,8 @@ def build_features(df: pd.DataFrame, macro: pd.DataFrame, ref: pd.DataFrame | No
         ref = _normalize(ref)
     labels = compute_label(df, contract)
     pi = pd.DatetimeIndex([pd.Timestamp(x).tz_localize(None) for x in labels.index])
+    # Apply derived-feature publication lags before alignment (safety net)
+    macro = apply_lag_to_macro_derived(macro)
     a = macro.reindex(pi, method='ffill')
     a.index = labels.index
 
@@ -73,6 +83,7 @@ def compute_training_data(ticker: str, macro: pd.DataFrame, ref: pd.DataFrame,
                           df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, FeatureContract]:
     contract = FEATURE_REGISTRY[ticker]
     features_df = build_features(df, macro, ref, contract)
+    audit_lookahead(features_df, contract_name=contract.name)
     return features_df[list(contract.features)], features_df['label'], contract
 
 
@@ -80,6 +91,7 @@ def compute_inference_features(ticker: str, macro: pd.DataFrame, ref: pd.DataFra
                                df: pd.DataFrame) -> pd.DataFrame:
     contract = FEATURE_REGISTRY[ticker]
     features_df = build_features(df, macro, ref, contract)
+    audit_lookahead(features_df, contract_name=contract.name)
     return features_df[list(contract.features)]
 
 

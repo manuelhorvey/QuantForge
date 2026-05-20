@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from labels.triple_barrier import apply_triple_barrier
 from data.loaders.cot_loader import get_contract_series
 from features.cot_features import build_cot_features
+from features.publication_lags import apply_publication_lags
 
 SIGNAL_THRESHOLD = 0.50
 MIN_TRADES = 10
@@ -33,6 +34,7 @@ def load_weekly_data():
     labeled["label_int"] = (labeled["label"] + 1).astype(int)
 
     raw = pd.read_parquet("data/processed/macro_factors.parquet")
+    raw = apply_publication_lags(raw)
     raw = raw.reindex(
         pd.date_range(raw.index.min(), raw.index.max(), freq="D")
     ).ffill()

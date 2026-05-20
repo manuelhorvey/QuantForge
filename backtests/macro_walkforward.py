@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from models.macro_only import MacroOnlyModel, FEATURES
 from signals.simple_threshold import THRESHOLD, generate_signals
+from features.publication_lags import apply_publication_lags
 
 WF_CONFIG = {
     'train_years': 3,
@@ -16,6 +17,7 @@ def load_data():
     xlf = pd.read_parquet("data/raw/XLF_1d.parquet")
     spy = pd.read_parquet("data/raw/SPY_1d.parquet")
     macro_raw = pd.read_parquet("data/processed/macro_factors.parquet")
+    macro_raw = apply_publication_lags(macro_raw)
 
     def _strip_tz(idx):
         if hasattr(idx, 'tz') and idx.tz is not None:
