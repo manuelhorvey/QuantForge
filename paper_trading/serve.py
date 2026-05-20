@@ -8,17 +8,34 @@ from paper_trading.health_score import get_latest as _get_health_latest, compute
 
 _STORE = StateStore(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DEFAULT_PORT = 5000
+BASE = os.path.dirname(os.path.abspath(__file__))
 
-FRONTEND_DIR = os.path.join(os.path.dirname(__file__), 'frontend')
+DASHBOARD_DIST = os.path.join(BASE, 'dashboard', 'dist')
+FRONTEND_DIR = os.path.join(BASE, 'frontend')
 LOG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'live', 'engine.log')
+CONFIDENCE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'live', 'confidence_buckets.parquet')
 
 MIME_TYPES = {
     ".html": "text/html; charset=utf-8",
     ".css": "text/css",
     ".js": "application/javascript",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".ico": "image/x-icon",
+    ".woff2": "font/woff2",
+    ".json": "application/json",
 }
 
-STATIC_ROUTES = {
+VOL_BASELINES = {
+    "BTC": 0.038705, "GC": 0.009129,
+    "NZDJPY": 0.006581, "CADJPY": 0.005989,
+    "USDCAD": 0.004463, "EURAUD": 0.005026,
+    "AUDJPY": 0.006759, "GBPJPY": 0.006138,
+    "USDJPY": 0.004498, "USDCHF": 0.004307,
+    "GBPUSD": 0.005595,
+}
+
+STATIC_ROUTES_VANILLA = {
     "/": "index.html",
     "/index.html": "index.html",
     "/style.css": "style.css",
@@ -26,33 +43,75 @@ STATIC_ROUTES = {
 }
 
 
+def get_index_html():
+    dist = os.path.join(DASHBOARD_DIST, 'index.html')
+    if os.path.exists(dist):
+        return os.path.join(DASHBOARD_DIST, 'index.html')
+    return os.path.join(FRONTEND_DIR, 'index.html')
+
+
+def try_serve_file(path, resp):
+    """Try to serve a static file from dist/ or frontend/ by exact path."""
+    clean = path.split('?')[0].lstrip('/')
+    candidates = []
+    if DASHBOARD_DIST:
+        candidates.append(os.path.join(DASHBOARD_DIST, clean))
+    if FRONTEND_DIR:
+        candidates.append(os.path.join(FRONTEND_DIR, clean))
+    for fp in candidates:
+        if os.path.exists(fp) and os.path.isfile(fp):
+            ext = os.path.splitext(fp)[1]
+            ct = MIME_TYPES.get(ext, 'application/octet-stream')
+            try:
+                with open(fp, 'rb') as f:
+                    data = f.read()
+                resp.send_response(200)
+                resp.send_header('Content-Type', ct)
+                resp.send_header('Cache-Control', 'no-cache')
+                resp.end_headers()
+                resp.wfile.write(data)
+                return True
+            except Exception:
+                pass
+    return False
+
+
 def serve(port=DEFAULT_PORT, shutdown_event=None):
     import http.server
     import socketserver
 
     class Handler(http.server.SimpleHTTPRequestHandler):
-        def serve_static(self, filename, content_type):
-            filepath = os.path.join(FRONTEND_DIR, filename)
-            try:
-                with open(filepath, 'rb') as f:
-                    data = f.read()
-                self.send_response(200)
-                self.send_header('Content-Type', content_type)
-                self.send_header('Cache-Control', 'no-cache')
-                self.end_headers()
-                self.wfile.write(data)
-            except FileNotFoundError:
-                self.send_response(404)
-                self.end_headers()
-
         def do_GET(self):
             path = self.path.split('?')[0]
-            if path in STATIC_ROUTES:
-                filename = STATIC_ROUTES[path]
-                ext = os.path.splitext(filename)[1]
-                content_type = MIME_TYPES.get(ext, 'text/html; charset=utf-8')
-                self.serve_static(filename, content_type)
-            elif path == '/state.json':
+
+            # Serve root and index.html from React build or vanilla fallback
+            if path in ('/', '/index.html'):
+                idx_path = get_index_html()
+                try:
+                    with open(idx_path, 'rb') as f:
+                        data = f.read()
+                    ext = os.path.splitext(idx_path)[1]
+                    ct = MIME_TYPES.get(ext, 'text/html; charset=utf-8')
+                    self.send_response(200)
+                    self.send_header('Content-Type', ct)
+                    self.send_header('Cache-Control', 'no-cache')
+                    self.end_headers()
+                    self.wfile.write(data)
+                except FileNotFoundError:
+                    self.send_response(404)
+                    self.end_headers()
+                return
+
+            # Try static file from dist/ or frontend/
+            if path.startswith('/assets/') or path.startswith('/favicon.ico'):
+                if try_serve_file(path, self):
+                    return
+                self.send_response(404)
+                self.end_headers()
+                return
+
+            # API endpoints
+            if path == '/state.json':
                 snapshot = _STORE.load_snapshot()
                 if snapshot is not None:
                     data = json.dumps(asdict(snapshot), indent=2, default=str)
@@ -89,6 +148,63 @@ def serve(port=DEFAULT_PORT, shutdown_event=None):
             elif path == '/equity_history.json':
                 history = _STORE.read_equity_history()
                 data = json.dumps(history, default=str)
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Cache-Control', 'no-cache')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(data.encode('utf-8'))
+            elif path == '/confidence.json':
+                snapshot = _STORE.load_snapshot()
+                if snapshot and snapshot.assets:
+                    live = {}
+                    for name, asset in snapshot.assets.items():
+                        sig = asset.get('last_signal', {})
+                        conf = sig.get('confidence', 0)
+                        bucket = f"{int(conf // 10) * 10}-{int(conf // 10) * 10 + 10}"
+                        live.setdefault(name, {})
+                        live[name][bucket] = live[name].get(bucket, 0) + 1
+                    historical = []
+                    try:
+                        if os.path.exists(CONFIDENCE_PATH):
+                            import pandas as pd
+                            df = pd.read_parquet(CONFIDENCE_PATH)
+                            historical = json.loads(df.to_json(orient='records', default_handler=str))
+                    except Exception:
+                        pass
+                    data = json.dumps({'live': live, 'historical': historical}, indent=2, default=str)
+                else:
+                    data = json.dumps({'live': {}, 'historical': []})
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Cache-Control', 'no-cache')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(data.encode('utf-8'))
+            elif path == '/volatility.json':
+                snapshot = _STORE.load_snapshot()
+                regimes = []
+                if snapshot and snapshot.assets:
+                    for name, asset in sorted(snapshot.assets.items()):
+                        training_vol = VOL_BASELINES.get(name)
+                        pos = asset.get('metrics', {}).get('position', {})
+                        current_vol = pos.get('current_vol') if pos else None
+                        if training_vol is not None and current_vol is not None:
+                            ratio = current_vol / training_vol
+                            if 0.80 <= ratio <= 1.20:
+                                status = 'green'
+                            elif (0.70 <= ratio < 0.80) or (1.20 < ratio <= 1.30):
+                                status = 'amber'
+                            else:
+                                status = 'red'
+                            regimes.append({
+                                'asset': name,
+                                'training_vol': training_vol,
+                                'current_vol': current_vol,
+                                'ratio': round(ratio, 4),
+                                'status': status,
+                            })
+                data = json.dumps(regimes, indent=2, default=str)
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.send_header('Cache-Control', 'no-cache')
