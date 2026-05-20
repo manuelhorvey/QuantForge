@@ -20,6 +20,18 @@ export default function AssetGrid() {
     )
   }
 
+  if (assetNames.length === 0) {
+    return (
+      <div className="card-gradient card-border rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-2 h-2 rounded-full bg-gray-500/50" />
+          <h2 className="text-sm font-semibold text-primary">Assets</h2>
+        </div>
+        <div className="text-xs text-tertiary text-center py-8">No assets available yet</div>
+      </div>
+    )
+  }
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {assetNames.map(name => (

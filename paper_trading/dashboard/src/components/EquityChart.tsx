@@ -1,54 +1,21 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState } from 'react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
-import type { EquityHistoryPoint } from '../types/portfolio'
-
-async function fetchEquity(): Promise<EquityHistoryPoint[]> {
-  const res = await fetch('/equity_history.json')
-  if (!res.ok) return []
-  return res.json()
-}
+import { useEquityHistory } from '../hooks/useEquityHistory'
 
 const COLORS = ['#34d399', '#f87171', '#fbbf24', '#60a5fa', '#a78bfa', '#f472b6', '#2dd4bf', '#fb923c', '#94a3b8', '#e879f9', '#22d3ee']
 
 export default function EquityChart() {
-  const [data, setData] = useState<EquityHistoryPoint[]>([])
+  const { data, isPending } = useEquityHistory()
   const [selected, setSelected] = useState<Set<string>>(new Set(['portfolio']))
 
-  useEffect(() => {
-    fetchEquity().then(d => {
-      setData(d)
-      if (d.length > 0) {
-        setSelected(prev => {
-          const next = new Set(prev)
-          next.add('portfolio')
-          Object.keys(d[0].assets ?? {}).forEach(a => next.add(a))
-          return next
-        })
-      }
-    })
-    const id = setInterval(() => {
-      fetchEquity().then(d => {
-        setData(d)
-        if (d.length > 0) {
-          setSelected(prev => {
-            const next = new Set(prev)
-            Object.keys(d[0].assets ?? {}).forEach(a => next.add(a))
-            return next
-          })
-        }
-      })
-    }, 60_000)
-    return () => clearInterval(id)
-  }, [])
-
-  const chartData = useMemo(() => data.map(d => ({
+  const chartData = useMemo(() => (data ?? []).map(d => ({
     t: d.timestamp?.split('T')[0] ?? '',
     portfolio: d.portfolio_value,
     ...d.assets,
   })), [data])
 
   const assetNames = useMemo(() => {
-    if (data.length === 0) return []
+    if (!data || data.length === 0) return []
     return Object.keys(data[0].assets ?? {}).sort()
   }, [data])
 
@@ -59,6 +26,18 @@ export default function EquityChart() {
       else next.add(name)
       return next
     })
+  }
+
+  if (isPending) {
+    return (
+      <div className="card-gradient card-border rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-2 h-2 rounded-full bg-emerald-500/50" />
+          <h2 className="text-sm font-semibold text-primary">Equity Curve</h2>
+        </div>
+        <div className="text-xs text-tertiary text-center py-8 animate-pulse">Loading...</div>
+      </div>
+    )
   }
 
   if (chartData.length === 0) {

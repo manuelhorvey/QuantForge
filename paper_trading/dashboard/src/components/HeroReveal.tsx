@@ -1,26 +1,23 @@
-import { useLerpMouse } from '../hooks/useLerpMouse'
-
 interface Props {
   children?: React.ReactNode
 }
 
 export default function HeroReveal({ children }: Props) {
-  const { ref, onMouseMove, onMouseLeave } = useLerpMouse()
-
   return (
-    <div
-      ref={ref}
-      onMouseMove={onMouseMove}
-      onMouseLeave={onMouseLeave}
-      className="relative w-full h-screen overflow-hidden bg-gray-950 select-none"
-      style={{
-        maskImage: `radial-gradient(circle 180px at var(--mx) var(--my), transparent 0%, transparent 40%, black 100%)`,
-        WebkitMaskImage: `radial-gradient(circle 180px at var(--mx) var(--my), transparent 0%, transparent 40%, black 100%)`,
-      }}
-    >
-      <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none">
-        <h1 className="text-white text-[72px] font-[500] tracking-tight">QuantForge</h1>
-        <p className="text-gray-400 text-xl mt-2">Macro-driven. Regime-aware.</p>
+    <div className="relative w-full h-screen overflow-hidden bg-gray-950 select-none flex flex-col items-center justify-center">
+      <h1 className="text-white text-[72px] font-[500] tracking-tight">
+        QuantForge
+      </h1>
+      <p className="text-gray-400 text-xl mt-2">
+        Macro-driven. Regime-aware.
+      </p>
+
+      <div className="mt-12 flex gap-3">
+        {['XLF', 'BTC', 'NZDJPY', 'GC', 'EURAUD'].map((a) => (
+          <span key={a} className="px-2.5 py-1 rounded-md text-[10px] font-mono font-medium bg-gray-800 text-gray-400 border border-gray-700/50">
+            {a}
+          </span>
+        ))}
       </div>
 
       <div
@@ -32,8 +29,11 @@ export default function HeroReveal({ children }: Props) {
         }}
       />
 
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-gray-600 text-xs pointer-events-none z-10">
-        Move cursor to explore
+      <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 pointer-events-none">
+        <span className="text-gray-600 text-xs tracking-wider uppercase">Move cursor to explore</span>
+        <svg className="w-4 h-4 text-gray-600 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+        </svg>
       </div>
 
       {children}

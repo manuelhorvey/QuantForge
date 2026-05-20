@@ -146,4 +146,25 @@
   .conf-bar-fill {
     @apply h-full rounded-full transition-all duration-500;
   }
+
+  .scroll-hint {
+    position: relative;
+  }
+
+  .scroll-hint::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 32px;
+    background: linear-gradient(to left, var(--color-surface), transparent);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .scroll-hint.can-scroll::after {
+    opacity: 1;
+  }
 }

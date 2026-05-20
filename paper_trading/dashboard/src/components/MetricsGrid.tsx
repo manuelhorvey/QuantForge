@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { usePortfolioState } from '../hooks/usePortfolioState'
 
 export default function MetricsGrid() {
-  const { data } = usePortfolioState()
+  const { data, isPending } = usePortfolioState()
   const cards = useMemo(() => {
     if (!data?.assets) return []
     return Object.entries(data.assets)
@@ -23,7 +23,35 @@ export default function MetricsGrid() {
       })
   }, [data])
 
-  if (cards.length === 0) return null
+  if (isPending) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="card-gradient card-border rounded-xl p-4 animate-pulse">
+            <div className="h-4 bg-gray-800 rounded w-1/3 mb-4" />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="h-16 bg-gray-800/50 rounded" />
+              <div className="h-16 bg-gray-800/50 rounded" />
+              <div className="h-16 bg-gray-800/50 rounded" />
+              <div className="h-16 bg-gray-800/50 rounded" />
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (cards.length === 0) {
+    return (
+      <div className="card-gradient card-border rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-2 h-2 rounded-full bg-blue-500/50" />
+          <h2 className="text-sm font-semibold text-primary">Asset Metrics</h2>
+        </div>
+        <div className="text-xs text-tertiary text-center py-8">No metric data available</div>
+      </div>
+    )
+  }
 
   const pfColor = (v: number | null | undefined) =>
     v != null && !isNaN(v) && v !== Infinity ? (v >= 1 ? 'text-emerald-400' : 'text-amber-400') : 'text-tertiary'

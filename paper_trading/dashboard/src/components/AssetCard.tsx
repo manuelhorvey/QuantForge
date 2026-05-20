@@ -1,6 +1,8 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useRef, useEffect, useState } from 'react'
 import { usePortfolioState } from '../hooks/usePortfolioState'
+import { useEquityHistory } from '../hooks/useEquityHistory'
 import { formatAssetPrice } from '../utils/format'
+import Sparkline from './Sparkline'
 
 interface Props {
   name: string
@@ -14,7 +16,11 @@ function confidenceColor(c: number): string {
 
 const AssetCard: React.FC<Props> = React.memo(({ name }) => {
   const { data } = usePortfolioState()
+  const { data: eqHistory } = useEquityHistory()
   const asset = data?.assets?.[name]
+
+  const prevEntryRef = useRef<number | null>(null)
+  const [newBadge, setNewBadge] = useState(false)
 
   const info = useMemo(() => {
     if (!asset) return null
@@ -26,6 +32,7 @@ const AssetCard: React.FC<Props> = React.memo(({ name }) => {
     const open = data?.open_positions?.[name]
     const hist = open?.prob_history ?? []
     const isNew = hist.length >= 2 && hist[hist.length - 1].signal !== hist[hist.length - 2].signal
+    const sparkValues = eqHistory?.map(p => p.assets?.[name]).filter((v): v is number => v != null && !isNaN(v)) ?? []
     return {
       signal: sig?.signal ?? 'FLAT',
       confidence: sig?.confidence ?? 0,
@@ -43,8 +50,22 @@ const AssetCard: React.FC<Props> = React.memo(({ name }) => {
       isNew,
       slMult: asset.sl_mult,
       tpMult: asset.tp_mult,
+      sparkValues,
     }
-  }, [asset, data, name])
+  }, [asset, data, name, eqHistory])
+
+  useEffect(() => {
+    const entry = info?.pos?.entry
+    if (entry != null && entry !== prevEntryRef.current) {
+      if (prevEntryRef.current !== null) {
+        setNewBadge(true)
+        const t = setTimeout(() => setNewBadge(false), 60_000)
+        prevEntryRef.current = entry
+        return () => clearTimeout(t)
+      }
+      prevEntryRef.current = entry
+    }
+  }, [info?.pos?.entry])
 
   if (!info) {
     return (
@@ -60,7 +81,7 @@ const AssetCard: React.FC<Props> = React.memo(({ name }) => {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <span className="font-semibold text-sm text-primary">{name}</span>
-          {info.isNew && (
+          {(info.isNew || newBadge) && (
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 animate-pulse">
               NEW
             </span>
@@ -78,10 +99,10 @@ const AssetCard: React.FC<Props> = React.memo(({ name }) => {
           {info.signal}
         </span>
         <div className="flex-1 conf-bar">
-          <div className={`conf-bar-fill ${info.confColor}`} style={{ width: `${Math.min(info.confidence, 100)}%` }} />
+          <div className={`conf-bar-fill ${info.confColor}`} style={{ width: `${Math.min(info.confidence ?? 0, 100)}%` }} />
         </div>
         <span className="text-[11px] text-tertiary font-mono w-10 text-right tabular-nums">
-          {info.confidence.toFixed(1)}%
+          {(info.confidence ?? 0).toFixed(1)}%
         </span>
       </div>
 
@@ -99,6 +120,12 @@ const AssetCard: React.FC<Props> = React.memo(({ name }) => {
           </div>
         ))}
       </div>
+
+      {info.sparkValues.length >= 2 && (
+        <div className="mt-2.5 flex items-center justify-center opacity-60">
+          <Sparkline values={info.sparkValues} width={160} height={20} color={info.signal === 'BUY' ? 'var(--color-emerald)' : info.signal === 'SELL' ? 'var(--color-red)' : 'var(--color-text-muted)'} />
+        </div>
+      )}
 
       {info.slMult != null && info.tpMult != null && (
         <div className="mt-2.5 bg-panel/30 border border-default/40 rounded-lg px-2.5 py-1.5 flex items-center justify-between text-[11px] text-tertiary">
@@ -126,17 +153,18 @@ const AssetCard: React.FC<Props> = React.memo(({ name }) => {
           </div>
           <div className="flex items-center gap-3 text-[10px]">
             {(() => {
-              const isLong = info.pos!.side === 'long'
-              const entry = info.pos!.entry
+              const p = info.pos
+              const isLong = p.side === 'long'
+              const entry = p.entry
               const cur = info.price ?? entry
               const tpDist = isLong
-                ? ((info.pos!.tp - cur) / cur) * 100
-                : ((cur - info.pos!.tp) / cur) * 100
+                ? ((p.tp - cur) / cur) * 100
+                : ((cur - p.tp) / cur) * 100
               const slDist = isLong
-                ? ((cur - info.pos!.sl) / cur) * 100
-                : ((info.pos!.sl - cur) / cur) * 100
-              const reward = Math.abs(info.pos!.tp - entry)
-              const risk = Math.abs(entry - info.pos!.sl)
+                ? ((cur - p.sl) / cur) * 100
+                : ((p.sl - cur) / cur) * 100
+              const reward = Math.abs(p.tp - entry)
+              const risk = Math.abs(entry - p.sl)
               const rr = risk > 0 ? reward / risk : 0
               return (
                 <>

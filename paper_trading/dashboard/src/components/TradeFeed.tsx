@@ -59,7 +59,7 @@ export default function TradeFeed() {
               const ret = (t.return ?? 0) * 100
               return (
                 <tr
-                  key={i}
+                  key={t.asset + t.exit_date + t.side}
                   className={`border-b border-default/50 transition-colors hover:bg-panel/50 ${
                     i % 2 === 0 ? '' : 'bg-panel/30'
                   }`}

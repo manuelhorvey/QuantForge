@@ -18,8 +18,23 @@ function XIcon() {
 }
 
 export default function HaltConditions() {
-  const { data } = usePortfolioState()
+  const { data, isPending } = usePortfolioState()
   const status = useHaltStatus(data)
+
+  if (isPending) {
+    return (
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="rounded-xl p-4 bg-panel/50 animate-pulse">
+            <div className="h-3 bg-gray-800 rounded w-1/3 mb-3" />
+            <div className="h-6 bg-gray-800 rounded w-1/2 mb-2" />
+            <div className="h-3 bg-gray-800/50 rounded w-2/3" />
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   if (!data) return null
 
   const cards = [

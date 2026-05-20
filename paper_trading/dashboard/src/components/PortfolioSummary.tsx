@@ -2,8 +2,35 @@ import { useMemo } from 'react'
 import { usePortfolioState } from '../hooks/usePortfolioState'
 
 export default function PortfolioSummary() {
-  const { data } = usePortfolioState()
+  const { data, isPending, isError } = usePortfolioState()
   const p = data?.portfolio
+
+  if (isPending) {
+    return (
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="card-gradient card-border rounded-xl p-4 animate-pulse">
+            <div className="h-3 bg-gray-800 rounded w-1/3 mb-3" />
+            <div className="h-7 bg-gray-800 rounded w-2/3 mb-2" />
+            <div className="h-3 bg-gray-800/50 rounded w-1/2" />
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div className="card-gradient card-border rounded-xl p-6">
+        <div className="flex items-center gap-3 text-sm text-tertiary">
+          <svg className="w-4 h-4 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+          </svg>
+          <span>Connecting to paper trading engine...</span>
+        </div>
+      </div>
+    )
+  }
 
   const cards = useMemo(() => {
     if (!p) return []

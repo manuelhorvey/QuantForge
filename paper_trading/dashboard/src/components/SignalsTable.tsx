@@ -3,7 +3,7 @@ import { usePortfolioState } from '../hooks/usePortfolioState'
 import { formatAssetPrice } from '../utils/format'
 
 export default function SignalsTable() {
-  const { data } = usePortfolioState()
+  const { data, isPending } = usePortfolioState()
   const rows = useMemo(() => {
     if (!data?.assets) return []
     return Object.entries(data.assets)
@@ -16,7 +16,30 @@ export default function SignalsTable() {
       })
   }, [data])
 
-  if (rows.length === 0) return null
+  if (isPending) {
+    return (
+      <div className="card-gradient card-border rounded-xl p-4">
+        <div className="h-4 bg-gray-800 rounded w-1/4 mb-4" />
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="h-8 bg-gray-800/50 rounded" />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div className="card-gradient card-border rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-2 h-2 rounded-full bg-emerald-500/50" />
+          <h2 className="text-sm font-semibold text-primary">Signals</h2>
+        </div>
+        <div className="text-xs text-tertiary text-center py-8">No assets loaded</div>
+      </div>
+    )
+  }
 
   return (
     <div className="card-gradient card-border rounded-xl p-4">

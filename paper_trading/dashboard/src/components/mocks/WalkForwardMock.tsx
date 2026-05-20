@@ -14,7 +14,7 @@ const bars = [
 ]
 
 export default function WalkForwardMock({ hovered }: Props) {
-  const heights = bars.map(() => 30 + Math.random() * 40)
+  const heights = useMemo(() => bars.map(() => 30 + Math.random() * 40), [])
 
   return (
     <div className="space-y-3">

@@ -29,7 +29,7 @@ const statusConfig = {
 }
 
 export default function VolRegimePanel() {
-  const { data } = usePortfolioState()
+  const { data, isPending } = usePortfolioState()
 
   const regimes = useMemo((): VolRegime[] => {
     if (!data?.assets) return []
@@ -38,12 +38,26 @@ export default function VolRegimePanel() {
         const trainingVol = VOL_BASELINES[name]
         const currentVol = asset.metrics?.position?.current_vol
         if (trainingVol == null || currentVol == null) return null
+        if (isNaN(trainingVol) || isNaN(currentVol) || !isFinite(trainingVol)) return null
         const ratio = trainingVol > 0 ? currentVol / trainingVol : 1
         return { asset: name, training_vol: trainingVol, current_vol: currentVol, ratio, status: volStatus(ratio) }
       })
       .filter((r): r is VolRegime => r !== null)
       .sort((a, b) => a.asset.localeCompare(b.asset))
   }, [data])
+
+  if (isPending) {
+    return (
+      <div className="card-gradient card-border rounded-xl p-4">
+        <div className="h-4 bg-gray-800 rounded w-1/3 mb-4" />
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-12 bg-gray-800/50 rounded animate-pulse" />
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="card-gradient card-border rounded-xl p-4">
@@ -55,9 +69,12 @@ export default function VolRegimePanel() {
         <div className="text-xs text-tertiary text-center py-8">No position data yet</div>
       ) : (
         <div className="space-y-2">
-          {regimes.map(r => {
+              {regimes.map(r => {
             const cfg = statusConfig[r.status]
-            const barWidth = Math.min((r.ratio / 1.5) * 100, 100)
+            const barWidth = Math.min(Math.max((r.ratio / 1.5) * 100, 0), 100)
+            const cv = isNaN(r.current_vol) ? 0 : r.current_vol
+            const tv = isNaN(r.training_vol) ? 0 : r.training_vol
+            const ratio = isNaN(r.ratio) ? 0 : r.ratio
             return (
               <div key={r.asset} className="bg-panel rounded-lg p-3 transition-colors hover:bg-panel/80">
                 <div className="flex items-center justify-between mb-2">
@@ -68,10 +85,10 @@ export default function VolRegimePanel() {
                 </div>
                 <div className="flex items-center gap-3 text-[11px] mb-1.5">
                   <span className="text-tertiary">Current</span>
-                  <span className="font-mono text-secondary">{r.current_vol.toFixed(4)}</span>
+                  <span className="font-mono text-secondary">{cv.toFixed(4)}</span>
                   <span className="text-tertiary">/ Baseline</span>
-                  <span className="font-mono text-tertiary">{r.training_vol.toFixed(4)}</span>
-                  <span className={`font-mono ml-auto ${cfg.text}`}>{r.ratio.toFixed(2)}x</span>
+                  <span className="font-mono text-tertiary">{tv.toFixed(4)}</span>
+                  <span className={`font-mono ml-auto ${cfg.text}`}>{ratio.toFixed(2)}x</span>
                 </div>
                 <div className="w-full h-1 bg-panel rounded-full overflow-hidden">
                   <div

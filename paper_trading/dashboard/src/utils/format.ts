@@ -1,5 +1,5 @@
 export function formatAssetPrice(price: number | null | undefined): string {
-  if (price == null) return '—'
+  if (price == null || isNaN(price)) return '—'
 
   const abs = Math.abs(price)
   let dp: number
