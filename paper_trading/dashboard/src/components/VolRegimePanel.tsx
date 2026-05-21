@@ -3,7 +3,6 @@ import { usePortfolioState } from '../hooks/usePortfolioState'
 import type { VolRegime } from '../types/portfolio'
 
 const VOL_BASELINES: Record<string, number> = {
-  BTC: 0.038705,
   GC: 0.009129,
   NZDJPY: 0.006581,
   CADJPY: 0.005989,
@@ -14,6 +13,9 @@ const VOL_BASELINES: Record<string, number> = {
   USDJPY: 0.004498,
   USDCHF: 0.004307,
   GBPUSD: 0.005595,
+  CHFJPY: 0.004780,
+  EURCAD: 0.003476,
+  DJI: 0.008061,
 }
 
 function volStatus(ratio: number): VolRegime['status'] {
