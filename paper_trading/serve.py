@@ -135,8 +135,20 @@ def serve(port=DEFAULT_PORT, shutdown_event=None):
             self.end_headers()
             self.wfile.write(data.encode('utf-8'))
 
+        @staticmethod
+        def _parse_query(query_string: str) -> dict[str, str]:
+            params = {}
+            if query_string:
+                for part in query_string.split('&'):
+                    if '=' in part:
+                        k, v = part.split('=', 1)
+                        params[k] = v
+            return params
+
         def do_GET(self):
-            path = self.path.split('?')[0]
+            qs = self.path.split('?', 1)
+            path = qs[0]
+            query = self._parse_query(qs[1] if len(qs) > 1 else '')
 
             # Serve root and index.html from React build or vanilla fallback
             if path in ('/', '/index.html'):
@@ -195,15 +207,17 @@ def serve(port=DEFAULT_PORT, shutdown_event=None):
                 _cache_set('/state.json', data)
                 self._send_json(data)
             elif path == '/trades.json':
-                trades = _STORE.read_trades(10)
-                if not trades:
+                limit = max(1, min(int(query.get('limit', 10)), 200))
+                offset = max(0, int(query.get('offset', 0)))
+                trades = _STORE.read_trades(limit + offset)
+                if len(trades) < limit + offset:
                     snapshot = _STORE.load_snapshot()
                     if snapshot and snapshot.assets:
                         for aname, adata in snapshot.assets.items():
                             for t in adata.get('metrics', {}).get('trade_log', []):
                                 trades.append(t)
-                        trades = sorted(trades, key=lambda x: x.get('exit_date', ''), reverse=True)[:10]
-                data = json.dumps(trades, default=str)
+                        trades = sorted(trades, key=lambda x: x.get('exit_date', ''), reverse=True)
+                data = json.dumps(trades[offset:offset + limit], default=str)
                 _cache_set('/trades.json', data)
                 self._send_json(data)
             elif path == '/equity_history.json':

@@ -1,12 +1,14 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { usePortfolioState } from '../hooks/usePortfolioState'
 import { formatAssetPrice } from '../utils/format'
 
 export default function SignalsTable() {
+  const [search, setSearch] = useState('')
   const { data, isPending } = usePortfolioState()
   const rows = useMemo(() => {
     if (!data?.assets) return []
     return Object.entries(data.assets)
+      .filter(([name]) => name.toLowerCase().includes(search.toLowerCase()))
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([name, asset]) => {
         const sig = asset.last_signal
@@ -14,7 +16,7 @@ export default function SignalsTable() {
         const alloc = data.portfolio?.allocations?.[name] ?? 0
         return { name, sig, m, alloc }
       })
-  }, [data])
+  }, [data, search])
 
   if (isPending) {
     return (
@@ -48,7 +50,16 @@ export default function SignalsTable() {
           <div className="w-2 h-2 rounded-full bg-emerald-500/50" />
           <h2 className="text-sm font-semibold text-primary">Signals</h2>
         </div>
-        <span className="text-[11px] text-tertiary">{rows.length} assets</span>
+        <div className="flex items-center gap-3">
+          <input
+            type="text"
+            placeholder="Filter assets..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-32 bg-surface border border-default rounded px-2 py-1 text-[11px] text-primary placeholder-tertiary focus:outline-none focus:border-strong"
+          />
+          <span className="text-[11px] text-tertiary">{rows.length} assets</span>
+        </div>
       </div>
       <div className="overflow-x-auto -mx-4 px-4">
         <table className="w-full text-xs">

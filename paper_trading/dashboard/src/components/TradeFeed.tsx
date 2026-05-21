@@ -1,10 +1,15 @@
-import { useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useTrades } from '../hooks/useTrades'
 import { formatAssetPrice } from '../utils/format'
 
+const PAGE_SIZE = 10
+
 export default function TradeFeed() {
-  const { data: trades, isPending } = useTrades()
-  const rows = useMemo(() => trades ?? [], [trades])
+  const [page, setPage] = useState(0)
+  const offset = page * PAGE_SIZE
+  const { data: trades, isPending } = useTrades(PAGE_SIZE + 1, offset)
+  const rows = useMemo(() => (trades ?? []).slice(0, PAGE_SIZE), [trades])
+  const hasMore = (trades?.length ?? 0) > PAGE_SIZE
 
   if (isPending) {
     return (
@@ -38,7 +43,29 @@ export default function TradeFeed() {
           <div className="w-2 h-2 rounded-full bg-blue-500/50" />
           <h2 className="text-sm font-semibold text-primary">Recent Trades</h2>
         </div>
-        <span className="text-[11px] text-tertiary">{rows.length} trades</span>
+        <div className="flex items-center gap-3">
+          <span className="text-[11px] text-tertiary">page {page + 1}</span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="p-1 rounded border border-default hover:border-strong disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <svg className="w-3 h-3 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setPage(p => p + 1)}
+              disabled={!hasMore}
+              className="p-1 rounded border border-default hover:border-strong disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <svg className="w-3 h-3 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        </div>
       </div>
       <div className="overflow-x-auto -mx-4 px-4">
         <table className="w-full text-xs">
