@@ -35,9 +35,20 @@
 
 ## 1. SYSTEM OVERVIEW
 
-QuantForge is a modular quantitative research and simulation system for **macro-driven systematic strategies across FX, commodities, and digital assets**.
+QuantForge is an adaptive multi-asset macro research and portfolio simulation platform with **governance-driven execution control and stress-conditioned survival modeling**.
 
-It implements a full lifecycle pipeline:
+### 1.1 Architecture at a Glance
+
+| Layer | Purpose |
+|-------|---------|
+| **Features** | Deterministic macro-conditioned signals under strict schema contracts (FeatureContract) |
+| **Models** | Probabilistic directional inference via XGBoost (BUY / HOLD / SELL) |
+| **Governance** | Exposure suppression under instability — validity state machine, feature stability penalties, meta-labeling |
+| **Simulation** | Adversarial survival testing with execution physics, regime bootstrap, and deleveraging feedback |
+| **Execution** | Continuous paper trading with mark-to-market PnL, SL/TP surface optimization, and portfolio construction |
+| **Telemetry** | Adaptive risk observability — shadow analytics, drift detection, importance tracking, deterministic replay |
+
+### 1.2 Lifecycle Pipeline
 
 * Feature engineering under strict schema contracts (FeatureContract)
 * Walk-forward out-of-sample validation across 5-year rolling windows
@@ -49,7 +60,16 @@ It implements a full lifecycle pipeline:
 * **Survival Monte Carlo simulation** with execution physics, regime-aware bootstrap, and deleveraging feedback
 * SL/TP execution surface optimization via replay engine
 
-The system is strictly designed for **research and simulation under realistic market constraints**.
+### 1.3 Design Philosophy
+
+QuantForge is designed under a specific philosophy that distinguishes it from conventional backtesting frameworks:
+
+* **Execution realism is prioritized over nominal CAGR** — simulated fills, spread expansion, gap risk, and partial fill decay prevent over-optimistic projections
+* **Survival under stress is prioritized over historical fit** — portfolio resilience is validated through adversarial perturbation, not backtest R²
+* **Governance is a primary system component, not an afterthought** — validity state machines, stability penalties, and meta-labeling actively suppress exposure when the system degrades
+* **Portfolio topology is prioritized over standalone alpha** — assets are selected for their marginal contribution to portfolio-level risk metrics, not individual Sharpe ratios
+
+This is not a backtesting engine. Backtesting engines answer "would this strategy have made money historically?" QuantForge answers "under what conditions does this portfolio survive?"
 
 ---
 
@@ -534,6 +554,8 @@ Tracks the deleveraging system's behavior across all paths:
 * CHFJPY and EURCAD are net positive contributors across all metrics
 * ^DJI shows small negative ΔSharbe (−0.11) — under monitoring
 
+**Important caveat**: Current regime space remains sparsely populated in CRISIS states (0.27% sample frequency). The bootstrap explicitly injects synthetic stress blocks (§12.8) to compensate, but the underlying data distribution means true tail persistence may be understated. The strong risk metrics above reflect the modeled dynamics — they do not guarantee robustness under compound stress regimes the system has not observed or been parameterised to simulate.
+
 ### 12.8 SL/TP Execution Surface Optimization
 
 The `research/execution_surface/` module runs OHLCV-driven replay simulation over SL/TP grids to find plateau-center configurations:
@@ -544,7 +566,20 @@ The `research/execution_surface/` module runs OHLCV-driven replay simulation ove
 * `monte_carlo.py` — Monte Carlo validation of selected SL/TP parameters
 * Aggregate reports at `data/sandbox/sltp_analysis/aggregate_report.json`
 
-### 12.9 Simulation Snapshot System (PR #6)
+### 12.10 Limitations of Realism
+
+The survival simulation is stateful and regime-conditioned, but it is not a full market microstructural model. The following are **not** yet modeled:
+
+* **Funding stress** — no margin funding rate shocks or repo market dislocations
+* **Market impact** — orders do not move prices; fills occur at observed levels
+* **Dynamic spread feedback** — spreads expand with vol but do not react trade-by-trade to order flow
+* **Order book exhaustion** — no queue priority, iceberg detection, or liquidity hole mechanics
+* **Endogenous correlation cascades** — correlations spike exogenously (stress blocks) but do not emerge from cross-asset margin calls
+* **Exchange outages** — no gateway disconnections, trading halts, or data feed failures
+
+These limitations mean the simulation likely understates true tail persistence, especially under compound stress where multiple degradation modes reinforce each other. The deleveraging governor provides a first-order safety layer against this class of risk, but the absence of endogenous cascades should be considered when interpreting absolute risk metrics.
+
+### 12.11 Simulation Snapshot System (PR #6)
 
 Full engine state captured per asset at each `save_state()` call for deterministic replay:
 
@@ -655,16 +690,26 @@ R --> A
 
 ## 17. KNOWN CONSTRAINTS
 
+### 17.1 Operational
+
 * Paper trading only (no live capital execution)
 * Data limited to Yahoo Finance + FRED
 * Weekend liquidity discontinuities
 * EURUSD excluded (pending COT integration)
 * Ensemble layer not yet activated in production loop
+
+### 17.2 Portfolio
+
 * ^DJI marginal contribution under watch (ΔSharpe −0.11, 30-day monitoring window)
 * CL=F rejected from promotion (regime overfit to 2020 crash); may be re-evaluated with different label params
-* 19 unticked pairs (AUDCHF, NZDCHF, etc.) not yet screened through full pipeline
+* 19 unscreened pairs (AUDCHF, NZDCHF, etc.) not yet evaluated through full pipeline
+
+### 17.3 Simulation Validity
+
 * Regime detection calibrated on 1,852-day sample (2019–2026); may not generalize to longer horizons
-* CRISIS regime only 0.27% of sample — crisis dynamics rely on stress scenario injection
+* CRISIS regime only 0.27% of sample — crisis dynamics rely on synthetic stress injection, not empirical observation
+* Survival simulation does not model funding stress, market impact, endogenous correlation cascades, or exchange outages (see §12.10)
+* Sharpe ratios above 5.0 reflect diversified portfolio construction + deleveraging feedback + regime-aware bootstrap — these are structural features of the simulation architecture, not standalone alpha metrics, and should be interpreted as bounds on modeled dynamics, not predictions of live performance
 
 ---
 
@@ -690,9 +735,9 @@ R --> A
 
 ## 19. SYSTEM CLASSIFICATION
 
-> Macro-conditioned systematic trading research platform with full lifecycle governance, adversarial validation, survival Monte Carlo simulation, and execution simulation infrastructure.
+> Adaptive multi-asset macro research and portfolio simulation platform with governance-driven execution control and stress-conditioned survival modeling.
 
-Designed to evaluate persistence of macro-driven structure under regime stress, cross-asset generalization constraints, and realistic market microstructure friction.
+Designed to evaluate persistence of macro-driven structure under regime stress, cross-asset generalization constraints, and realistic market microstructure friction. Distinguished from conventional backtesting frameworks by treating governance as a primary system component, stress survival as the central validation criterion, and portfolio topology as the unit of analysis rather than standalone asset alpha.
 
 ---
 
