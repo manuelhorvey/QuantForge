@@ -12,7 +12,7 @@ logger = setup_logging(logging.INFO, log_file=LOG_PATH)
 from paper_trading.serve import serve
 import threading, time, json, pickle, signal as sigmod
 
-REFRESH_INTERVAL = 1800
+REFRESH_INTERVAL = int(os.environ.get('QUANTFORGE_REFRESH_INTERVAL', 300))
 _shutdown = threading.Event()
 
 
