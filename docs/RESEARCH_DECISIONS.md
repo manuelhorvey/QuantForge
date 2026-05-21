@@ -138,6 +138,18 @@ Full engine state is captured per asset at each save_state() call to `data/live/
 
 **Why it works:** Row-based parquet snapshots enable replay from any historical date without restarting the simulation. Deduplication prevents unbounded growth. External cold state references avoid duplicating large model files into every snapshot. The parquet format enables direct SQL-like analysis: "what was every asset's position on all Mondays in May?"
 
+### Publication-Lag-Aware Feature Construction
+
+All macro features (FRED series, VIX, DXY) are lagged to their real publication date before any downstream computation. A central `PUBLICATION_LAGS` registry in `features/publication_lags.py` maps each macro series to its lag in business days (e.g. FRED GDPNow = 30bd, VIX = 0bd). The `lag_features()` function applies these before feature computation; the engine enforces lags via the `FeaturePipeline`.
+
+**Why it works:** FRED series are published with a 30-day delay — using "today's" value would leak future information into the training set. The registry-based approach makes the lag policy explicit, auditable, and testable. Zero tolerance for look-ahead in feature construction.
+
+### Synthetic Stress Blocks With Common-Factor Gaussian Model
+
+Six parameterised stress blocks cover structurally distinct crisis regimes: COVID crash, GFC, taper tantrum, 2010 flash crash, correlation spike, and high-vol regime. Each block is modelled as a common-factor Gaussian return perturbation applied to the portfolio's baseline return distribution. A synthetic block index (SBI) tracks injection: `returns_synthetic = returns_base + w * factor_loadings * factor_shock`.
+
+**Why it works:** Bootstrap-resampled historical episodes overfit to a single crisis path. A common-factor model captures the regime's statistical signature (vol, correlation, skew, tail shape) without copying the exact return sequence. The 25% injection cap prevents synthetic data from dominating the original series.
+
 ---
 
 ## 4. What Remains Blocked and What Data Would Unblock It
@@ -168,14 +180,24 @@ Full engine state is captured per asset at each save_state() call to `data/live/
 
 ### Bitcoin — Removed From Core Portfolio (see ADR-018)
 
-**Resolution:** BTC was removed from the core portfolio and placed in a `HighVolSatellite` bucket at 5% AUM cap. Marginal contribution analysis confirmed that BTC's 60-80% annualised vol and 77% 2022 drawdown corrupted portfolio-level Sharpe and drawdown metrics even at 20% allocation. The satellite isolation preserves upside convexity while preventing tail events from corrupting core metrics. See [ADR-018](../docs/adr/ADR-018-btc-satellite.md).
+**Resolution:** BTC was removed from the core portfolio and placed in a `HighVolSatellite` bucket at 5% AUM cap. Marginal contribution analysis confirmed that BTC's 60-80% annualised vol and 77% 2022 drawdown corrupted portfolio-level Sharpe and drawdown metrics even at 20% allocation. The satellite isolation preserves upside convexity while preventing tail events from corrupting core metrics. 14-asset survival sim validated: BTC Satellite portfolio Sharpe 5.58, worst DD 12.1%, vs BTC Legacy 20% Sharpe 3.78, worst DD 27.5%. See [ADR-018](../docs/adr/ADR-018-btc-satellite.md).
+
+### Portfolio Expansion — 11 to 14 Assets (CHFJPY, EURCAD, ^DJI)
+
+**Resolution:** 32 tickers registered and walk-forward screened. 10 passed the promotion gate. Historical 5-year sandbox governance narrowed to 4 candidates. CL=F rejected (avg Sharpe −0.33 in historical backtest — regime overfit to 2020 crash). GBPNZD held back (only 3/5 consistent windows). Three promoted:
+
+- **CHFJPY**: avg Sharpe 0.89 (WF), 1.62 (historical), 5/5 windows, plateau SL/TP at 0.50/1.70
+- **EURCAD**: avg Sharpe 0.52 (WF), 1.41 (historical), 5/5 windows, plateau SL/TP at 0.51/1.96
+- **^DJI**: avg Sharpe 1.53 (historical), 4/5 windows, started underweight at 5%; marginal contribution ΔSharpe −0.11 (under observation)
+
+**14-asset survival sim results**: Sharpe 6.02 (was 3.78), worst DD 8.3% (was 27.5%), flash crash DD 34.1% (was 35.8%), ruin 0%, 100% positive paths. Return compression −2.4% is the expected trade-off for diversification and well within bounds.
+
+**Lesson learned**: Single-metric walk-forward gates can miss regime overfitting (CL=F case). Historical 5-year governance is necessary as a secondary filter. Plateau-center SL/TP selection is more robust than global max Sharpe.
 
 ### Risk-Parity Portfolio Allocation — In Progress
 
-**Blocking issue:** The portfolio/ module has HRP and risk parity implementations marked "in progress." Current allocation uses fixed weights across 6 assets (GC=F 20%, EURAUD 22%, NZDJPY 15%, CADJPY 13%, USDCAD 10%). BTC is excluded.
+**Blocking issue:** The portfolio/ module has HRP and risk parity implementations marked "in progress." Current allocation uses fixed weights across 14 assets (see README §4).
 
-
-
-**Data needed:** Validated correlation and volatility models for the six-asset portfolio. The current max |r| < 0.40 may be period-specific and needs ongoing monitoring. Requires: a) rolling correlation estimator, b) volatility forecasting, c) rebalancing schedule, d) backtest against fixed-weight baseline.
+**Data needed:** Validated correlation and volatility models for the 14-asset portfolio. The expansion to 14 assets may shift pairwise correlation structure. Requires: a) rolling correlation estimator, b) volatility forecasting, c) rebalancing schedule, d) backtest against fixed-weight baseline.
 
 **Estimated effort:** 2-3 weeks for implementation + 2 weeks for validation.
