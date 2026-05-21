@@ -8,8 +8,9 @@ import numpy as np
 import pandas as pd
 import pytz
 import xgboost as xgb
-import yaml
 from datetime import datetime
+
+from paper_trading.config_manager import EngineConfig, load_config
 
 # Re-exported from data_fetcher for backward compatibility
 from paper_trading.data_fetcher import (  # noqa: F401
@@ -62,46 +63,45 @@ EQUITY_HISTORY_PATH = _STORE.equity_history_path
 CACHE_DIR = _STORE.cache_dir
 LOG_PATH = os.path.join(BASE, 'data', 'live', 'engine.log')
 MODEL_DIR = os.path.join(os.path.dirname(__file__), 'models')
-CONFIG_PATH = os.path.join(BASE, 'configs', 'paper_trading.yaml')
 
 os.makedirs(MODEL_DIR, exist_ok=True)
 
-
-def _load_config():
-    path = CONFIG_PATH
-    if os.path.exists(path):
-        with open(path) as f:
-            cfg = yaml.safe_load(f)
-        logger.info("Loaded config from %s", path)
-        return cfg
-    logger.warning("Config file %s not found; using defaults", path)
-    return {}
+# Backward-compat module-level config (populated lazily from config_manager)
+_ENGINE_CONFIG: EngineConfig | None = None
 
 
-_cfg = _load_config()
+def _get_config() -> EngineConfig:
+    global _ENGINE_CONFIG
+    if _ENGINE_CONFIG is None:
+        _ENGINE_CONFIG = load_config()
+    return _ENGINE_CONFIG
 
-CONFIG = {
-    'capital': _cfg.get('capital', 100_000),
-    'position_size': _cfg.get('position_size', 0.95),
-    'rebalance': _cfg.get('rebalance', 'daily'),
-    'retrain_freq': _cfg.get('retrain_freq', 'annual'),
-    'retrain_window': _cfg.get('retrain_window', 5),
-}
 
-HALT = dict(_cfg.get('halt', {
-    'drawdown': -0.08, 'monthly_pf': 0.70, 'signal_drought': 30, 'prob_drift': 0.15,
-}))
+CONFIG: dict = {}
+HALT: dict = {}
+
+
+def _refresh_module_config() -> None:
+    global CONFIG, HALT
+    cfg = _get_config()
+    CONFIG.clear()
+    CONFIG.update(cfg.to_dict())
+    HALT.clear()
+    HALT.update(cfg.halt)
+
+
+_refresh_module_config()
 
 
 class AssetEngine:
-    def __init__(self, ticker, name, contract, allocation, halt_config=None, config=None, expected_prob_conf=0.45, state_store=None, journal_path=None, sl_mult=1.0, tp_mult=2.5):
+    def __init__(self, ticker, name, contract, allocation, halt_config=None, config=None, expected_prob_conf=0.45, state_store=None, journal_path=None, sl_mult=1.0, tp_mult=2.5, initial_capital=None, position_size=None):
         self.ticker = ticker
         self.name = name
         self.contract = contract
         self.features = list(contract.features)
         self.allocation = allocation
-        self.initial_capital = CONFIG['capital'] * allocation
-        self.halt_config = halt_config or HALT
+        self.initial_capital = initial_capital if initial_capital is not None else CONFIG['capital'] * allocation
+        self.halt_config = halt_config or dict(HALT)
         self.config = config or {}
         self.expected_prob_conf = expected_prob_conf
         self.model = None
@@ -117,7 +117,7 @@ class AssetEngine:
         self.position = None
         self.trade_log = []
         self.current_price = None
-        self.pos_mgr = PositionManager(self.initial_capital, CONFIG['position_size'])
+        self.pos_mgr = PositionManager(self.initial_capital, position_size if position_size is not None else CONFIG['position_size'])
         self.validity_sm = _ValidityStateMachine()
         self._reg = StrategyRegistry.get_instance()
         self._model_iface = self._reg.get_model(self.name)
@@ -131,7 +131,7 @@ class AssetEngine:
         self._shadow_learning = None
         self.sl_mult = sl_mult
         self.tp_mult = tp_mult
-        self._research_mode = _cfg.get("research_mode", False)
+        self._research_mode = _get_config().research_mode
         if state_store is not None:
             self.state_store = state_store
         elif journal_path is _SKIP_JOURNAL:
@@ -728,7 +728,8 @@ class AssetEngine:
 
 
 def _build_paper_portfolio():
-    assets = _cfg.get('assets', {})
+    cfg = _get_config()
+    assets = cfg.assets
     if assets:
         pf = {}
         for name, spec in assets.items():
@@ -739,7 +740,7 @@ def _build_paper_portfolio():
                 contract = type('Contract', (), {'features': spec.get('features', [])})()
             alloc = spec.get('allocation', 0)
             user_halt = spec.get('halt', {})
-            halt = copy.deepcopy(HALT)
+            halt = dict(cfg.halt)
             halt.update(user_halt)
             config = spec.get('config', {})
             sl_mult = spec.get('sl_mult', 1.0)
@@ -752,23 +753,23 @@ def _build_paper_portfolio():
         'NZDJPY': {'ticker': 'NZDJPY=X', 'contract': FEATURE_REGISTRY['NZDJPY=X'], 'alloc': 0.11,
                    'halt': {'drawdown': -0.06, 'monthly_pf': 0.70, 'signal_drought': 30, 'prob_drift': 0.15}, 'config': {}},
         'CADJPY': {'ticker': 'CADJPY=X', 'contract': FEATURE_REGISTRY['CADJPY=X'], 'alloc': 0.10,
-                   'halt': HALT, 'config': {}},
+                   'halt': dict(HALT), 'config': {}},
         'USDCAD': {'ticker': 'USDCAD=X', 'contract': FEATURE_REGISTRY['USDCAD=X'], 'alloc': 0.07,
-                   'halt': HALT, 'config': {}},
+                   'halt': dict(HALT), 'config': {}},
         'GC': {'ticker': 'GC=F', 'contract': FEATURE_REGISTRY['GC=F'], 'alloc': 0.15,
-               'halt': HALT, 'config': {}},
+               'halt': dict(HALT), 'config': {}},
         'EURAUD': {'ticker': 'EURAUD=X', 'contract': FEATURE_REGISTRY['EURAUD=X'], 'alloc': 0.17,
-                   'halt': HALT, 'config': {}},
+                   'halt': dict(HALT), 'config': {}},
         'AUDJPY': {'ticker': 'AUDJPY=X', 'contract': FEATURE_REGISTRY['AUDJPY=X'], 'alloc': 0.07,
-                   'halt': HALT, 'config': {}},
+                   'halt': dict(HALT), 'config': {}},
         'GBPJPY': {'ticker': 'GBPJPY=X', 'contract': FEATURE_REGISTRY['GBPJPY=X'], 'alloc': 0.06,
-                   'halt': HALT, 'config': {}},
+                   'halt': dict(HALT), 'config': {}},
         'USDJPY': {'ticker': 'USDJPY=X', 'contract': FEATURE_REGISTRY['USDJPY=X'], 'alloc': 0.05,
-                   'halt': HALT, 'config': {}},
+                   'halt': dict(HALT), 'config': {}},
         'USDCHF': {'ticker': 'USDCHF=X', 'contract': FEATURE_REGISTRY['USDCHF=X'], 'alloc': 0.04,
-                   'halt': HALT, 'config': {}},
+                   'halt': dict(HALT), 'config': {}},
         'GBPUSD': {'ticker': 'GBPUSD=X', 'contract': FEATURE_REGISTRY['GBPUSD=X'], 'alloc': 0.04,
-                   'halt': HALT, 'config': {}},
+                   'halt': dict(HALT), 'config': {}},
     }
 
 
@@ -831,13 +832,13 @@ class PaperTradingEngine:
 
         # ── Satellite (high-vol bucket, initially BTC) ───────────────
         self.satellite = None
-        sat_cfg = _cfg.get('satellite', {})
-        if sat_cfg:
-            sat_alloc = sat_cfg.get('max_allocation_pct', 0.05)
+        sat_cfg = _get_config().satellite
+        btc_sat = sat_cfg.get('BTC', {})
+        if btc_sat:
             sconfig = SatelliteConfig(
-                max_allocation_pct=sat_alloc,
-                vol_target=sat_cfg.get('vol_target', 0.40),
-                max_drawdown_pct=sat_cfg.get('max_drawdown_pct', -0.25),
+                max_allocation_pct=btc_sat.get('max_allocation_pct', 0.05),
+                vol_target=btc_sat.get('vol_target', 0.40),
+                max_drawdown_pct=btc_sat.get('max_drawdown_pct', -0.25),
             )
             self.satellite = HighVolSatellite(
                 total_aum=CONFIG['capital'],
