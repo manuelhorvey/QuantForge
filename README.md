@@ -1,4 +1,4 @@
-# QUANTFORGE — SYSTEM SPECIFICATION
+# QUANTFORGE
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Status](https://img.shields.io/badge/status-research%20system%20%7C%20paper%20trading-green)
