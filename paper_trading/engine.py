@@ -29,6 +29,8 @@ from paper_trading.satellite_runner import (
 )
 from paper_trading.simulation_snapshot import SimulationStore, build_asset_snapshot
 from paper_trading.state_store import _SKIP_JOURNAL, EngineSnapshot, StateStore, sanitize  # noqa: F401
+from execution.paper_broker import PaperBroker
+from shared.execution_config import build_execution_configs
 from shared.registry import StrategyRegistry
 
 
@@ -95,6 +97,15 @@ class PaperTradingEngine:
                 snapshot.engine_status.get("start_time", self.start_date.isoformat())
             )
         saved_positions = (snapshot.open_positions or {}) if snapshot else {}
+
+        cfg = get_config()
+        self.execution_configs = build_execution_configs(
+            cfg.assets, defaults=cfg.execution_defaults
+        )
+        self.broker = PaperBroker(
+            initial_capital=cfg.capital,
+            execution_configs=self.execution_configs,
+        )
 
         self._build_asset_registry()
         self._init_satellite()

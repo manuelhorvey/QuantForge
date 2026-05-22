@@ -427,6 +427,19 @@ def print_validation_results(results: list[TailValidationResult]) -> None:
     print()
 
 
+def adjust_injection_rate_for_crisis_density(
+    crisis_fraction: float,
+    base_rate: float = 0.25,
+    target_crisis_fraction: float = 0.05,
+    min_rate: float = 0.0,
+) -> float:
+    """Lower synthetic injection when extended history already has enough CRISIS days."""
+    if crisis_fraction >= target_crisis_fraction:
+        return min_rate
+    scale = max(0.0, 1.0 - crisis_fraction / target_crisis_fraction)
+    return round(base_rate * scale, 4)
+
+
 def regime_fraction_report(
     regimes: np.ndarray,
     n_synthetic: int = 0,

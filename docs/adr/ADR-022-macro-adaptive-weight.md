@@ -1,7 +1,7 @@
 # ADR-022: Macro Expert Head Adaptive Weighting
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 The Hybrid Regime Ensemble uses a Macro Expert Head to provide a "fundamental" or "regime-based" overlay that is less susceptible to price-action noise. Currently, this head has a fixed blend weight (default 0.45). However, the relative predictive power of macro factors vs. price-based features fluctuates across different market regimes. A fixed weight may be sub-optimal during periods where macro drivers are either dominant or decoupled from price action.

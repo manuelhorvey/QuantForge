@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 import numpy as np
 
 @dataclass
@@ -62,6 +62,44 @@ def compute_slippage_cost(vol_zscore: np.ndarray, config: ExecutionConfig) -> np
     spread_bps = config.base_spread_bps * (1.0 + config.spread_vol_slope * excess)
     spread_bps = np.minimum(spread_bps, config.spread_max_bps)
     return spread_bps / 10000.0  # bps → decimal
+
+
+def execution_config_from_dict(data: dict | None) -> ExecutionConfig:
+    """Build ExecutionConfig from a YAML-style dict (merges over defaults)."""
+    if not data:
+        return ExecutionConfig()
+    valid = {f.name for f in fields(ExecutionConfig)}
+    kwargs = {k: v for k, v in data.items() if k in valid}
+    return ExecutionConfig(**kwargs)
+
+
+def build_execution_configs(
+    assets: dict,
+    defaults: dict | None = None,
+) -> dict[str, ExecutionConfig]:
+    """Per-asset execution configs for PaperBroker and survival sim."""
+    base = execution_config_from_dict(defaults)
+    configs: dict[str, ExecutionConfig] = {"default": base}
+    for name, spec in assets.items():
+        ticker = spec.get("ticker", name)
+        overrides = spec.get("execution_config") or {}
+        merged = {
+            "base_spread_bps": base.base_spread_bps,
+            "spread_vol_slope": base.spread_vol_slope,
+            "spread_max_bps": base.spread_max_bps,
+            "impact_model": base.impact_model,
+            "impact_coeff": base.impact_coeff,
+            "avg_daily_volume": base.avg_daily_volume,
+            "vol_window": base.vol_window,
+        }
+        merged.update(overrides)
+        cfg = execution_config_from_dict(merged)
+        configs[ticker] = cfg
+        configs[name] = cfg
+    if "BTC" not in configs and "BTC-USD" not in configs:
+        configs["BTC"] = btc_execution_config()
+        configs["BTC-USD"] = configs["BTC"]
+    return configs
 
 
 def compute_market_impact(position_notional: float, config: ExecutionConfig) -> float:

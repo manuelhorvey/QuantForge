@@ -53,6 +53,40 @@ def test_regime_aware_sizing_volatile():
     # size_volatile should be 0.5x size_neutral
     assert pytest.approx(size_volatile) == size_neutral * 0.5
 
+def test_regime_calm_crisis_aliases():
+    rets = np.random.normal(0, 0.01, 100)
+    close = pd.Series(100 * np.exp(np.cumsum(rets)))
+    config = {"vol_scalar": True}
+    strategy = VolTargetSizing(window=30, target_vol=0.1, regime_aware=True)
+
+    size_calm = strategy.compute(close, config, regime="calm")
+    size_crisis = strategy.compute(close, config, regime="crisis")
+    size_neutral = strategy.compute(close, config, regime="neutral")
+
+    assert size_calm >= size_neutral
+    assert pytest.approx(size_crisis) == size_neutral * 0.5
+
+
+def test_vol_baseline_floors_realized_vol():
+    rets = np.random.normal(0, 0.001, 100)
+    close = pd.Series(100 * np.exp(np.cumsum(rets)))
+    config = {"vol_scalar": True, "vol_baseline": 0.25}
+    strategy = VolTargetSizing(window=30, target_vol=0.10, regime_aware=False)
+    size = strategy.compute(close, config)
+    assert 0 < size <= 1.0
+
+
+def test_edge_decay_reduces_size():
+    rets = np.random.normal(0, 0.01, 100)
+    close = pd.Series(100 * np.exp(np.cumsum(rets)))
+    base_cfg = {"vol_scalar": True}
+    high_impact_cfg = {"vol_scalar": True, "impact_bps": 10.0}
+    strategy = VolTargetSizing(window=30, target_vol=0.1, regime_aware=False)
+    size_base = strategy.compute(close, base_cfg)
+    size_impact = strategy.compute(close, high_impact_cfg)
+    assert size_impact <= size_base
+
+
 def test_regime_aware_disabled():
     rets = np.random.normal(0, 0.01, 100)
     close = pd.Series(100 * np.exp(np.cumsum(rets)))

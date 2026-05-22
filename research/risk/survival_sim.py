@@ -1800,6 +1800,8 @@ def main():
         extended_history=args.extended_history
     )
 
+    synthetic_injection_rate = args.synthetic_stress or 0.0
+
     # Compute composite vol index and regimes (for regime-aware bootstrap)
     regimes = None
     if args.regime_bootstrap:
@@ -1808,6 +1810,19 @@ def main():
         regimes = classify_regimes(composite_vol)
         r_counts = {int(r): (regimes == r).sum() for r in VolRegime}
         logger.info("Regime classification: CALM=%d ELEVATED=%d CRISIS=%d", r_counts[0], r_counts[1], r_counts[2])
+        if args.extended_history and synthetic_injection_rate > 0:
+            from research.risk.synthetic_stress import adjust_injection_rate_for_crisis_density
+
+            crisis_frac = float((regimes == VolRegime.CRISIS).mean())
+            adjusted = adjust_injection_rate_for_crisis_density(crisis_frac, base_rate=synthetic_injection_rate)
+            if adjusted != synthetic_injection_rate:
+                logger.info(
+                    "Extended history CRISIS fraction %.2f%% — synthetic injection %.2f → %.2f",
+                    100 * crisis_frac,
+                    synthetic_injection_rate,
+                    adjusted,
+                )
+                synthetic_injection_rate = adjusted
 
     # Build execution config (after asset_data so we know asset names)
     execution_config = None
@@ -1826,7 +1841,6 @@ def main():
 
     # 2. Run each variant
     variant_results = {}
-    synthetic_injection_rate = args.synthetic_stress or 0.0
     for vname in variants:
         logger.info("Running variant: %s", vname)
         result = run_variant(

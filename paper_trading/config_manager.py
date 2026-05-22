@@ -35,6 +35,7 @@ class EngineConfig:
     assets: dict = field(default_factory=dict)
     vol_baselines: dict = field(default_factory=dict)
     regime_geometry: dict = field(default_factory=dict)
+    execution_defaults: dict = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict) -> "EngineConfig":
@@ -55,6 +56,7 @@ class EngineConfig:
             assets=data.get("assets", {}),
             vol_baselines=data.get("vol_baselines", {}),
             regime_geometry=data.get("regime_geometry", {}),
+            execution_defaults=data.get("execution_defaults", {}),
         )
 
     def to_dict(self) -> dict:
@@ -70,6 +72,7 @@ class EngineConfig:
             "assets": self.assets,
             "vol_baselines": self.vol_baselines,
             "regime_geometry": self.regime_geometry,
+            "execution_defaults": self.execution_defaults,
         }
 
 

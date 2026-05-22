@@ -58,3 +58,36 @@ class TestValidateNoCrossAssetLeakage:
         df = pd.DataFrame({"nonsense_col": [1.0], "label": [0]})
         with pytest.raises(FeatureMismatchError, match="is unrecognized"):
             validate_no_cross_asset_leakage(df, contract, known_slugs=ALL_SLUGS)
+
+    def test_custom_features_allowed(self):
+        contract = FeatureContract(
+            ticker="NZDJPY=X",
+            name="NZDJPY",
+            contract_prefix="nzdjpy=x",
+            label_type="tb20",
+            label_params={"pt_sl": [2.0, 0.5], "vertical_barrier": 20},
+            macro_filters=("vix_ma21",),
+            price_mom_windows=(21,),
+            vs_spy_windows=(),
+            custom_features=("audjpy_lead_3",),
+        )
+        df = pd.DataFrame(
+            {"vix_ma21": [1.0], "nzdjpy=x_mom_21": [0.01], "audjpy_lead_3": [0.02], "label": [0]}
+        )
+        validate_no_cross_asset_leakage(df, contract, known_slugs=ALL_SLUGS)
+
+    def test_custom_features_foreign_slug_still_raises(self):
+        contract = FeatureContract(
+            ticker="NZDJPY=X",
+            name="NZDJPY",
+            contract_prefix="nzdjpy=x",
+            label_type="tb20",
+            label_params={"pt_sl": [2.0, 0.5], "vertical_barrier": 20},
+            macro_filters=(),
+            price_mom_windows=(),
+            vs_spy_windows=(),
+            custom_features=(),
+        )
+        df = pd.DataFrame({"eurusd=x_mom_21": [0.01], "label": [0]})
+        with pytest.raises(FeatureMismatchError, match="Cross-asset feature leakage"):
+            validate_no_cross_asset_leakage(df, contract, known_slugs=ALL_SLUGS)

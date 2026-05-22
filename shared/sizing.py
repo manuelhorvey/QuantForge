@@ -21,14 +21,16 @@ class VolTargetSizing(PositionSizingStrategy):
         
         target = self.target_vol
         if self.regime_aware:
-            # Plan: CALM (range) expands to 1.2x target, CRISIS (volatile) contracts to 0.5x
+            # CALM/range expands target; CRISIS/volatile contracts (plan aliases included)
             multipliers = {
                 "range": 1.2,
+                "calm": 1.2,
                 "trend": 1.0,
                 "volatile": 0.5,
-                "neutral": 1.0
+                "crisis": 0.5,
+                "neutral": 1.0,
             }
-            target *= multipliers.get(regime, 1.0)
+            target *= multipliers.get(str(regime).lower(), 1.0)
             
         rets = close.pct_change().dropna()
         if len(rets) < self.window:
@@ -36,7 +38,13 @@ class VolTargetSizing(PositionSizingStrategy):
         rv = rets.iloc[-self.window:].std() * np.sqrt(252)
         if pd.isna(rv) or np.isinf(rv):
             return 1.0
+        vol_baseline = config.get("vol_baseline")
+        if vol_baseline is not None and vol_baseline > 0:
+            rv = max(rv, float(vol_baseline))
         scalar = target / (rv + 1e-9)
+        impact_bps = config.get("impact_bps")
+        if impact_bps is not None:
+            scalar *= self.edge_decay(float(impact_bps))
         return min(scalar, 1.0)
 
     def edge_decay(self, impact_bps: float, threshold_bps: float = 5.0) -> float:

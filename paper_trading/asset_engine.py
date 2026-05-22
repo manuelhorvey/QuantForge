@@ -121,9 +121,6 @@ class AssetEngine:
         if self.config.get("regime_sizing"):
             self._sizing_strategy.regime_aware = True
 
-        if self._macro_head and self.config.get("adaptive_macro"):
-            self._macro_head.online_weight = True
-
         self._window_id_counter = 0
         self._current_window_train_start = ""
         self._current_window_train_end = ""
@@ -131,6 +128,13 @@ class AssetEngine:
 
     def _build_features(self, df, ref, macro):
         return build_features(df, macro, ref, self.contract)
+
+    def _enable_adaptive_macro(self) -> None:
+        if not self.config.get("adaptive_macro") or self.model is None:
+            return
+        macro_head = getattr(self.model, "macro_head", None)
+        if macro_head is not None:
+            macro_head.online_weight = True
 
     def _tb_vol(self, df):
         returns = np.log(df["close"] / df["close"].shift(1))
@@ -183,10 +187,11 @@ class AssetEngine:
         trade["asset"] = self.name
         trade["conf_at_entry"] = self.position.get("confidence") if self.position else None
         
-        # Feed back to macro head if adaptive_macro is enabled
         try:
-            if hasattr(self.model, "macro_head") and self.model.macro_head:
-                self.model.macro_head.update_weight(trade["return"], trade["return"])
+            macro_head = getattr(self.model, "macro_head", None) if self.model else None
+            if macro_head is not None and macro_head.online_weight:
+                trade_ret = float(trade.get("return", 0.0))
+                macro_head.update_weight(trade_ret, trade_ret)
         except Exception:
             pass
 
@@ -210,6 +215,7 @@ class AssetEngine:
             with open(self.model_path, "rb") as f:
                 self.model = pickle.load(f)
                 self._trained = True
+            self._enable_adaptive_macro()
             return
 
         logger.info("%s: downloading history...", self.name)
@@ -249,6 +255,7 @@ class AssetEngine:
         )
         self.model = model
         self._trained = True
+        self._enable_adaptive_macro()
         with open(self.model_path, "wb") as f:
             pickle.dump(model, f)
 

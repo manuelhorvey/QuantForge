@@ -5,6 +5,25 @@ retrain_freq: annual
 retrain_window: 5
 research_mode: false
 
+# Training-window vol baselines (annualized); used for vol-target sizing floors
+vol_baselines:
+  NZDJPY: 0.0055
+  CADJPY: 0.0048
+  EURAUD: 0.0042
+  GC: 0.0120
+  BTC: 0.4500
+  USDCAD: 0.0038
+  AUDJPY: 0.0051
+  GBPJPY: 0.0062
+  USDJPY: 0.0049
+  USDCHF: 0.0043
+  GBPUSD: 0.0056
+  EURUSD: 0.0048
+  AUDUSD: 0.0059
+  NZDUSD: 0.0061
+  EURCAD: 0.0035
+  DJI: 0.0081
+
 # Execution physics / Liquidity models
 execution_defaults:
   base_spread_bps: 0.5

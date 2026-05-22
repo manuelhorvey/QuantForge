@@ -52,9 +52,15 @@ def build_paper_portfolio(halt_defaults: dict) -> dict:
             user_halt = spec.get("halt", {})
             halt = dict(halt_defaults)
             halt.update(user_halt)
-            config = spec.get("config", {})
+            config = dict(spec.get("config", {}))
             if spec.get("regime_sizing"):
                 config["regime_sizing"] = True
+                config.setdefault("vol_scalar", True)
+            if spec.get("adaptive_macro"):
+                config["adaptive_macro"] = True
+            baseline = cfg.vol_baselines.get(name)
+            if baseline is not None:
+                config["vol_baseline"] = baseline
             sl_mult = spec.get("sl_mult", 1.0)
             tp_mult = spec.get("tp_mult", 2.5)
             pf[name] = {
@@ -66,6 +72,7 @@ def build_paper_portfolio(halt_defaults: dict) -> dict:
                 "sl_mult": sl_mult,
                 "tp_mult": tp_mult,
                 "regime_geometry": regime_geom,
+                "execution_config": spec.get("execution_config"),
             }
         return pf
     return {

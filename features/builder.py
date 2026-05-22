@@ -2,7 +2,7 @@ import os, pickle
 import pandas as pd
 import numpy as np
 from features.contract import FeatureContract, validate_no_cross_asset_leakage
-from features.registry import FEATURE_REGISTRY
+from features.registry import FEATURE_CONTRACT_VALIDATION, FEATURE_REGISTRY
 from features.publication_lags import (
     apply_publication_lags,
     apply_lag_to_macro_derived,
@@ -82,7 +82,8 @@ def build_features(df: pd.DataFrame, macro: pd.DataFrame, ref: pd.DataFrame | No
 
     a['label'] = labels
     result = a.dropna(subset=list(contract.features) + ['label'])
-    validate_no_cross_asset_leakage(result, contract, known_slugs=FEATURE_REGISTRY.keys())
+    if FEATURE_CONTRACT_VALIDATION:
+        validate_no_cross_asset_leakage(result, contract, known_slugs=FEATURE_REGISTRY.keys())
     return result
 
 

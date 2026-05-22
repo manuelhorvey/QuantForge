@@ -2,7 +2,7 @@ import os
 import logging
 import pandas as pd
 from features.registry import FEATURE_REGISTRY
-from research.lead_lag.lead_lag_matrix import compute_lead_lag
+from research.lead_lag.lead_lag_matrix import build_lead_lag_matrix, compute_lead_lag
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("run_lead_lag")
@@ -55,6 +55,11 @@ def run():
                     "p_val": res["granger_p"]
                 })
                 
+    matrix = build_lead_lag_matrix(series_dict)
+    matrix_path = os.path.join(OUT_DIR, "lead_lag_matrix.parquet")
+    matrix.to_parquet(matrix_path)
+    logger.info("Saved lead-lag matrix to %s", matrix_path)
+
     df_results = pd.DataFrame(results)
     if not df_results.empty:
         df_results = df_results.sort_values("corr", ascending=False)
