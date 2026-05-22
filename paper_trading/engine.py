@@ -71,10 +71,15 @@ def _refresh_module_config() -> None:
 _refresh_module_config()
 
 from paper_trading.portfolio_builder import build_paper_portfolio as _build_paper_portfolio  # noqa: E402
+from paper_trading.portfolio_builder import cluster_risk_report  # noqa: E402
 
 PAPER_PORTFOLIO = _build_paper_portfolio(HALT)
 _total_alloc = sum(v["alloc"] for v in PAPER_PORTFOLIO.values())
 assert _total_alloc <= 1.01, f"Portfolio allocations sum to {_total_alloc}, must be ≤ 1.0 (remainder is cash buffer)"
+
+_cluster_warnings = cluster_risk_report(PAPER_PORTFOLIO)
+for w in _cluster_warnings:
+    logger.warning("PORTFOLIO CLUSTER RISK: %s", w)
 
 
 class PaperTradingEngine:

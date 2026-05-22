@@ -5,6 +5,36 @@ from paper_trading.config_manager import get_config
 
 logger = logging.getLogger("quantforge.portfolio_builder")
 
+# JPY-carry cluster: assets where JPY is the funding leg (short JPY)
+JPY_CARRY_CLUSTER = {"NZDJPY", "CADJPY", "AUDJPY", "GBPJPY", "USDJPY", "CHFJPY"}
+JPY_CARRY_MAX_ALLOC = 0.40  # 40% max total allocation to JPY crosses
+
+
+def cluster_risk_report(portfolio: dict) -> list[str]:
+    """Check portfolio for cluster concentration risks.
+
+    Returns a list of warning strings (empty list = all clear).
+    """
+    warnings = []
+
+    # JPY-carry cluster concentration
+    jpy_total = 0.0
+    jpy_assets = []
+    for name, spec in portfolio.items():
+        if name in JPY_CARRY_CLUSTER:
+            alloc = spec.get("alloc", 0)
+            jpy_total += alloc
+            jpy_assets.append((name, alloc))
+
+    if jpy_total > JPY_CARRY_MAX_ALLOC:
+        warnings.append(
+            f"JPY-carry cluster {jpy_total * 100:.0f}% exceeds limit "
+            f"{JPY_CARRY_MAX_ALLOC * 100:.0f}% ({len(jpy_assets)} assets). "
+            f"Consider reducing positions in: {', '.join(a for a, _ in jpy_assets)}"
+        )
+
+    return warnings
+
 
 def build_paper_portfolio(halt_defaults: dict) -> dict:
     cfg = get_config()

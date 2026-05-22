@@ -31,15 +31,16 @@ class StressBlock:
     Each block is a named, auditable stress episode that can be injected
     into the return series before bootstrapping.
     """
+
     name: str
-    source_rationale: str          # e.g. "GFC vol analogue"
+    source_rationale: str  # e.g. "GFC vol analogue"
     duration_days: int
-    daily_return_mean: float       # e.g. -0.0015 (-0.15%/day)
-    daily_return_std: float        # daily vol during stress
-    vol_multiplier: float          # spread/gap scaling vs normal
-    correlation_target: float      # inter-asset corr during the block (0–1)
-    liquidity_gap_bps: float       # additional slippage in bps
-    weight: float                  # sampling weight within CRISIS regime (0–1)
+    daily_return_mean: float  # e.g. -0.0015 (-0.15%/day)
+    daily_return_std: float  # daily vol during stress
+    vol_multiplier: float  # spread/gap scaling vs normal
+    correlation_target: float  # inter-asset corr during the block (0–1)
+    liquidity_gap_bps: float  # additional slippage in bps
+    weight: float  # sampling weight within CRISIS regime (0–1)
 
 
 # ── Pre-defined stress block library ───────────────────────────────────
@@ -120,6 +121,7 @@ STRESS_BLOCK_LIBRARY: list[StressBlock] = [
 #  I.  Synthetic Block Generation
 # ══════════════════════════════════════════════════════════════════════
 
+
 def generate_stress_returns(
     block: StressBlock,
     n_assets: int,
@@ -158,6 +160,7 @@ def generate_stress_returns(
 # ══════════════════════════════════════════════════════════════════════
 #  II.  Injection Into Return Series
 # ══════════════════════════════════════════════════════════════════════
+
 
 def inject_synthetic_blocks(
     series_dict: dict[str, np.ndarray],
@@ -215,8 +218,7 @@ def inject_synthetic_blocks(
         # How many repeats of the block do we need?
         n_repeats = max(1, math.ceil(n_days / b.duration_days))
         for rep in range(n_repeats):
-            block_rets = generate_stress_returns(b, n_assets,
-                                                  seed=block_rng + rep)
+            block_rets = generate_stress_returns(b, n_assets, seed=block_rng + rep)
             synthetic_blocks.append(block_rets)
 
     if not synthetic_blocks:
@@ -233,10 +235,12 @@ def inject_synthetic_blocks(
 
     n_injected = total_synthetic
     logger.info(
-        "Injected %d synthetic stress days (%.1f%% of original %d days) "
-        "across %d blocks for %d assets",
-        n_injected, 100 * n_injected / max(1, n_orig), n_orig,
-        len(blocks), n_assets,
+        "Injected %d synthetic stress days (%.1f%% of original %d days) across %d blocks for %d assets",
+        n_injected,
+        100 * n_injected / max(1, n_orig),
+        n_orig,
+        len(blocks),
+        n_assets,
     )
     return result
 
@@ -254,9 +258,11 @@ def compute_synthetic_fraction(
 #  III.  Bootstrap Validation
 # ══════════════════════════════════════════════════════════════════════
 
+
 @dataclass
 class TailValidationResult:
     """Comparison of simulated tail statistics against historical episodes."""
+
     metric: str
     historical_value: float
     simulated_p50: float
@@ -362,46 +368,49 @@ def validate_tail_statistics(
     sim_dd = stats["max_drawdown_pct"]
     hist_dd_range = (min(all_historical_dds), max(all_historical_dds))
     plausible = hist_dd_range[0] * 1.5 <= -sim_dd <= hist_dd_range[1] * 0.5
-    results.append(TailValidationResult(
-        metric="max_drawdown_pct",
-        historical_value=float(np.median(list(b["max_drawdown_pct"]
-                                              for b in benchmarks.values()))),
-        simulated_p50=sim_dd,
-        simulated_p5=sim_dd * 0.7,
-        simulated_p95=sim_dd * 1.3,
-        plausible=plausible,
-        note=f"Historical range: {hist_dd_range[0]:.0f}% to {hist_dd_range[1]:.0f}%",
-    ))
+    results.append(
+        TailValidationResult(
+            metric="max_drawdown_pct",
+            historical_value=float(np.median(list(b["max_drawdown_pct"] for b in benchmarks.values()))),
+            simulated_p50=sim_dd,
+            simulated_p5=sim_dd * 0.7,
+            simulated_p95=sim_dd * 1.3,
+            plausible=plausible,
+            note=f"Historical range: {hist_dd_range[0]:.0f}% to {hist_dd_range[1]:.0f}%",
+        )
+    )
 
     # Sharpe plausibility
     sim_sharpe = stats["sharpe"]
     hist_sharpe_range = (min(all_historical_sharpes), max(all_historical_sharpes))
     plausible = hist_sharpe_range[0] * 1.5 <= sim_sharpe <= hist_sharpe_range[1] * 0.5
-    results.append(TailValidationResult(
-        metric="sharpe_during_crisis",
-        historical_value=float(np.median(list(b["sharpe_during"]
-                                              for b in benchmarks.values()))),
-        simulated_p50=sim_sharpe,
-        simulated_p5=sim_sharpe * 0.7,
-        simulated_p95=sim_sharpe * 1.3,
-        plausible=plausible,
-        note=f"Historical range: {hist_sharpe_range[0]:.1f} to {hist_sharpe_range[1]:.1f}",
-    ))
+    results.append(
+        TailValidationResult(
+            metric="sharpe_during_crisis",
+            historical_value=float(np.median(list(b["sharpe_during"] for b in benchmarks.values()))),
+            simulated_p50=sim_sharpe,
+            simulated_p5=sim_sharpe * 0.7,
+            simulated_p95=sim_sharpe * 1.3,
+            plausible=plausible,
+            note=f"Historical range: {hist_sharpe_range[0]:.1f} to {hist_sharpe_range[1]:.1f}",
+        )
+    )
 
     # Vol plausibility
     sim_vol = stats["annualized_vol_pct"]
     hist_vol_range = (min(all_historical_vols), max(all_historical_vols))
     plausible = hist_vol_range[0] * 0.5 <= sim_vol <= hist_vol_range[1] * 1.5
-    results.append(TailValidationResult(
-        metric="annualized_vol_pct",
-        historical_value=float(np.median(list(b["annualized_vol_pct"]
-                                              for b in benchmarks.values()))),
-        simulated_p50=sim_vol,
-        simulated_p5=sim_vol * 0.7,
-        simulated_p95=sim_vol * 1.3,
-        plausible=plausible and sim_vol > 0,
-        note=f"Historical range: {hist_vol_range[0]:.0f}% to {hist_vol_range[1]:.0f}%",
-    ))
+    results.append(
+        TailValidationResult(
+            metric="annualized_vol_pct",
+            historical_value=float(np.median(list(b["annualized_vol_pct"] for b in benchmarks.values()))),
+            simulated_p50=sim_vol,
+            simulated_p5=sim_vol * 0.7,
+            simulated_p95=sim_vol * 1.3,
+            plausible=plausible and sim_vol > 0,
+            note=f"Historical range: {hist_vol_range[0]:.0f}% to {hist_vol_range[1]:.0f}%",
+        )
+    )
 
     return results
 
@@ -414,10 +423,7 @@ def print_validation_results(results: list[TailValidationResult]) -> None:
     print("  " + "- * 60")
     for r in results:
         plausible_str = "YES" if r.plausible else "NO  ← REVIEW"
-        print(
-            f"  {r.metric:>28s}  {r.historical_value:>10.1f}  "
-            f"{r.simulated_p50:>9.1f}  {plausible_str:>10s}"
-        )
+        print(f"  {r.metric:>28s}  {r.historical_value:>10.1f}  {r.simulated_p50:>9.1f}  {plausible_str:>10s}")
     print()
 
 
@@ -438,6 +444,7 @@ def regime_fraction_report(
     if total == 0:
         return {}
     from research.risk.execution_physics import VolRegime
+
     fractions = {}
     for regime in VolRegime:
         frac = float((regimes == regime).mean())
@@ -445,7 +452,5 @@ def regime_fraction_report(
     fractions["_n_total"] = total
     fractions["_n_synthetic"] = n_synthetic
     n_crisis = int((regimes == VolRegime.CRISIS).sum())
-    fractions["_synthetic_pct_of_crisis"] = round(
-        100 * n_synthetic / max(1, n_crisis), 1
-    )
+    fractions["_synthetic_pct_of_crisis"] = round(100 * n_synthetic / max(1, n_crisis), 1)
     return fractions
