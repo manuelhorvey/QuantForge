@@ -7,14 +7,18 @@ on regime-filtered predictions.
 Output: data/sandbox/regime_sweep.json
 """
 
-import os, sys, json, logging, argparse
-from typing import Optional
-import pandas as pd
+import argparse
+import json
+import logging
+import os
+import sys
+
 import numpy as np
+import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-from research.execution_surface.replay_engine import replay, ReplayConfig
-from research.execution_surface.monte_carlo import compute_trade_metrics, MIN_TRADES
+from research.execution_surface.monte_carlo import compute_trade_metrics
+from research.execution_surface.replay_engine import ReplayConfig, replay
 
 logger = logging.getLogger("quantforge.execution_surface.regime_sweep")
 logging.basicConfig(level=logging.INFO,
@@ -93,7 +97,7 @@ def find_best(results: list) -> dict:
     }
 
 
-def run(spread_bps: float = 0.0, assets: Optional[list] = None):
+def run(spread_bps: float = 0.0, assets: list | None = None):
     """Run per-regime sweep for all assets."""
     report = {}
     target_assets = assets or ASSETS

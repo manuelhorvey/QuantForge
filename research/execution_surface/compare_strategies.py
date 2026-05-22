@@ -8,16 +8,25 @@ Usage:
     python -m research.execution_surface.compare_strategies
 """
 
-import os, sys, json, logging
+import json
+import logging
+import os
+import sys
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from research.execution_surface.replay_engine import replay, replay_regime, replay_meta_geometry, ReplayConfig, ReplayRegimeConfig
-from research.execution_surface.regime_geometry import build_regime_config, to_replay_config, get_plateau_center
-from shared.meta_labeling import MetaModel, build_inference_features, encode_regime, compute_vol_zscore
+from research.execution_surface.regime_geometry import get_plateau_center, to_replay_config
+from research.execution_surface.replay_engine import (
+    ReplayConfig,
+    ReplayRegimeConfig,
+    replay,
+    replay_meta_geometry,
+    replay_regime,
+)
+from shared.meta_labeling import MetaModel, compute_vol_zscore, encode_regime
 
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
 logger = logging.getLogger('compare')
@@ -114,7 +123,6 @@ def run_meta(predictions: pd.DataFrame, regime_cfg: ReplayRegimeConfig) -> tuple
             close_up_to_entry = close_series.iloc[:loc + 1]
             vz = compute_vol_zscore(close_up_to_entry)
             if loc > 0:
-                last_change = regime_changed.iloc[:loc + 1].cumsum().iloc[-1]
                 change_indices = regime_changed.iloc[:loc + 1].values.nonzero()[0]
                 days_since = loc - change_indices[-1] if len(change_indices) > 0 else loc
             else:
@@ -157,7 +165,7 @@ def run_meta(predictions: pd.DataFrame, regime_cfg: ReplayRegimeConfig) -> tuple
     mm.train(X_train, y_train)
 
     # Holdout evaluation
-    from sklearn.metrics import roc_auc_score, precision_score, recall_score, f1_score
+    from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_score
 
     X_test_scaled = mm.scaler.transform(X_test[mm.feature_names].values)
     test_probas = mm.model.predict_proba(X_test_scaled)[:, 1]

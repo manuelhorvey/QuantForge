@@ -22,30 +22,38 @@ Output:
     *_{VARIANT}.png                  — charts per variant
 """
 
-import os, sys, json, logging, math, argparse, copy, pickle
-from dataclasses import dataclass, field
-from typing import Optional
+import argparse
+import json
+import logging
+import math
+import os
+import pickle
+import sys
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-from research.execution_surface.replay_engine import replay, replay_regime, ReplayConfig, ReplayRegimeConfig
 from research.execution_surface.mae_mfe_analyzer import compute_mae_mfe_for_trade
+from research.execution_surface.replay_engine import ReplayConfig, ReplayRegimeConfig, replay, replay_regime
 from research.execution_surface.trade_outcome_analyzer import analyze_trade_outcomes
 from research.risk.execution_physics import (
-    ExecutionConfig, VolRegime, degrade_all_paths, apply_deleveraging,
+    ExecutionConfig,
+    VolRegime,
+    apply_deleveraging,
     btc_execution_config,
-    compute_composite_vol_index, classify_regimes, regime_aware_bootstrap,
-    compute_exposure_telemetry, TelemetryResult, plot_exposure_telemetry,
+    classify_regimes,
+    compute_composite_vol_index,
+    compute_exposure_telemetry,
+    degrade_all_paths,
+    plot_exposure_telemetry,
+    regime_aware_bootstrap,
 )
-from shared.meta_labeling import encode_regime, compute_vol_zscore
 from research.risk.synthetic_stress import (
     inject_synthetic_blocks,
-    validate_tail_statistics,
     print_validation_results,
     regime_fraction_report,
-    STRESS_BLOCK_LIBRARY,
+    validate_tail_statistics,
 )
 
 logger = logging.getLogger("quantforge.risk.survival")
@@ -298,12 +306,11 @@ def load_asset_data(configs: dict, confidence_threshold: float = 0.0,
             n_flip = exit_reasons['flip']
             n_expiry = exit_reasons['expiry']
 
-            # For BTC-gated variant: also extract regime information
-            regime_info = None
-            if 'regime' in predictions.columns:
-                regime_series = predictions['regime']
-            else:
-                regime_series = None
+            regime_series = (
+                predictions['regime']
+                if 'regime' in predictions.columns
+                else None
+            )
 
             raw[name] = {
                 'daily_returns': daily,
@@ -903,7 +910,8 @@ def run_stress_scenarios(asset_data: dict, allocations: dict,
                 synthetic_injection_rate=synthetic_injection_rate)
         except Exception as e:
             logger.error('  Stress %s failed: %s', name, e)
-            import traceback; traceback.print_exc()
+            import traceback
+            traceback.print_exc()
     return scenarios
 
 
@@ -1260,8 +1268,8 @@ def plot_variant_comparison(results: dict, out_dir: str):
     ann_vol = [m['annualized']['vol_pct'] for m in metrics_list]
     ruin = [m['ruin']['probability'] * 100 for m in metrics_list]
     worst_dd = [m['drawdown']['worst_case_dd'] for m in metrics_list]
-    median_term = [m['terminal_wealth']['p50_multiplier'] for m in metrics_list]
-    p5_term = [m['terminal_wealth']['p5_multiplier'] for m in metrics_list]
+    _ = [m['terminal_wealth']['p50_multiplier'] for m in metrics_list]
+    _ = [m['terminal_wealth']['p5_multiplier'] for m in metrics_list]
 
     fig, axes = plt.subplots(2, 3, figsize=(16, 10))
 
@@ -1363,7 +1371,7 @@ def print_variant_summary(name: str, result: dict):
           f'Med DD: {m["drawdown"]["median_max_dd"]:.1f}%')
     print(f'  │  Positive paths: {m["path_distribution"]["fraction_positive"]*100:.1f}%  |  '
           f'Return skew: {m["path_distribution"]["skew"]:.2f}')
-    print(f'  └─')
+    print('  └─')
 
 
 def print_comparison_summary(variant_results: dict, marginal: dict = None):
@@ -1520,10 +1528,17 @@ def main():
     parser.add_argument('--validate-tails', action='store_true',
                         help='Run tail validation against historical crisis benchmarks')
     parser.add_argument('--confidence-filter', type=float, default=0.0,
-                        help='Calibrated confidence threshold [0-1]; bars below get signal=NEUTRAL (default: 0.0 = off)')
+                        help=(
+                            'Calibrated confidence threshold [0-1]; '
+                            'bars below get signal=NEUTRAL (default: 0.0 = off)'
+                        ))
     parser.add_argument('--regime-geometry', type=str, default=None, nargs='?',
                         const='research/execution_surface/recommended_geometries.json',
-                        help='Use regime-conditional SL/TP geometry. Optionally provide custom config JSON path (default: recommended_geometries.json)')
+                        help=(
+                            'Use regime-conditional SL/TP geometry. '
+                            'Optionally provide custom config JSON path '
+                            '(default: recommended_geometries.json)'
+                        ))
     args = parser.parse_args()
 
     n_paths = args.paths

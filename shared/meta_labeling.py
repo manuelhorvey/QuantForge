@@ -7,11 +7,7 @@ then filters/reduces primary signals based on predicted profitability.
 from __future__ import annotations
 
 import logging
-import os
-import pickle
-from dataclasses import dataclass, asdict
-from datetime import datetime
-from typing import Optional
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -109,8 +105,8 @@ class MetaModel:
     """Lightweight binary classifier for meta-labeling."""
 
     def __init__(self):
-        self.model: Optional[LogisticRegression] = None
-        self.scaler: Optional[StandardScaler] = None
+        self.model: LogisticRegression | None = None
+        self.scaler: StandardScaler | None = None
         self._trained = False
         self._n_trades = 0
         self.feature_names = FEATURE_NAMES
@@ -203,7 +199,7 @@ def build_meta_features_from_trade(
     feature_stability_penalty: float,
     close: pd.Series,
     vol_regime: str = "unknown",
-) -> Optional[dict]:
+) -> dict | None:
     """Build a single feature row for a completed trade.
 
     Matches the trade's entry_date to the closest prob_history entry
@@ -232,10 +228,10 @@ def build_meta_features_from_trade(
     if validity_history:
         for v in validity_history:
             v_ts = v.get("timestamp", "")
-            if isinstance(v_ts, str) and v_ts <= entry_date:
-                regime_state = v.get("state", "YELLOW")
-                days_since_regime_change = v.get("periods_in_state", 999)
-            elif hasattr(v_ts, "strftime") and str(v_ts)[:10] <= entry_date:
+            if (
+                isinstance(v_ts, str) and v_ts <= entry_date
+                or hasattr(v_ts, "strftime") and str(v_ts)[:10] <= entry_date
+            ):
                 regime_state = v.get("state", "YELLOW")
                 days_since_regime_change = v.get("periods_in_state", 999)
 
@@ -258,7 +254,7 @@ def build_meta_training_data(
     validity_history: list[dict],
     feature_stability_penalty: float,
     close: pd.Series,
-) -> tuple[Optional[pd.DataFrame], Optional[pd.Series]]:
+) -> tuple[pd.DataFrame | None, pd.Series | None]:
     """Build training DataFrame and label Series from historical trades."""
     rows = []
     labels = []

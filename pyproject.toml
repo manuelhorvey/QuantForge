@@ -69,6 +69,9 @@ select = ["I", "E", "F", "W", "UP", "N", "SIM"]
 "paper_trading/risk_governance.py" = ["E501"]
 "paper_trading/shadow_learning.py" = ["E501"]
 "paper_trading/simulation_snapshot.py" = ["E501"]
+# Research scripts: pre-existing line length violations in print/log formatting
+"research/execution_surface/compare_strategies.py" = ["E501"]
+"research/execution_surface/replay_engine.py" = ["E501"]
 
 [tool.ruff.format]
 quote-style = "double"

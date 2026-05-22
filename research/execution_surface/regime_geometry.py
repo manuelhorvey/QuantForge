@@ -15,11 +15,10 @@ Usage:
     # returns ReplayRegimeConfig with asset-specific tuned geometry
 """
 
-import os, sys, json, logging
-from dataclasses import dataclass, field
-from typing import Optional
-
-import pandas as pd
+import json
+import logging
+import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
@@ -110,7 +109,7 @@ TUNED_GEOMETRIES = {
 }
 
 
-def get_plateau_center(name: str) -> Optional[dict]:
+def get_plateau_center(name: str) -> dict | None:
     """Load plateau center from aggregate report."""
     report_path = os.path.join(SANDBOX_BASE, 'sltp_analysis', 'aggregate_report.json')
     if not os.path.exists(report_path):
@@ -133,7 +132,7 @@ def get_plateau_center(name: str) -> Optional[dict]:
 
 
 def apply_regime_adjustment(base_sl: float, base_tp: float,
-                            regime_adjust: Optional[dict]) -> tuple:
+                            regime_adjust: dict | None) -> tuple:
     """Apply a regime-specific geometry override.
 
     If regime_adjust is None, use base geometry.
@@ -145,7 +144,7 @@ def apply_regime_adjustment(base_sl: float, base_tp: float,
     return regime_adjust['sl_mult'], regime_adjust['tp_mult']
 
 
-def build_regime_config(name: str, plateau: Optional[dict] = None) -> dict:
+def build_regime_config(name: str, plateau: dict | None = None) -> dict:
     """Build a per-asset regime geometry config dict.
 
     Returns:
@@ -187,7 +186,6 @@ def build_regime_config(name: str, plateau: Optional[dict] = None) -> dict:
 
 def tune_all() -> dict:
     """Generate and save tuned regime configs for all assets."""
-    from research.execution_surface.replay_engine import ReplayRegimeConfig
 
     report_path = os.path.join(SANDBOX_BASE, 'sltp_analysis', 'aggregate_report.json')
     if os.path.exists(report_path):
@@ -203,7 +201,8 @@ def tune_all() -> dict:
         cfg = build_regime_config(name)
         configs[name] = cfg
         skip_info = f' skip={cfg["skip_regimes"]}' if cfg['skip_regimes'] else ''
-        logger.info('%s: base(sl=%.2f, tp=%.2f)  low(sl=%.2f, tp=%.2f)  high(sl=%.2f, tp=%.2f)  trans(sl=%.2f, tp=%.2f)%s',
+        logger.info(  # noqa: E501
+            '%s: base(sl=%.2f, tp=%.2f)  low(sl=%.2f, tp=%.2f)  high(sl=%.2f, tp=%.2f)  trans(sl=%.2f, tp=%.2f)%s',
                     name,
                     cfg['default_geom']['sl_mult'], cfg['default_geom']['tp_mult'],
                     cfg['regime_geom'].get('low_vol', {}).get('sl_mult', 0),
@@ -222,7 +221,7 @@ def tune_all() -> dict:
     return configs
 
 
-def to_replay_config(name: str, regime_cfg: Optional[dict] = None) -> 'ReplayRegimeConfig':
+def to_replay_config(name: str, regime_cfg: dict | None = None) -> 'ReplayRegimeConfig':  # noqa: F821
     """Convert a regime config dict to a ReplayRegimeConfig dataclass."""
     from research.execution_surface.replay_engine import ReplayRegimeConfig
 

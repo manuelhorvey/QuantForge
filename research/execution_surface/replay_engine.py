@@ -15,13 +15,9 @@ Extended replay functions:
   - replay_meta_geometry() — meta-model adjusts geometry per trade
 """
 
-import pandas as pd
-import numpy as np
 from dataclasses import dataclass, field
-from typing import Optional, TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from shared.meta_labeling import MetaModel
+import pandas as pd
 
 
 @dataclass
@@ -60,7 +56,7 @@ class PositionState:
     entry_idx: int  # row index in the predictions DataFrame
 
 
-def check_barrier_hit(row: pd.Series, pos: PositionState) -> Optional[tuple[str, float]]:
+def check_barrier_hit(row: pd.Series, pos: PositionState) -> tuple[str, float] | None:
     """Check if High/Low breached SL/TP for a given bar.
 
     Returns ('sl', exit_price) or ('tp', exit_price) or None.
@@ -113,7 +109,7 @@ def replay(predictions: pd.DataFrame, config: ReplayConfig) -> pd.DataFrame:
         vol_at_entry, conf_at_entry, year, regime
     """
     trades = []
-    pos: Optional[PositionState] = None
+    pos: PositionState | None = None
 
     for idx, (timestamp, row) in enumerate(predictions.iterrows()):
         signal = int(row['signal'])
@@ -257,7 +253,7 @@ def replay_regime(predictions: pd.DataFrame, config: ReplayRegimeConfig,
         DataFrame of trade records (same schema as replay()).
     """
     trades = []
-    pos: Optional[PositionState] = None
+    pos: PositionState | None = None
 
     for idx, (timestamp, row) in enumerate(predictions.iterrows()):
         signal = int(row['signal'])
@@ -430,7 +426,7 @@ def replay_meta_geometry(predictions: pd.DataFrame,
     from shared.meta_labeling import build_inference_features
 
     trades = []
-    pos: Optional[PositionState] = None
+    pos: PositionState | None = None
 
     for idx, (timestamp, row) in enumerate(predictions.iterrows()):
         signal = int(row['signal'])

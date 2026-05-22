@@ -33,7 +33,6 @@ from paper_trading.tracer import (
     trace_decision,
     trace_diagnostic_report,
 )
-
 from shared.registry import StrategyRegistry
 
 logger = logging.getLogger("quantforge.asset_engine")
@@ -489,7 +488,10 @@ class AssetEngine:
                 if self.signal_data is not None and len(self.signal_data) > 0:
                     last_bar = str(self.signal_data.index[-1].date())
 
-                logger.info("%s: SL/TP HIT: %s at %s (Current: %s)", self.name, hit[0].upper(), hit[1], self.current_price)
+                logger.info(
+                    "%s: SL/TP HIT: %s at %s (Current: %s)",
+                    self.name, hit[0].upper(), hit[1], self.current_price,
+                )
                 self._close_position(hit[1], last_bar, hit[0])
                 if self.current_value > self.peak_value:
                     self.peak_value = self.current_value
