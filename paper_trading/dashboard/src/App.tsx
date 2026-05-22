@@ -11,6 +11,7 @@ import ConfidenceChart from './components/ConfidenceChart'
 import VolRegimePanel from './components/VolRegimePanel'
 import HealthScores from './components/HealthScores'
 import GovernancePanel from './components/GovernancePanel'
+import TradeOutcomes from './components/TradeOutcomes'
 import EngineLogs from './components/EngineLogs'
 import Footer from './components/Footer'
 
@@ -96,6 +97,8 @@ export default function App() {
             <VolRegimePanel />
           </div>
         </div>
+
+        <TradeOutcomes />
 
         <TradeFeed />
 

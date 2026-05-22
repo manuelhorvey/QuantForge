@@ -63,6 +63,13 @@ export interface AssetState {
   feature_stability_spearman?: number
 }
 
+export interface ExitReasons {
+  tp_rate: number
+  sl_rate: number
+  signal_flip_rate: number
+  avg_r: number
+}
+
 export interface AssetMetrics {
   asset: string
   current_value: number
@@ -85,6 +92,7 @@ export interface AssetMetrics {
   current_sl_mult?: number
   current_tp_mult?: number
   trade_log: TradeEntry[]
+  exit_reasons?: ExitReasons
 }
 
 export interface SignalDistribution {
