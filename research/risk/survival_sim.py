@@ -1955,6 +1955,15 @@ def main():
         json.dump(comparison, f, indent=2)
     logger.info("Consolidated comparison saved to %s", cpath)
 
+    if "full" in variant_results:
+        research_dir = os.path.join(PROJECT_ROOT, "data", "research")
+        os.makedirs(research_dir, exist_ok=True)
+        export_name = "survival_extended.json" if args.extended_history else "survival_baseline.json"
+        export_path = os.path.join(research_dir, export_name)
+        with open(export_path, "w") as f:
+            json.dump(variant_results["full"]["metrics"], f, indent=2, default=str)
+        logger.info("Exported full-variant metrics to %s", export_path)
+
     # 9. Tail validation against historical crisis benchmarks
     if args.validate_tails and "full" in variant_results:
         logger.info("Running bootstrap tail validation...")

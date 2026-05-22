@@ -22,6 +22,7 @@ vol_baselines:
   AUDUSD: 0.0059
   NZDUSD: 0.0061
   EURCAD: 0.0035
+  CHFJPY: 0.0048
   DJI: 0.0081
 
 # Execution physics / Liquidity models

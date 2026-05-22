@@ -11,6 +11,12 @@ logger = logging.getLogger("quantforge.extended_history_report")
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_OUT = os.path.join(PROJECT_ROOT, "data", "research", "extended_history_comparison.json")
+DEFAULT_BASELINE = os.path.join(
+    PROJECT_ROOT, "data", "research", "survival_baseline.json"
+)
+DEFAULT_EXTENDED = os.path.join(
+    PROJECT_ROOT, "data", "research", "survival_extended.json"
+)
 
 
 def _load_metrics(path: str) -> dict | None:
@@ -35,8 +41,8 @@ def compare_reports(baseline: dict, extended: dict) -> dict:
 def main():
     logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser(description="Compare 5y vs extended-history survival stats")
-    parser.add_argument("--baseline", default=os.path.join(PROJECT_ROOT, "data", "research", "survival_baseline.json"))
-    parser.add_argument("--extended", default=os.path.join(PROJECT_ROOT, "data", "research", "survival_extended.json"))
+    parser.add_argument("--baseline", default=DEFAULT_BASELINE)
+    parser.add_argument("--extended", default=DEFAULT_EXTENDED)
     parser.add_argument("--out", default=DEFAULT_OUT)
     args = parser.parse_args()
 
