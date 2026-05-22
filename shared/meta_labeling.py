@@ -7,11 +7,7 @@ then filters/reduces primary signals based on predicted profitability.
 from __future__ import annotations
 
 import logging
-import os
-import pickle
-from dataclasses import dataclass, asdict
-from datetime import datetime
-from typing import Optional
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -47,7 +43,7 @@ class MetaInferenceResult:
 
 def encode_regime(state: str) -> int:
     mapping = {"GREEN": 2, "YELLOW": 1, "RED": 0, "LOW_VOL": 2, "TRANSITION": 1, "HIGH_VOL": 0}
-    return mapping.get(state.upper().replace(' ', '_'), 1)
+    return mapping.get(state.upper().replace(" ", "_"), 1)
 
 
 def compute_vol_zscore(close: pd.Series, window: int = 21) -> float:
@@ -61,9 +57,9 @@ def compute_vol_zscore(close: pd.Series, window: int = 21) -> float:
     return (recent_vol - hist_vol) / hist_vol
 
 
-def decision_from_confidence(confidence: float,
-                              base_sl_mult: float = 1.0,
-                              base_tp_mult: float = 1.0) -> MetaInferenceResult:
+def decision_from_confidence(
+    confidence: float, base_sl_mult: float = 1.0, base_tp_mult: float = 1.0
+) -> MetaInferenceResult:
     """Convert meta-model confidence into execution decision with geometry adjustments.
 
     LOW confidence → SKIP (don't trade)
@@ -109,8 +105,8 @@ class MetaModel:
     """Lightweight binary classifier for meta-labeling."""
 
     def __init__(self):
-        self.model: Optional[LogisticRegression] = None
-        self.scaler: Optional[StandardScaler] = None
+        self.model: LogisticRegression | None = None
+        self.scaler: StandardScaler | None = None
         self._trained = False
         self._n_trades = 0
         self.feature_names = FEATURE_NAMES
@@ -123,7 +119,8 @@ class MetaModel:
         if len(features) < MIN_TRADES_FOR_TRAINING:
             logger.info(
                 "skipping meta-model training: %d trades < %d minimum",
-                len(features), MIN_TRADES_FOR_TRAINING,
+                len(features),
+                MIN_TRADES_FOR_TRAINING,
             )
             self._trained = False
             self._n_trades = len(features)
@@ -162,7 +159,8 @@ class MetaModel:
         self._n_trades = len(features)
         logger.info(
             "meta-model trained on %d trades, %d features",
-            len(features), X.shape[1],
+            len(features),
+            X.shape[1],
         )
 
     def predict(self, features: dict) -> MetaInferenceResult:
@@ -203,7 +201,7 @@ def build_meta_features_from_trade(
     feature_stability_penalty: float,
     close: pd.Series,
     vol_regime: str = "unknown",
-) -> Optional[dict]:
+) -> dict | None:
     """Build a single feature row for a completed trade.
 
     Matches the trade's entry_date to the closest prob_history entry
@@ -232,10 +230,12 @@ def build_meta_features_from_trade(
     if validity_history:
         for v in validity_history:
             v_ts = v.get("timestamp", "")
-            if isinstance(v_ts, str) and v_ts <= entry_date:
-                regime_state = v.get("state", "YELLOW")
-                days_since_regime_change = v.get("periods_in_state", 999)
-            elif hasattr(v_ts, "strftime") and str(v_ts)[:10] <= entry_date:
+            if (
+                isinstance(v_ts, str)
+                and v_ts <= entry_date
+                or hasattr(v_ts, "strftime")
+                and str(v_ts)[:10] <= entry_date
+            ):
                 regime_state = v.get("state", "YELLOW")
                 days_since_regime_change = v.get("periods_in_state", 999)
 
@@ -258,7 +258,7 @@ def build_meta_training_data(
     validity_history: list[dict],
     feature_stability_penalty: float,
     close: pd.Series,
-) -> tuple[Optional[pd.DataFrame], Optional[pd.Series]]:
+) -> tuple[pd.DataFrame | None, pd.Series | None]:
     """Build training DataFrame and label Series from historical trades."""
     rows = []
     labels = []
@@ -266,8 +266,11 @@ def build_meta_training_data(
         if trade.get("pnl") is None:
             continue
         features = build_meta_features_from_trade(
-            trade, prob_history, validity_history,
-            feature_stability_penalty, close,
+            trade,
+            prob_history,
+            validity_history,
+            feature_stability_penalty,
+            close,
         )
         if features is None:
             continue
