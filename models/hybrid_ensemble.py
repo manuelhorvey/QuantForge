@@ -180,8 +180,12 @@ class HybridRegimeEnsemble:
             macro_cols = [c for c in self.macro_feature_names if c in X.columns]
             if len(macro_cols) >= 3:
                 macro_probs = self.macro_head.predict_proba(X[macro_cols])
-                final = (self.macro_weight * macro_probs + 
-                         (1.0 - self.macro_weight) * regime_blend)
+                
+                # Use adaptive weight if online_weight is enabled in the macro head
+                w = getattr(self.macro_head, "current_weight", self.macro_weight)
+                
+                final = (w * macro_probs + 
+                         (1.0 - w) * regime_blend)
                 final = final / final.sum(axis=1, keepdims=True)
                 return final
         

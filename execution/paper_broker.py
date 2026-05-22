@@ -4,6 +4,8 @@ from typing import Dict, List, Optional
 import yfinance as yf
 
 from execution.broker_interface import BrokerInterface, Order, Position, AccountSummary
+from shared.execution_config import ExecutionConfig, compute_slippage_cost, compute_market_impact, DEFAULT_EXECUTION_CONFIGS
+import numpy as np
 
 logger = logging.getLogger("quantforge.paper_broker")
 
@@ -11,23 +13,25 @@ logger = logging.getLogger("quantforge.paper_broker")
 class PaperBroker(BrokerInterface):
     """
     Simulated broker that fills market orders at yfinance prices.
-    Designed to be intentionally simple: no partial fills, no order books.
+    Uses asset-specific ExecutionConfig for realistic spread expansion.
     """
 
     def __init__(
         self,
         initial_capital: float = 100_000,
-        slippage: float = 0.001,
+        execution_configs: Optional[Dict[str, ExecutionConfig]] = None,
         fees: float = 0.0,
     ):
         self.initial_capital = initial_capital
         self.cash = initial_capital
-        self.slippage = slippage
+        self.execution_configs = execution_configs or DEFAULT_EXECUTION_CONFIGS
         self.fees = fees
         self._positions: Dict[str, Position] = {}
         self._orders: Dict[str, Order] = {}
         self._next_order_id = 1
         self._price_cache: Dict[str, float] = {}
+        self._returns_history: Dict[str, List[float]] = {}
+        self._last_price: Dict[str, float] = {}
 
     def connect(self) -> bool:
         return True
@@ -48,13 +52,56 @@ class PaperBroker(BrokerInterface):
             positions=positions,
         )
 
+    def _get_config(self, asset: str) -> ExecutionConfig:
+        return self.execution_configs.get(asset, self.execution_configs.get("default", ExecutionConfig()))
+
+    def _update_vol_tracking(self, asset: str, current_price: float) -> None:
+        if asset in self._last_price:
+            prev_price = self._last_price[asset]
+            if prev_price > 0:
+                ret = current_price / prev_price - 1.0
+                self._returns_history.setdefault(asset, []).append(ret)
+                
+                # Prune history to avoid memory bloat, keep enough for a few windows
+                config = self._get_config(asset)
+                max_history = config.vol_window * 10
+                if len(self._returns_history[asset]) > max_history:
+                    self._returns_history[asset] = self._returns_history[asset][-max_history:]
+        
+        self._last_price[asset] = current_price
+
+    def get_vol_zscore(self, asset: str) -> float:
+        history = self._returns_history.get(asset, [])
+        config = self._get_config(asset)
+        if len(history) < config.vol_window:
+            return 1.0
+        
+        recent = np.array(history[-config.vol_window:])
+        full = np.array(history)
+        
+        recent_std = np.std(recent)
+        full_std = np.std(full)
+        
+        if full_std < 1e-10:
+            return 1.0
+            
+        return float(recent_std / full_std)
+
     def place_order(self, order: Order) -> str:
         price = self.get_current_price(order.asset)
         if price <= 0:
             logger.error("Invalid price %s for %s", price, order.asset)
             return ""
 
-        fill_price = price * (1 + self.slippage) if order.side == "buy" else price * (1 - self.slippage)
+        self._update_vol_tracking(order.asset, price)
+        vol_z = self.get_vol_zscore(order.asset)
+        config = self._get_config(order.asset)
+        
+        slippage = compute_slippage_cost(np.array([vol_z]), config)[0]
+        impact = compute_market_impact(order.quantity * price, config)
+        total_slippage = slippage + impact
+        
+        fill_price = price * (1 + total_slippage) if order.side == "buy" else price * (1 - total_slippage)
         fill_qty = order.quantity
         cost = fill_price * fill_qty
         fee = cost * self.fees
@@ -87,7 +134,8 @@ class PaperBroker(BrokerInterface):
         order.status = "filled"
         order.timestamp = datetime.now()
         self._orders[order_id] = order
-        logger.debug("Order %s: %s %s %.4f @ %.2f", order_id, order.side, order.asset, fill_qty, fill_price)
+        logger.debug("Order %s: %s %s %.4f @ %.2f (vol_z=%.2f, slippage=%.4f, impact=%.4f)", 
+                     order_id, order.side, order.asset, fill_qty, fill_price, vol_z, slippage, impact)
         return order_id
 
     def cancel_order(self, order_id: str) -> bool:

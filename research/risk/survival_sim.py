@@ -249,7 +249,7 @@ def load_allocations() -> dict:
     return {name: acfg["allocation"] for name, acfg in cfg["assets"].items()}
 
 
-def load_asset_data(configs: dict, confidence_threshold: float = 0.0, regime_configs: dict = None) -> dict:
+def load_asset_data(configs: dict, confidence_threshold: float = 0.0, regime_configs: dict = None, extended_history: bool = False) -> dict:
     """Load OOS predictions and compute daily returns for each asset.
 
     Uses correlated approach: all daily return series are aligned to the
@@ -260,6 +260,7 @@ def load_asset_data(configs: dict, confidence_threshold: float = 0.0, regime_con
         confidence_threshold: optional filter for low-confidence signals
         regime_configs: dict mapping asset name -> ReplayRegimeConfig,
                        or None to use fixed plateau geometry
+        extended_history: if True, loads from data/raw/historical_extended/
 
     Returns:
         asset_data: {name: {'daily_returns': Series, 'config': ..., ...}}
@@ -269,11 +270,35 @@ def load_asset_data(configs: dict, confidence_threshold: float = 0.0, regime_con
     indices = []
 
     for name, cfg in configs.items():
-        oos_path = os.path.join(SANDBOX_BASE, name, "oos_predictions.parquet")
-        if not os.path.exists(oos_path):
-            continue
-
-        predictions = pd.read_parquet(oos_path)
+        if extended_history:
+            ticker = cfg.get("ticker") or name # fallback
+            # sanitize ticker
+            clean_t = ticker.replace('^', '').replace('=', '')
+            path = os.path.join(PROJECT_ROOT, "data", "raw", "historical_extended", f"{clean_t}_2000.parquet")
+            if not os.path.exists(path):
+                logger.warning("%s: extended history not found at %s", name, path)
+                continue
+            
+            # For extended history, we might not have OOS predictions.
+            # If so, we can't run 'replay'.
+            # A common use case for survival sim with 2000+ is to test 
+            # how the ASSET itself behaves in regimes, or if we have full-history predictions.
+            # Let's check if there's an extended predictions file.
+            pred_path = os.path.join(SANDBOX_BASE, name, "extended_predictions.parquet")
+            if os.path.exists(pred_path):
+                predictions = pd.read_parquet(pred_path)
+            else:
+                logger.warning("%s: extended predictions not found, using raw returns", name)
+                # Fallback: load raw returns and treat as 'neutral' trades
+                df = pd.read_parquet(path)
+                predictions = df.copy()
+                predictions["signal"] = 1 # Neutral
+                predictions["confidence"] = 100
+        else:
+            oos_path = os.path.join(SANDBOX_BASE, name, "oos_predictions.parquet")
+            if not os.path.exists(oos_path):
+                continue
+            predictions = pd.read_parquet(oos_path)
         replay_cfg = ReplayConfig(sl_mult=cfg["sl_mult"], tp_mult=cfg["tp_mult"])
 
         # Optional: filter low-confidence signals before replay
@@ -1724,6 +1749,9 @@ def main():
             "(default: recommended_geometries.json)"
         ),
     )
+    parser.add_argument(
+        "--extended-history", action="store_true", help="Use extended history (2000+) for simulation"
+    )
     args = parser.parse_args()
 
     n_paths = args.paths
@@ -1765,7 +1793,12 @@ def main():
         else:
             logger.warning("Regime geometry file not found at %s — using defaults", geom_path)
 
-    asset_data = load_asset_data(configs, confidence_threshold=args.confidence_filter, regime_configs=regime_configs)
+    asset_data = load_asset_data(
+        configs, 
+        confidence_threshold=args.confidence_filter, 
+        regime_configs=regime_configs,
+        extended_history=args.extended_history
+    )
 
     # Compute composite vol index and regimes (for regime-aware bootstrap)
     regimes = None

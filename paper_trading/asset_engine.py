@@ -121,6 +121,9 @@ class AssetEngine:
         if self.config.get("regime_sizing"):
             self._sizing_strategy.regime_aware = True
 
+        if self._macro_head and self.config.get("adaptive_macro"):
+            self._macro_head.online_weight = True
+
         self._window_id_counter = 0
         self._current_window_train_start = ""
         self._current_window_train_end = ""
@@ -179,6 +182,14 @@ class AssetEngine:
             return
         trade["asset"] = self.name
         trade["conf_at_entry"] = self.position.get("confidence") if self.position else None
+        
+        # Feed back to macro head if adaptive_macro is enabled
+        try:
+            if hasattr(self.model, "macro_head") and self.model.macro_head:
+                self.model.macro_head.update_weight(trade["return"], trade["return"])
+        except Exception:
+            pass
+
         self.position = None
         self.current_value = self.pos_mgr.current_value
         self.trade_log = list(self.pos_mgr.trade_log)

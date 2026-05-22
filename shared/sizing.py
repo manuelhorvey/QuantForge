@@ -38,3 +38,9 @@ class VolTargetSizing(PositionSizingStrategy):
             return 1.0
         scalar = target / (rv + 1e-9)
         return min(scalar, 1.0)
+
+    def edge_decay(self, impact_bps: float, threshold_bps: float = 5.0) -> float:
+        """Scales down position size when estimated impact exceeds a threshold."""
+        if impact_bps > threshold_bps:
+            return 0.5
+        return 1.0

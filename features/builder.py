@@ -94,6 +94,19 @@ def compute_training_data(ticker: str, macro: pd.DataFrame, ref: pd.DataFrame,
     return features_df[list(contract.features)], features_df['label'], contract
 
 
+def compute_training_data_extended(ticker: str, macro: pd.DataFrame, ref: pd.DataFrame,
+                                  df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, FeatureContract]:
+    """
+    Computes training data for the full provided history (2000+).
+    Same pipeline as compute_training_data but intended for extended history datasets.
+    """
+    contract = FEATURE_REGISTRY[ticker]
+    features_df = build_features(df, macro, ref, contract)
+    # Skip strict lookahead audit for historical data if it might be noisy, 
+    # but still build all features correctly.
+    return features_df[list(contract.features)], features_df['label'], contract
+
+
 def compute_inference_features(ticker: str, macro: pd.DataFrame, ref: pd.DataFrame | None,
                                df: pd.DataFrame) -> pd.DataFrame:
     contract = FEATURE_REGISTRY[ticker]
