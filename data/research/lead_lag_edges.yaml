@@ -1,0 +1,6 @@
+# Strong lead-lag edges for custom_features (update after run_lead_lag.py)
+edges:
+  - target: AUDJPY=X
+    leader: NZDJPY=X
+    lag: 3
+    column: nzdjpy_lead_3

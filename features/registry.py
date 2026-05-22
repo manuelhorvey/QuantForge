@@ -92,6 +92,7 @@ FEATURE_REGISTRY: dict[str, FeatureContract] = {
         macro_filters=("vix_ma21", "vix_delta_5", "us_jp_10y_spread"),
         price_mom_windows=(21, 63),
         vs_spy_windows=(),
+        custom_features=("nzdjpy_lead_3",),
     ),
     "GBPJPY=X": FeatureContract(
         ticker="GBPJPY=X", name="GBPJPY", contract_prefix="gbpjpy=x",

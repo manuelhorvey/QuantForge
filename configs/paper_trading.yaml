@@ -125,7 +125,7 @@ assets:
     execution_config:
       base_spread_bps: 2.0
       avg_daily_volume: 400000000 # 400M
-    features: [vix_ma21, vix_delta_5, us_jp_10y_spread, audjpy_mom_21, audjpy_mom_63]
+    features: [vix_ma21, vix_delta_5, us_jp_10y_spread, audjpy_mom_21, audjpy_mom_63, nzdjpy_lead_3]
     halt:
       drawdown: -0.08
       monthly_pf: 0.70

@@ -2,7 +2,11 @@ import os
 import logging
 import pandas as pd
 from features.registry import FEATURE_REGISTRY
-from research.lead_lag.lead_lag_matrix import build_lead_lag_matrix, compute_lead_lag
+from research.lead_lag.lead_lag_matrix import (
+    build_lead_lag_matrix,
+    compute_lead_lag,
+    plot_lead_lag_heatmap,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("run_lead_lag")
@@ -59,6 +63,11 @@ def run():
     matrix_path = os.path.join(OUT_DIR, "lead_lag_matrix.parquet")
     matrix.to_parquet(matrix_path)
     logger.info("Saved lead-lag matrix to %s", matrix_path)
+    plot_lead_lag_heatmap(
+        matrix,
+        os.path.join(OUT_DIR, "lead_lag_matrix.png"),
+        title="Cross-asset lead-lag (best lag, days)",
+    )
 
     df_results = pd.DataFrame(results)
     if not df_results.empty:

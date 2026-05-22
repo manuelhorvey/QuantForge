@@ -67,6 +67,32 @@ def build_lead_lag_matrix(series_dict: dict, max_lag: int = 21) -> pd.DataFrame:
             
     return matrix
 
+
+def plot_lead_lag_heatmap(matrix: pd.DataFrame, out_path: str, title: str = "Lead-lag (days)") -> str | None:
+    """Save a heatmap PNG of the lead-lag matrix. Returns path or None if matplotlib missing."""
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        logger.warning("matplotlib not available; skipping lead-lag heatmap")
+        return None
+
+    numeric = matrix.astype(float)
+    fig, ax = plt.subplots(figsize=(10, 8))
+    im = ax.imshow(numeric.values, cmap="RdBu_r", aspect="auto", vmin=-21, vmax=21)
+    ax.set_xticks(range(len(numeric.columns)))
+    ax.set_yticks(range(len(numeric.index)))
+    ax.set_xticklabels(numeric.columns, rotation=90, fontsize=7)
+    ax.set_yticklabels(numeric.index, fontsize=7)
+    ax.set_title(title)
+    fig.colorbar(im, ax=ax, label="best lag (days)")
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=120)
+    plt.close(fig)
+    logger.info("Saved lead-lag heatmap to %s", out_path)
+    return out_path
+
+
 if __name__ == "__main__":
     # Test with random data
     s1 = pd.Series(np.random.normal(0, 1, 1000))

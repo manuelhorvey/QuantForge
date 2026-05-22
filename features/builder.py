@@ -54,6 +54,30 @@ def compute_label(df: pd.DataFrame, contract: FeatureContract) -> pd.Series:
     return (labeled['label'] + 1).astype(int)
 
 
+def _attach_lead_lag_features(a: pd.DataFrame, df: pd.DataFrame, contract: FeatureContract) -> None:
+    from features.lead_lag_features import apply_lead_lag_features, load_lead_lag_edges
+
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    raw_dir = os.path.join(base, "data", "raw")
+    for edge in load_lead_lag_edges():
+        if edge.get("target") != contract.ticker:
+            continue
+        col = edge.get("column")
+        if col not in contract.custom_features:
+            continue
+        leader = edge.get("leader", "")
+        clean = leader.replace("^", "").replace("=", "")
+        path = os.path.join(raw_dir, f"{clean}_1d.parquet")
+        if not os.path.exists(path):
+            continue
+        leader_df = pd.read_parquet(path)
+        if "close" not in leader_df.columns:
+            continue
+        a[col] = apply_lead_lag_features(
+            df, leader_df, lag=int(edge.get("lag", 1)), column_name=col
+        ).reindex(a.index)
+
+
 def build_features(df: pd.DataFrame, macro: pd.DataFrame, ref: pd.DataFrame | None,
                    contract: FeatureContract) -> pd.DataFrame:
     """
@@ -79,6 +103,9 @@ def build_features(df: pd.DataFrame, macro: pd.DataFrame, ref: pd.DataFrame | No
         mom = df['close'].pct_change(w)
         spy_mom = ref['close'].pct_change(w) if ref is not None else 0
         a[f'{slug}_vs_spy_{w}'] = mom - spy_mom
+
+    if contract.custom_features:
+        _attach_lead_lag_features(a, df, contract)
 
     a['label'] = labels
     result = a.dropna(subset=list(contract.features) + ['label'])
