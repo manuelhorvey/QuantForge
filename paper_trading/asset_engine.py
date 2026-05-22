@@ -33,11 +33,7 @@ from paper_trading.tracer import (
     trace_decision,
     trace_diagnostic_report,
 )
-from shared.meta_labeling import (
-    MetaModel,
-    build_inference_features,
-    build_meta_training_data,
-)
+
 from shared.registry import StrategyRegistry
 
 logger = logging.getLogger("quantforge.asset_engine")
@@ -122,8 +118,7 @@ class AssetEngine:
         self._current_window_train_start = ""
         self._current_window_train_end = ""
         self._last_stability: StabilityResult | None = None
-        self._meta_model = MetaModel()
-        self._meta_inference: dict | None = None
+
 
     def _build_features(self, df, ref, macro):
         return build_features(df, macro, ref, self.contract)
@@ -140,19 +135,19 @@ class AssetEngine:
             logger.error("%s: invalid entry_price=%s or vol=%s", self.name, entry_price, vol)
             return
 
-        # Regime-conditional geometry selection
+        # Regime-conditional geometry selection (multipliers on base sl_mult/tp_mult)
         state = self.validity_sm.current_state.value if self.validity_sm else "YELLOW"
-        geom = self.regime_geometry.get(state, {"sl_mult": self.sl_mult, "tp_mult": self.tp_mult})
-        sl_mult = geom.get("sl_mult", self.sl_mult)
-        tp_mult = geom.get("tp_mult", self.tp_mult)
+        geom = self.regime_geometry.get(state, {"sl_mult": 1.0, "tp_mult": 1.0})
+        sl_mult = self.sl_mult * geom.get("sl_mult", 1.0)
+        tp_mult = self.tp_mult * geom.get("tp_mult", 1.0)
 
-        if self.regime_geometry:
+        if self.regime_geometry and geom.get("sl_mult", 1.0) != 1.0:
             logger.info(
-                "%s: using regime-conditional geometry for %s: sl=%.2f, tp=%.2f",
+                "%s: regime-adjusted geometry for %s: sl=%.2f (base %.2f × %.2f), tp=%.2f (base %.2f × %.2f)",
                 self.name,
                 state,
-                sl_mult,
-                tp_mult,
+                sl_mult, self.sl_mult, geom.get("sl_mult", 1.0),
+                tp_mult, self.tp_mult, geom.get("tp_mult", 1.0),
             )
 
         intent = PositionIntent.from_price_and_vol(side, entry_price, entry_date, vol, sl_mult, tp_mult)
@@ -298,30 +293,6 @@ class AssetEngine:
         pos_size = self._sizing_strategy.compute(df["close"], self.config)
 
         # Meta-model: train on accumulated trades if enough data
-        self._maybe_train_meta_model(df)
-
-        # Meta-model inference
-        if self._meta_model.is_trained:
-            validity_state = self.validity_sm.current_state.value if self.validity_sm else "YELLOW"
-            periods_in_state = self.validity_sm.periods_in_current_state if self.validity_sm else 0
-            stability_penalty = self._last_stability.penalty if self._last_stability else 0.0
-            primary_conf = float(max(proba[-1]))
-            inf_features = build_inference_features(
-                primary_confidence=primary_conf,
-                regime_state=validity_state,
-                periods_in_state=periods_in_state,
-                feature_stability_penalty=stability_penalty,
-                close=df["close"],
-            )
-            meta_result = self._meta_model.predict(inf_features)
-            pos_size *= meta_result.scale_factor
-            self._meta_inference = {
-                "meta_confidence": meta_result.meta_confidence,
-                "meta_decision": meta_result.meta_decision,
-            }
-        else:
-            self._meta_inference = None
-
         result = self._signal_strategy.compute(proba, X.index, threshold, df["close"], pos_size)
         self.signal_data = result.signal_data
 
@@ -664,9 +635,11 @@ class AssetEngine:
                 "avg_r": round(np.mean([t.get("realized_r", 0) for t in self.trade_log]), 4),
             }
 
-        # Current regime-based multipliers (even if no position)
+        # Current regime-based geometry (multipliers applied to base)
         state = self.validity_sm.current_state.value if self.validity_sm else "YELLOW"
-        geom = self.regime_geometry.get(state, {"sl_mult": self.sl_mult, "tp_mult": self.tp_mult})
+        geom = self.regime_geometry.get(state, {"sl_mult": 1.0, "tp_mult": 1.0})
+        current_sl = self.sl_mult * geom.get("sl_mult", 1.0)
+        current_tp = self.tp_mult * geom.get("tp_mult", 1.0)
 
         return {
             "asset": self.name,
@@ -687,8 +660,8 @@ class AssetEngine:
             "last_signal_date": str(self.last_signal_date.date()) if self.last_signal_date else None,
             "monthly_pf": round(float(monthly_pf), 2) if monthly_pf else None,
             "position": pos_info,
-            "current_sl_mult": geom.get("sl_mult", self.sl_mult),
-            "current_tp_mult": geom.get("tp_mult", self.tp_mult),
+            "current_sl_mult": round(current_sl, 4),
+            "current_tp_mult": round(current_tp, 4),
             "trade_log": self.trade_log[-10:],
             "feature_stability": {
                 "jaccard_top_10": self._last_stability.jaccard_top_10 if self._last_stability else None,
@@ -696,30 +669,8 @@ class AssetEngine:
                 "penalty": self._last_stability.penalty if self._last_stability else 0.0,
                 "window_id": self._last_stability.window_id if self._last_stability else None,
             },
-            "meta_model": self._meta_model.get_state(),
-            "meta_inference": self._meta_inference,
             "exit_reasons": exit_reasons,
         }
-
-    def _maybe_train_meta_model(self, df: pd.DataFrame) -> None:
-        if len(self.trade_log) < 50:
-            return
-        if self._meta_model.is_trained:
-            return
-        try:
-            stability_penalty = self._last_stability.penalty if self._last_stability else 0.0
-            validity_history = [t for t in getattr(self.validity_sm, "state_history", [])]
-            X, y = build_meta_training_data(
-                trade_log=self.trade_log,
-                prob_history=self.prob_history,
-                validity_history=validity_history,
-                feature_stability_penalty=stability_penalty,
-                close=df["close"],
-            )
-            if X is not None and y is not None:
-                self._meta_model.train(X, y)
-        except Exception as e:
-            logger.warning("%s: meta-model training failed: %s", self.name, e)
 
     def _save_trade_journal(self, trade):
         if self.state_store is not None:

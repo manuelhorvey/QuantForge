@@ -47,40 +47,66 @@ SKIP_RECIMES = {
 # Values are adjustments relative to the asset's plateau center.
 TUNED_GEOMETRIES = {
     'NZDJPY': {
-        'low_vol':    None,              # use plateau base
-        'high_vol':   None,              # use plateau base (Avg R 0.53, good)
-        'transition': {'sl_mult': 0.40, 'tp_mult': 1.20},  # tighten hard (Avg R -0.12)
+        'low_vol':    {'sl_mult': 0.30, 'tp_mult': 1.75},
+        'transition': {'sl_mult': 0.30, 'tp_mult': 1.50},   # tighten TP (Avg R -0.12 → gate instead)
+        'high_vol':   {'sl_mult': 0.30, 'tp_mult': 1.75},
     },
     'GC': {
-        'high_vol':   None,              # use plateau base (Avg R 0.83, great)
-        'low_vol':    {'sl_mult': 0.40, 'tp_mult': 2.00},  # tighten SL (Avg R 0.15)
-        'transition': {'sl_mult': 0.40, 'tp_mult': 1.80},  # tighten both (Avg R 0.26)
+        'high_vol':   {'sl_mult': 0.30, 'tp_mult': 2.25},   # wider TP in high vol (Avg R 0.83)
+        'low_vol':    {'sl_mult': 0.30, 'tp_mult': 1.25},   # tight SL+TP (Avg R 0.15)
+        'transition': {'sl_mult': 0.30, 'tp_mult': 1.25},   # tight SL+TP (Avg R 0.26)
     },
     'EURCAD': {
-        'high_vol':   {'sl_mult': 0.60, 'tp_mult': 2.20},  # widen (Avg R 0.70)
-        'low_vol':    None,              # use base (Avg R 0.29)
-        'transition': {'sl_mult': 0.40, 'tp_mult': 1.60},  # tighten (Avg R 0.25)
+        'high_vol':   {'sl_mult': 0.30, 'tp_mult': 2.00},   # wider TP in high vol (Avg R 0.70)
+        'low_vol':    {'sl_mult': 0.30, 'tp_mult': 1.50},
+        'transition': {'sl_mult': 0.30, 'tp_mult': 1.75},
     },
     'USDCHF': {
-        'low_vol':    None,              # use base (Avg R 0.54, best)
-        'high_vol':   {'sl_mult': 0.40, 'tp_mult': 1.60},  # tighten (Avg R 0.19)
-        'transition': {'sl_mult': 0.45, 'tp_mult': 1.80},  # tighten (Avg R 0.41)
+        'low_vol':    {'sl_mult': 0.30, 'tp_mult': 1.75},   # best regime
+        'high_vol':   {'sl_mult': 0.30, 'tp_mult': 1.50},   # tighter TP in high vol
+        'transition': {'sl_mult': 0.30, 'tp_mult': 1.75},
     },
     'DJI': {
-        'low_vol':    {'sl_mult': 0.40, 'tp_mult': 1.50},  # tighten all (all weak)
-        'high_vol':   {'sl_mult': 0.40, 'tp_mult': 1.50},
-        'transition': {'sl_mult': 0.35, 'tp_mult': 1.40},
+        'low_vol':    {'sl_mult': 0.30, 'tp_mult': 1.50},
+        'high_vol':   {'sl_mult': 0.30, 'tp_mult': 1.50},
+        'transition': {'sl_mult': 0.30, 'tp_mult': 2.25},   # wider TP in trans
     },
-    'GBPUSD': None,  # use plateau center for all regimes (consistent ~0.31-0.58)
+    'GBPUSD': None,
     'AUDJPY': {
-        'high_vol':   None,              # Avg R 0.42
-        'low_vol':    {'sl_mult': 0.45, 'tp_mult': 1.80},  # tighten slightly (Avg R 0.31)
+        'high_vol':   {'sl_mult': 0.30, 'tp_mult': 2.00},   # wider TP in high vol
+        'low_vol':    {'sl_mult': 0.30, 'tp_mult': 1.50},
     },
     'USDCAD': {
-        'high_vol':   None,              # Avg R 0.32
-        'low_vol':    None,              # Avg R 0.42 (best)
-        'transition': {'sl_mult': 0.45, 'tp_mult': 1.70},  # tighten (Avg R 0.25)
+        'high_vol':   {'sl_mult': 0.30, 'tp_mult': 1.50},
+        'low_vol':    {'sl_mult': 0.30, 'tp_mult': 1.50},
+        'transition': {'sl_mult': 0.30, 'tp_mult': 1.25},   # tightest TP
     },
+    'CADJPY': {
+        'low_vol':    {'sl_mult': 0.30, 'tp_mult': 1.00},
+        'transition': {'sl_mult': 0.30, 'tp_mult': 1.50},
+        'high_vol':   {'sl_mult': 0.30, 'tp_mult': 1.25},
+    },
+    'CHFJPY': {
+        'low_vol':    {'sl_mult': 0.30, 'tp_mult': 1.00},
+        'transition': {'sl_mult': 0.30, 'tp_mult': 1.00},
+        'high_vol':   {'sl_mult': 0.30, 'tp_mult': 1.25},
+    },
+    'EURAUD': {
+        'low_vol':    {'sl_mult': 0.30, 'tp_mult': 1.00},
+        'transition': {'sl_mult': 0.30, 'tp_mult': 1.25},
+        'high_vol':   {'sl_mult': 0.30, 'tp_mult': 1.00},
+    },
+    'GBPJPY': {
+        'low_vol':    {'sl_mult': 0.30, 'tp_mult': 1.00},
+        'transition': {'sl_mult': 0.30, 'tp_mult': 1.25},
+        'high_vol':   {'sl_mult': 0.30, 'tp_mult': 1.25},
+    },
+    'USDJPY': {
+        'low_vol':    {'sl_mult': 0.30, 'tp_mult': 1.00},
+        'transition': {'sl_mult': 0.30, 'tp_mult': 1.00},
+        'high_vol':   {'sl_mult': 0.30, 'tp_mult': 1.25},
+    },
+    'BTC': None,
 }
 
 

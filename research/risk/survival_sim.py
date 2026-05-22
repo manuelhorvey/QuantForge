@@ -30,7 +30,7 @@ import pandas as pd
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-from research.execution_surface.replay_engine import replay, replay_regime, replay_meta_geometry, ReplayConfig, ReplayRegimeConfig
+from research.execution_surface.replay_engine import replay, replay_regime, ReplayConfig, ReplayRegimeConfig
 from research.execution_surface.mae_mfe_analyzer import compute_mae_mfe_for_trade
 from research.execution_surface.trade_outcome_analyzer import analyze_trade_outcomes
 from research.risk.execution_physics import (
@@ -39,7 +39,7 @@ from research.risk.execution_physics import (
     compute_composite_vol_index, classify_regimes, regime_aware_bootstrap,
     compute_exposure_telemetry, TelemetryResult, plot_exposure_telemetry,
 )
-from shared.meta_labeling import MetaModel, encode_regime, compute_vol_zscore
+from shared.meta_labeling import encode_regime, compute_vol_zscore
 from research.risk.synthetic_stress import (
     inject_synthetic_blocks,
     validate_tail_statistics,
@@ -228,17 +228,17 @@ def load_allocations() -> dict:
 
 
 def load_asset_data(configs: dict, confidence_threshold: float = 0.0,
-                     regime_config: ReplayRegimeConfig = None,
-                     meta_geometry: bool = False) -> dict:
+                     regime_configs: dict = None) -> dict:
     """Load OOS predictions and compute daily returns for each asset.
 
     Uses correlated approach: all daily return series are aligned to the
     common date index (intersection of all asset date ranges).
 
-    When meta_geometry is True, a two-pass flow is used:
-      1. Baseline regime replay to generate trades
-      2. Train MetaModel on trade outcomes, then second-pass replay
-         with meta-model SL/TP adjustments
+    Args:
+        configs: per-asset base configs from load_best_configs()
+        confidence_threshold: optional filter for low-confidence signals
+        regime_configs: dict mapping asset name -> ReplayRegimeConfig,
+                       or None to use fixed plateau geometry
 
     Returns:
         asset_data: {name: {'daily_returns': Series, 'config': ..., ...}}
@@ -262,67 +262,9 @@ def load_asset_data(configs: dict, confidence_threshold: float = 0.0,
                 predictions, name, confidence_threshold)
 
         try:
-            if meta_geometry:
-                # Pass 1: baseline replay to collect trades for meta-model training
-                if regime_config is not None:
-                    trades_pass1 = replay_regime(predictions, regime_config)
-                else:
-                    trades_pass1 = replay(predictions, replay_cfg)
-                if len(trades_pass1) < 50:
-                    logger.warning('%s: %d trades from baseline (< 50), skipping meta-geometry',
-                                   name, len(trades_pass1))
-                    trades = trades_pass1
-                else:
-                    # Train meta-model on pass 1 outcomes with real features
-                    mm = MetaModel()
-                    feature_rows = []
-                    labels = []
-                    close_series = predictions['close']
-                    regime_series = predictions.get('regime', pd.Series(index=predictions.index))
-                    # Pre-compute regime change points for days_since_regime_change
-                    regime_changed = regime_series != regime_series.shift(1)
-                    regime_changed.iloc[0] = False
-                    for idx, (_, tr) in enumerate(trades_pass1.iterrows()):
-                        ret_pct = float(tr.get('return_pct', 0))
-                        conf = float(tr.get('conf_at_entry', 50)) / 100.0
-                        reg = str(tr.get('regime', 'unknown'))
-                        entry_ts = tr.get('entry_time')
-                        if entry_ts is not None and entry_ts in predictions.index:
-                            loc = predictions.index.get_loc(entry_ts)
-                            close_up_to_entry = close_series.iloc[:loc + 1]
-                            vz = compute_vol_zscore(close_up_to_entry)
-                            # Days since last regime change up to entry
-                            if loc > 0:
-                                last_change = regime_changed.iloc[:loc + 1].cumsum().iloc[-1]
-                                change_indices = regime_changed.iloc[:loc + 1].values.nonzero()[0]
-                                days_since = loc - change_indices[-1] if len(change_indices) > 0 else loc
-                            else:
-                                days_since = 0
-                        else:
-                            vz = 0.0
-                            days_since = 1
-                        # Stability penalty: 0 = very stable (many bars since last change),
-                        # approaching 1.0 right after a change, capped at 7 days lookback
-                        stability_penalty = max(0.0, 1.0 - days_since / 7.0)
-                        feature_rows.append({
-                            'primary_confidence': conf,
-                            'regime_state_encoded': encode_regime(reg),
-                            'feature_stability_penalty': stability_penalty,
-                            'vol_zscore': vz,
-                            'days_since_regime_change': float(days_since),
-                        })
-                        labels.append(1 if ret_pct > 0 else 0)
-                    if len(feature_rows) >= 50:
-                        mm.train(pd.DataFrame(feature_rows), pd.Series(labels))
-                    else:
-                        logger.warning('%s: only %d trades for meta training, using full only',
-                                       name, len(feature_rows))
-
-                    # Pass 2: replay with meta-model adjustments
-                    trades = replay_meta_geometry(predictions, regime_config or ReplayRegimeConfig(), mm)
-                    logger.info('%s: meta-geometry enabled (pass1=%d trades)', name, len(trades_pass1))
-            elif regime_config is not None:
-                trades = replay_regime(predictions, regime_config)
+            asset_regime_cfg = regime_configs.get(name) if regime_configs else None
+            if asset_regime_cfg is not None:
+                trades = replay_regime(predictions, asset_regime_cfg)
                 logger.info('%s: regime-conditional geometry enabled', name)
             else:
                 trades = replay(predictions, replay_cfg)
@@ -1582,8 +1524,6 @@ def main():
     parser.add_argument('--regime-geometry', type=str, default=None, nargs='?',
                         const='research/execution_surface/recommended_geometries.json',
                         help='Use regime-conditional SL/TP geometry. Optionally provide custom config JSON path (default: recommended_geometries.json)')
-    parser.add_argument('--meta-geometry', action='store_true',
-                        help='Two-pass meta-labeling: train MetaModel on baseline trades, then adjust SL/TP per trade')
     args = parser.parse_args()
 
     n_paths = args.paths
@@ -1599,32 +1539,35 @@ def main():
     configs = load_best_configs()
     base_allocations = load_allocations()
 
-    # Build regime-conditional geometry config if requested
-    regime_config = None
+    # Build per-asset regime-conditional geometry configs
+    regime_configs = None
     if args.regime_geometry:
         geom_path = os.path.join(PROJECT_ROOT, args.regime_geometry)
         if os.path.exists(geom_path):
             with open(geom_path) as f:
                 geom_data = json.load(f)
-            rc = geom_data.get('regime_conditional', {})
-            regime_config = ReplayRegimeConfig(
-                regime_geom={
-                    'low_vol':    rc.get('low_vol',    {'sl_mult': 0.52, 'tp_mult': 1.96}),
-                    'transition': rc.get('transition', {'sl_mult': 0.65, 'tp_mult': 1.65}),
-                    'high_vol':   rc.get('high_vol',   {'sl_mult': 0.75, 'tp_mult': 1.50}),
-                },
-                default_geom={'sl_mult': 0.65, 'tp_mult': 1.65},
-            )
-            logger.info('Regime-conditional geometry loaded from %s', geom_path)
-            for regime, g in regime_config.regime_geom.items():
-                logger.info('  %s: sl=%.2f, tp=%.2f', regime, g['sl_mult'], g['tp_mult'])
+            regime_configs = {}
+            for asset_name, regimes in geom_data.items():
+                if isinstance(regimes, dict) and all(k in regimes for k in ('low_vol', 'high_vol', 'transition')):
+                    skip = set()
+                    if asset_name == 'NZDJPY':
+                        skip = {'transition'}
+                    regime_configs[asset_name] = ReplayRegimeConfig(
+                        regime_geom=regimes,
+                        default_geom={'sl_mult': 0.65, 'tp_mult': 1.65},
+                        skip_regimes=skip,
+                    )
+            logger.info('Loaded per-asset regime geometry for %d assets from %s',
+                        len(regime_configs), geom_path)
+            for name, rc in list(regime_configs.items())[:5]:
+                g = rc.regime_geom.get('low_vol', {})
+                logger.info('  %s: low(sl=%.2f, tp=%.2f)', name, g.get('sl_mult', 0), g.get('tp_mult', 0))
         else:
             logger.warning('Regime geometry file not found at %s — using defaults',
                            geom_path)
 
     asset_data = load_asset_data(configs, confidence_threshold=args.confidence_filter,
-                                  regime_config=regime_config,
-                                  meta_geometry=args.meta_geometry)
+                                  regime_configs=regime_configs)
 
     # Compute composite vol index and regimes (for regime-aware bootstrap)
     regimes = None

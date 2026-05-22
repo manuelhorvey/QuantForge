@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 class ReplayConfig:
     sl_mult: float = 1.0
     tp_mult: float = 2.5
+    spread_bps: float = 0.0  # round-trip spread in basis points (1 bps = 0.01%)
 
 
 @dataclass
@@ -89,6 +90,13 @@ def compute_trade_return(side: str, entry: float, exit_price: float) -> float:
         return entry / exit_price - 1.0
 
 
+def apply_spread_to_return(ret: float, spread_bps: float) -> float:
+    """Deduct round-trip spread cost from trade return."""
+    if spread_bps <= 0:
+        return ret
+    return ret - spread_bps / 10000.0
+
+
 def replay(predictions: pd.DataFrame, config: ReplayConfig) -> pd.DataFrame:
     """Replay frozen predictions through lifecycle simulation.
 
@@ -117,6 +125,7 @@ def replay(predictions: pd.DataFrame, config: ReplayConfig) -> pd.DataFrame:
             if hit is not None:
                 reason, exit_price = hit
                 ret = compute_trade_return(pos.side, pos.entry_price, exit_price)
+                ret = apply_spread_to_return(ret, config.spread_bps)
                 trades.append({
                     'entry_time': pos.entry_time,
                     'exit_time': timestamp,
@@ -161,6 +170,7 @@ def replay(predictions: pd.DataFrame, config: ReplayConfig) -> pd.DataFrame:
         elif pos.side != desired:
             # Hard close before reversal
             ret = compute_trade_return(pos.side, pos.entry_price, close)
+            ret = apply_spread_to_return(ret, config.spread_bps)
             trades.append({
                 'entry_time': pos.entry_time,
                 'exit_time': timestamp,
@@ -196,6 +206,7 @@ def replay(predictions: pd.DataFrame, config: ReplayConfig) -> pd.DataFrame:
     if pos is not None:
         last_row = predictions.iloc[-1]
         ret = compute_trade_return(pos.side, pos.entry_price, float(last_row['close']))
+        ret = apply_spread_to_return(ret, config.spread_bps)
         trades.append({
             'entry_time': pos.entry_time,
             'exit_time': predictions.index[-1],
@@ -231,7 +242,8 @@ def _get_geom(regime: str, config: ReplayRegimeConfig) -> dict:
     return config.default_geom
 
 
-def replay_regime(predictions: pd.DataFrame, config: ReplayRegimeConfig) -> pd.DataFrame:
+def replay_regime(predictions: pd.DataFrame, config: ReplayRegimeConfig,
+                  spread_bps: float = 0.0) -> pd.DataFrame:
     """Replay with regime-dependent SL/TP geometry.
 
     Args:
@@ -239,6 +251,7 @@ def replay_regime(predictions: pd.DataFrame, config: ReplayRegimeConfig) -> pd.D
                      prob_long, prob_short, prob_neutral, confidence,
                      volatility, atr, year, regime]
         config: ReplayRegimeConfig mapping regime labels to (sl_mult, tp_mult)
+        spread_bps: round-trip spread cost in basis points
 
     Returns:
         DataFrame of trade records (same schema as replay()).
@@ -257,6 +270,7 @@ def replay_regime(predictions: pd.DataFrame, config: ReplayRegimeConfig) -> pd.D
             if hit is not None:
                 reason, exit_price = hit
                 ret = compute_trade_return(pos.side, pos.entry_price, exit_price)
+                ret = apply_spread_to_return(ret, spread_bps)
                 trades.append({
                     'entry_time': pos.entry_time,
                     'exit_time': timestamp,
@@ -290,6 +304,7 @@ def replay_regime(predictions: pd.DataFrame, config: ReplayRegimeConfig) -> pd.D
             if pos is not None and pos.side != desired:
                 # Close existing position but don't open new one (gated)
                 ret = compute_trade_return(pos.side, pos.entry_price, close)
+                ret = apply_spread_to_return(ret, spread_bps)
                 trades.append({
                     'entry_time': pos.entry_time,
                     'exit_time': timestamp,
@@ -329,6 +344,7 @@ def replay_regime(predictions: pd.DataFrame, config: ReplayRegimeConfig) -> pd.D
             )
         elif pos.side != desired:
             ret = compute_trade_return(pos.side, pos.entry_price, close)
+            ret = apply_spread_to_return(ret, spread_bps)
             trades.append({
                 'entry_time': pos.entry_time,
                 'exit_time': timestamp,
@@ -363,6 +379,7 @@ def replay_regime(predictions: pd.DataFrame, config: ReplayRegimeConfig) -> pd.D
     if pos is not None:
         last_row = predictions.iloc[-1]
         ret = compute_trade_return(pos.side, pos.entry_price, float(last_row['close']))
+        ret = apply_spread_to_return(ret, spread_bps)
         trades.append({
             'entry_time': pos.entry_time,
             'exit_time': predictions.index[-1],
@@ -379,7 +396,7 @@ def replay_regime(predictions: pd.DataFrame, config: ReplayRegimeConfig) -> pd.D
             'initial_risk_pct': round(abs(pos.entry_price - pos.sl_price) / pos.entry_price, 6),
             'realized_r': round(ret / (abs(pos.entry_price - pos.sl_price) / pos.entry_price), 4) if pos.sl_price != pos.entry_price else 0.0,
             'year': int(last_row['year']),
-            'regime': str(last_row.get('regime', 'unknown')),
+            'regime': str(last_row['regime']),
         })
 
     if not trades:
@@ -393,7 +410,8 @@ def replay_regime(predictions: pd.DataFrame, config: ReplayRegimeConfig) -> pd.D
 
 def replay_meta_geometry(predictions: pd.DataFrame,
                           regime_config: ReplayRegimeConfig,
-                          meta_model) -> pd.DataFrame:
+                          meta_model,
+                          spread_bps: float = 0.0) -> pd.DataFrame:
     """Replay with meta-model geometry adjustments on top of regime base geometry.
 
     For each trade entry, runs meta-model inference.  If meta-model says SKIP, the
@@ -404,6 +422,7 @@ def replay_meta_geometry(predictions: pd.DataFrame,
         predictions: DataFrame with OHLC and signals (same as replay())
         regime_config: ReplayRegimeConfig for per-regime base geometry
         meta_model: trained MetaModel instance (from shared.meta_labeling)
+        spread_bps: round-trip spread cost in basis points
 
     Returns:
         DataFrame of trade records (same schema as replay()).
@@ -423,6 +442,7 @@ def replay_meta_geometry(predictions: pd.DataFrame,
             if hit is not None:
                 reason, exit_price = hit
                 ret = compute_trade_return(pos.side, pos.entry_price, exit_price)
+                ret = apply_spread_to_return(ret, spread_bps)
                 trades.append({
                     'entry_time': pos.entry_time,
                     'exit_time': timestamp,
@@ -454,6 +474,7 @@ def replay_meta_geometry(predictions: pd.DataFrame,
         if regime in regime_config.skip_regimes:
             if pos is not None and pos.side != desired:
                 ret = compute_trade_return(pos.side, pos.entry_price, close)
+                ret = apply_spread_to_return(ret, spread_bps)
                 trades.append({
                     'entry_time': pos.entry_time,
                     'exit_time': timestamp,
@@ -482,6 +503,7 @@ def replay_meta_geometry(predictions: pd.DataFrame,
             periods_in_state=1,
             feature_stability_penalty=0.0,
             close=predictions['close'],
+            vol_regime=regime,
         )
         meta_result = meta_model.predict(inf_features)
 
@@ -505,6 +527,7 @@ def replay_meta_geometry(predictions: pd.DataFrame,
             )
         elif pos.side != desired:
             ret = compute_trade_return(pos.side, pos.entry_price, close)
+            ret = apply_spread_to_return(ret, spread_bps)
             trades.append({
                 'entry_time': pos.entry_time,
                 'exit_time': timestamp,
@@ -538,6 +561,7 @@ def replay_meta_geometry(predictions: pd.DataFrame,
     if pos is not None:
         last_row = predictions.iloc[-1]
         ret = compute_trade_return(pos.side, pos.entry_price, float(last_row['close']))
+        ret = apply_spread_to_return(ret, spread_bps)
         trades.append({
             'entry_time': pos.entry_time,
             'exit_time': predictions.index[-1],

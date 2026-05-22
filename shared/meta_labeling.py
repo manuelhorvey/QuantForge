@@ -27,6 +27,8 @@ MIN_TRADES_FOR_TRAINING = 50
 FEATURE_NAMES = [
     "primary_confidence",
     "regime_state_encoded",
+    "vol_regime_low",
+    "vol_regime_high",
     "feature_stability_penalty",
     "vol_zscore",
     "days_since_regime_change",
@@ -111,6 +113,7 @@ class MetaModel:
         self.scaler: Optional[StandardScaler] = None
         self._trained = False
         self._n_trades = 0
+        self.feature_names = FEATURE_NAMES
 
     @property
     def is_trained(self) -> bool:
@@ -199,6 +202,7 @@ def build_meta_features_from_trade(
     validity_history: list[dict],
     feature_stability_penalty: float,
     close: pd.Series,
+    vol_regime: str = "unknown",
 ) -> Optional[dict]:
     """Build a single feature row for a completed trade.
 
@@ -240,6 +244,8 @@ def build_meta_features_from_trade(
     return {
         "primary_confidence": primary_confidence,
         "regime_state_encoded": encode_regime(regime_state),
+        "vol_regime_low": 1.0 if vol_regime == "low_vol" else 0.0,
+        "vol_regime_high": 1.0 if vol_regime == "high_vol" else 0.0,
         "feature_stability_penalty": feature_stability_penalty,
         "vol_zscore": vol_z,
         "days_since_regime_change": float(days_since_regime_change),
@@ -279,10 +285,13 @@ def build_inference_features(
     periods_in_state: int,
     feature_stability_penalty: float,
     close: pd.Series,
+    vol_regime: str = "unknown",
 ) -> dict:
     return {
         "primary_confidence": primary_confidence,
         "regime_state_encoded": encode_regime(regime_state),
+        "vol_regime_low": 1.0 if vol_regime == "low_vol" else 0.0,
+        "vol_regime_high": 1.0 if vol_regime == "high_vol" else 0.0,
         "feature_stability_penalty": feature_stability_penalty,
         "vol_zscore": compute_vol_zscore(close),
         "days_since_regime_change": float(periods_in_state),
