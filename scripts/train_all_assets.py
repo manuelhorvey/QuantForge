@@ -79,12 +79,22 @@ def train_one(ticker, macro, ref, force=False):
         X_train, y_train = X, y
 
     split = int(len(X_train) * 0.8)
+    X_tr, y_tr = X_train.iloc[:split], y_train.iloc[:split]
+    # Ensure all 3 classes are present in training split
+    present = set(y_tr.unique())
+    if present != {0, 1, 2}:
+        dummy = pd.DataFrame({c: [0.0] for c in X_tr.columns}, index=pd.RangeIndex(1))
+        missing = [c for c in [0, 1, 2] if c not in present]
+        for m in missing:
+            X_tr = pd.concat([dummy, X_tr], ignore_index=True)
+            y_tr = pd.concat([pd.Series([m]), y_tr], ignore_index=True)
+
     model = xgb.XGBClassifier(
         n_estimators=300, max_depth=2, learning_rate=0.02,
         objective='multi:softprob', num_class=3,
         random_state=42, n_jobs=1, tree_method='hist', verbosity=0,
     )
-    model.fit(X_train.iloc[:split], y_train.iloc[:split],
+    model.fit(X_tr, y_tr,
               eval_set=[(X_train.iloc[split:], y_train.iloc[split:])], verbose=False)
 
     acc, ll = evaluate_model(model, X_train.iloc[split:], y_train.iloc[split:])

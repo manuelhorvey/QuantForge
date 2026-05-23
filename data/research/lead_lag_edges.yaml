@@ -1,6 +1,40 @@
-# Strong lead-lag edges for custom_features (update after run_lead_lag.py)
+# Strong lead-lag edges for custom_features (from lead_lag_results.parquet, |corr|>0.25, lag=1)
 edges:
   - target: AUDJPY=X
     leader: NZDJPY=X
     lag: 3
     column: nzdjpy_lead_3
+  # DJI leads FX crosses at lag=1 (corr 0.33-0.46)
+  - target: AUDJPY=X
+    leader: ^DJI
+    lag: 1
+    column: dji_lead_1
+  - target: NZDJPY=X
+    leader: ^DJI
+    lag: 1
+    column: dji_lead_1
+  - target: CADJPY=X
+    leader: ^DJI
+    lag: 1
+    column: dji_lead_1
+  - target: GBPJPY=X
+    leader: ^DJI
+    lag: 1
+    column: dji_lead_1
+  - target: EURAUD=X
+    leader: ^DJI
+    lag: 1
+    column: dji_lead_1
+  - target: USDCAD=X
+    leader: ^DJI
+    lag: 1
+    column: dji_lead_1
+  # GC (gold) leads USD pairs at lag=1 (corr -0.34)
+  - target: USDJPY=X
+    leader: GC=F
+    lag: 1
+    column: gc_lead_1
+  - target: USDCHF=X
+    leader: GC=F
+    lag: 1
+    column: gc_lead_1

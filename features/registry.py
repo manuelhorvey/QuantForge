@@ -80,6 +80,7 @@ FEATURE_REGISTRY: dict[str, FeatureContract] = {
         ),
         price_mom_windows=(10, 21, 63),
         vs_spy_windows=(),
+        custom_features=("dji_lead_1",),
     ),
     "NZDJPY=X": FeatureContract(
         ticker="NZDJPY=X",
@@ -93,6 +94,7 @@ FEATURE_REGISTRY: dict[str, FeatureContract] = {
         macro_filters=("vix_ma21", "vix_delta_5", "us_jp_10y_spread"),
         price_mom_windows=(21,),
         vs_spy_windows=(),
+        custom_features=("dji_lead_1",),
     ),
     "USDCAD=X": FeatureContract(
         ticker="USDCAD=X",
@@ -106,6 +108,7 @@ FEATURE_REGISTRY: dict[str, FeatureContract] = {
         macro_filters=("rate_diff", "dxy_mom_21", "vix_ma21", "vix_delta_5"),
         price_mom_windows=(21, 63),
         vs_spy_windows=(),
+        custom_features=("dji_lead_1",),
     ),
     "EURAUD=X": FeatureContract(
         ticker="EURAUD=X",
@@ -119,6 +122,7 @@ FEATURE_REGISTRY: dict[str, FeatureContract] = {
         macro_filters=("rate_diff", "dxy_mom_21", "vix_ma21", "vix_delta_5"),
         price_mom_windows=(21, 63),
         vs_spy_windows=(),
+        custom_features=("dji_lead_1",),
     ),
     "AUDJPY=X": FeatureContract(
         ticker="AUDJPY=X",
@@ -132,7 +136,7 @@ FEATURE_REGISTRY: dict[str, FeatureContract] = {
         macro_filters=("vix_ma21", "vix_delta_5", "us_jp_10y_spread"),
         price_mom_windows=(21, 63),
         vs_spy_windows=(),
-        custom_features=("nzdjpy_lead_3",),
+        custom_features=("nzdjpy_lead_3", "dji_lead_1"),
     ),
     "GBPJPY=X": FeatureContract(
         ticker="GBPJPY=X",
@@ -146,6 +150,7 @@ FEATURE_REGISTRY: dict[str, FeatureContract] = {
         macro_filters=("vix_ma21", "vix_delta_5", "us_jp_10y_spread"),
         price_mom_windows=(21, 63),
         vs_spy_windows=(),
+        custom_features=("dji_lead_1",),
     ),
     "USDJPY=X": FeatureContract(
         ticker="USDJPY=X",
@@ -159,6 +164,7 @@ FEATURE_REGISTRY: dict[str, FeatureContract] = {
         macro_filters=("vix_ma21", "vix_delta_5", "us_jp_10y_spread", "dxy_mom_21"),
         price_mom_windows=(21, 63),
         vs_spy_windows=(),
+        custom_features=("gc_lead_1",),
     ),
     "USDCHF=X": FeatureContract(
         ticker="USDCHF=X",
@@ -172,6 +178,7 @@ FEATURE_REGISTRY: dict[str, FeatureContract] = {
         macro_filters=("rate_diff", "dxy_mom_21", "vix_ma21", "vix_delta_5"),
         price_mom_windows=(21, 63),
         vs_spy_windows=(),
+        custom_features=("gc_lead_1",),
     ),
     "GBPUSD=X": FeatureContract(
         ticker="GBPUSD=X",

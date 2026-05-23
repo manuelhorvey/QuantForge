@@ -67,6 +67,35 @@ def compute_label(df: pd.DataFrame, contract: FeatureContract) -> pd.Series:
     return (labeled["label"] + 1).astype(int)
 
 
+def _resolve_leader_path(leader: str, raw_dir: str) -> str | None:
+    """Resolve leader data file, trying multiple patterns. Download via yfinance if missing."""
+    candidates = [
+        leader.replace("^", ""),
+        leader.replace("^", "").replace("=X", "").replace("=F", ""),
+        leader,
+    ]
+    for c in set(candidates):
+        path = os.path.join(raw_dir, f"{c}_1d.parquet")
+        if os.path.exists(path):
+            return path
+    # Fallback: download via yfinance
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        try:
+            import yfinance as yf
+            df = yf.download(leader, period="10y", auto_adjust=True, progress=False)
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = [c[0] for c in df.columns]
+            df = df.rename(columns={"Close": "close", "High": "high", "Low": "low", "Open": "open", "Volume": "volume"})
+            filename = leader.replace("^", "").replace("=X", "").replace("=F", "")
+            path = os.path.join(raw_dir, f"{filename}_1d.parquet")
+            df.to_parquet(path)
+            return path
+        except Exception:
+            return None
+
+
 def _attach_lead_lag_features(a: pd.DataFrame, df: pd.DataFrame, contract: FeatureContract) -> None:
     from features.lead_lag_features import apply_lead_lag_features, load_lead_lag_edges
 
@@ -79,13 +108,13 @@ def _attach_lead_lag_features(a: pd.DataFrame, df: pd.DataFrame, contract: Featu
         if col not in contract.custom_features:
             continue
         leader = edge.get("leader", "")
-        clean = leader.replace("^", "").replace("=", "")
-        path = os.path.join(raw_dir, f"{clean}_1d.parquet")
-        if not os.path.exists(path):
+        path = _resolve_leader_path(leader, raw_dir)
+        if path is None:
             continue
         leader_df = pd.read_parquet(path)
         if "close" not in leader_df.columns:
             continue
+        leader_df = _normalize(leader_df)
         a[col] = apply_lead_lag_features(df, leader_df, lag=int(edge.get("lag", 1)), column_name=col).reindex(a.index)
 
 
