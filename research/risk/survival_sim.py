@@ -325,7 +325,7 @@ def load_asset_data(configs: dict, confidence_threshold: float = 0.0, regime_con
             predictions = pd.read_parquet(oos_path)
         sltp_engine = None
         if use_dynamic_sltp:
-            sltp_engine = DynamicSLTPEngine(method="atr", atr_period=14, atr_mult_sl=2.0, atr_mult_tp=3.0)
+            sltp_engine = DynamicSLTPEngine(method="atr", atr_period=14, atr_mult_sl=2.0, atr_mult_tp=3.0, calibration_scale=1.0)
             sltp_engine.calibrate(predictions)
         replay_cfg = ReplayConfig(sl_mult=cfg["sl_mult"], tp_mult=cfg["tp_mult"], sltp_engine=sltp_engine)
 

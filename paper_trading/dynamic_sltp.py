@@ -77,6 +77,9 @@ class DynamicSLTPEngine:
         Maximum allowed SL widening fraction (0 = never widen).
     use_gap_protection : bool
         If True, widen SL by expected gap during high-vol sessions.
+    calibration_scale : float
+        Extra multiplier on the calibration ratio (1.0 = match EWM vol,
+        1.2 = 20% wider barriers for higher TP rates).
     """
 
     def __init__(
@@ -91,6 +94,7 @@ class DynamicSLTPEngine:
         post_adjust_interval_bars: int = 3,
         max_sl_widen_pct: float = 0.0,
         use_gap_protection: bool = True,
+        calibration_scale: float = 1.0,
     ):
         self.method = method
         self.atr_period = atr_period
@@ -102,6 +106,7 @@ class DynamicSLTPEngine:
         self.post_adjust_interval_bars = post_adjust_interval_bars
         self.max_sl_widen_pct = max_sl_widen_pct
         self.use_gap_protection = use_gap_protection
+        self.calibration_scale = calibration_scale
 
     # ── Public API ────────────────────────────────────────────────
 
@@ -152,10 +157,10 @@ class DynamicSLTPEngine:
         atr_pct = self._compute_atr(df, self.atr_period) / (float(df["close"].iloc[-1]) + 1e-9)
         if ewm_vol > 0 and atr_pct > 0:
             ratio = ewm_vol / atr_pct
-            self.atr_mult_sl = ratio
+            self.atr_mult_sl = ratio * self.calibration_scale
             logger.info(
-                "ATR calibrated: atr_mult_sl=%.3f (ewm_vol=%.4f, atr_pct=%.4f)",
-                ratio, ewm_vol, atr_pct,
+                "ATR calibrated: atr_mult_sl=%.3f (ewm_vol=%.4f, atr_pct=%.4f, scale=%.2f)",
+                self.atr_mult_sl, ewm_vol, atr_pct, self.calibration_scale,
             )
 
     def compute_trailing_stop(
@@ -446,6 +451,7 @@ def build_dynamic_sltp_from_config(asset_config: dict, df: pd.DataFrame | None =
         post_adjust_interval_bars=sltp_cfg.get("post_adjust_interval_bars", 3),
         max_sl_widen_pct=sltp_cfg.get("max_sl_widen_pct", 0.0),
         use_gap_protection=sltp_cfg.get("use_gap_protection", True),
+        calibration_scale=sltp_cfg.get("calibration_scale", 1.0),
     )
     if df is not None and sltp_cfg.get("auto_calibrate", True):
         engine.calibrate(df)

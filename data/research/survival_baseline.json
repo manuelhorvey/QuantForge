@@ -1,0 +1,98 @@
+{
+  "ruin": {
+    "threshold": -0.4,
+    "probability": 0.0,
+    "n_ruined_paths": 0,
+    "n_total_paths": 500
+  },
+  "terminal_wealth": {
+    "capital": 100000,
+    "p1_multiplier": 1.2063,
+    "p1_return_pct": 20.63,
+    "p5_multiplier": 1.2841,
+    "p5_return_pct": 28.41,
+    "p10_multiplier": 1.3405,
+    "p10_return_pct": 34.05,
+    "p25_multiplier": 1.4389,
+    "p25_return_pct": 43.89,
+    "p50_multiplier": 1.577,
+    "p50_return_pct": 57.7,
+    "p75_multiplier": 1.7656,
+    "p75_return_pct": 76.56,
+    "p90_multiplier": 1.9578,
+    "p90_return_pct": 95.78,
+    "p95_multiplier": 2.0749,
+    "p95_return_pct": 107.49,
+    "p99_multiplier": 2.3805,
+    "p99_return_pct": 138.05,
+    "var_95": 0.0,
+    "cvar_95": 0.0,
+    "pctile_return_95": 28.42,
+    "var_99": 0.0,
+    "cvar_99": 0.0,
+    "pctile_return_99": 20.64
+  },
+  "drawdown": {
+    "p1_max_dd": 2.72,
+    "p5_max_dd": 3.21,
+    "p25_max_dd": 4.0,
+    "p50_max_dd": 4.76,
+    "p75_max_dd": 5.73,
+    "p90_max_dd": 6.81,
+    "p95_max_dd": 7.92,
+    "p99_max_dd": 9.86,
+    "worst_case_dd": 13.36,
+    "median_max_dd": 4.76
+  },
+  "equity_horizons": {
+    "1y": {
+      "p5": 1.0343,
+      "p5_return_pct": 3.43,
+      "p25": 1.0972,
+      "p25_return_pct": 9.72,
+      "p50": 1.1499,
+      "p50_return_pct": 14.99,
+      "p75": 1.2084,
+      "p75_return_pct": 20.84,
+      "p95": 1.2994,
+      "p95_return_pct": 29.94
+    },
+    "2y": {
+      "p5": 1.1511,
+      "p5_return_pct": 15.11,
+      "p25": 1.2525,
+      "p25_return_pct": 25.25,
+      "p50": 1.3435,
+      "p50_return_pct": 34.35,
+      "p75": 1.4473,
+      "p75_return_pct": 44.73,
+      "p95": 1.6469,
+      "p95_return_pct": 64.69
+    },
+    "3y": {
+      "p5": 1.2841,
+      "p5_return_pct": 28.41,
+      "p25": 1.4389,
+      "p25_return_pct": 43.89,
+      "p50": 1.577,
+      "p50_return_pct": 57.7,
+      "p75": 1.7656,
+      "p75_return_pct": 76.56,
+      "p95": 2.0749,
+      "p95_return_pct": 107.49
+    }
+  },
+  "annualized": {
+    "return_pct": 16.4,
+    "vol_pct": 4.72,
+    "sharpe": 3.48
+  },
+  "path_distribution": {
+    "mean_return_pct": 62.31,
+    "std_return_pct": 25.52,
+    "skew": 1.0785,
+    "min_return_pct": 13.3,
+    "max_return_pct": 212.28,
+    "fraction_positive": 1.0
+  }
+}

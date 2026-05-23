@@ -76,6 +76,8 @@ satellite:
         atr_mult_sl: 2.5
         atr_mult_tp: 3.0
         min_rr_ratio: 1.2
+        calibration_scale: 1.0
+        auto_calibrate: true
         trailing_activation_mult: 2.0
         trailing_distance_mult: 3.0
         use_gap_protection: true
@@ -119,6 +121,8 @@ assets:
         atr_mult_sl: 2.0
         atr_mult_tp: 3.0
         min_rr_ratio: 1.5
+        calibration_scale: 1.0
+        auto_calibrate: true
         trailing_activation_mult: 1.5
         trailing_distance_mult: 2.0
         post_adjust_interval_bars: 3
@@ -161,6 +165,8 @@ assets:
         atr_mult_sl: 2.5
         atr_mult_tp: 4.0
         min_rr_ratio: 1.5
+        calibration_scale: 1.0
+        auto_calibrate: true
         trailing_activation_mult: 2.0
         trailing_distance_mult: 2.5
       meta_labeling:
@@ -194,6 +200,8 @@ assets:
         atr_mult_sl: 2.0
         atr_mult_tp: 3.5
         min_rr_ratio: 1.8
+        calibration_scale: 1.0
+        auto_calibrate: true
         trailing_activation_mult: 1.5
         trailing_distance_mult: 2.0
       meta_labeling:
@@ -234,6 +242,8 @@ assets:
         atr_mult_sl: 1.8
         atr_mult_tp: 2.5
         min_rr_ratio: 1.5
+        calibration_scale: 1.0
+        auto_calibrate: true
       meta_labeling:
         enabled: true
         threshold: 0.55
@@ -272,6 +282,8 @@ assets:
         atr_mult_sl: 2.0
         atr_mult_tp: 3.5
         min_rr_ratio: 1.8
+        calibration_scale: 1.0
+        auto_calibrate: true
       meta_labeling:
         enabled: true
         threshold: 0.55
@@ -310,6 +322,8 @@ assets:
         atr_mult_sl: 2.0
         atr_mult_tp: 3.0
         min_rr_ratio: 1.5
+        calibration_scale: 1.0
+        auto_calibrate: true
       meta_labeling:
         enabled: true
         threshold: 0.55
@@ -348,6 +362,8 @@ assets:
         atr_mult_sl: 1.8
         atr_mult_tp: 2.5
         min_rr_ratio: 1.5
+        calibration_scale: 1.0
+        auto_calibrate: true
       meta_labeling:
         enabled: true
         threshold: 0.55
@@ -386,6 +402,8 @@ assets:
         atr_mult_sl: 2.5
         atr_mult_tp: 3.0
         min_rr_ratio: 2.0
+        calibration_scale: 1.0
+        auto_calibrate: true
       meta_labeling:
         enabled: true
         threshold: 0.55
@@ -416,6 +434,8 @@ assets:
         atr_mult_sl: 2.0
         atr_mult_tp: 3.5
         min_rr_ratio: 1.8
+        calibration_scale: 1.0
+        auto_calibrate: true
       meta_labeling:
         enabled: true
         threshold: 0.55
@@ -454,6 +474,8 @@ assets:
         atr_mult_sl: 1.5
         atr_mult_tp: 3.0
         min_rr_ratio: 2.0
+        calibration_scale: 1.0
+        auto_calibrate: true
       meta_labeling:
         enabled: true
         threshold: 0.55
@@ -492,6 +514,8 @@ assets:
         atr_mult_sl: 1.8
         atr_mult_tp: 2.0
         min_rr_ratio: 1.5
+        calibration_scale: 1.0
+        auto_calibrate: true
       meta_labeling:
         enabled: true
         threshold: 0.55
@@ -522,6 +546,8 @@ assets:
         atr_mult_sl: 2.0
         atr_mult_tp: 3.5
         min_rr_ratio: 1.8
+        calibration_scale: 1.0
+        auto_calibrate: true
       meta_labeling:
         enabled: true
         threshold: 0.55
@@ -560,6 +586,8 @@ assets:
         atr_mult_sl: 2.0
         atr_mult_tp: 3.0
         min_rr_ratio: 1.5
+        calibration_scale: 1.0
+        auto_calibrate: true
       meta_labeling:
         enabled: true
         threshold: 0.55
