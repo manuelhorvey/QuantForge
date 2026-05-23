@@ -2,7 +2,6 @@ import os
 import logging
 import numpy as np
 import pandas as pd
-from scipy.signal import correlate
 from statsmodels.tsa.stattools import grangercausalitytests
 
 logger = logging.getLogger("quantforge.lead_lag")
@@ -12,21 +11,24 @@ def compute_lead_lag(series1: pd.Series, series2: pd.Series, max_lag: int = 21) 
     Computes lead-lag relationship between two return series.
     Returns max correlation, the lag at which it occurs, and Granger causality p-value.
     """
-    # 1. Cross-correlation
-    s1 = (series1 - series1.mean()) / (series1.std() * len(series1))
-    s2 = (series2 - series2.mean()) / series2.std()
+    # 1. Cross-correlation via shift-based Pearson r
+    idx1 = pd.DatetimeIndex([d.date() for d in series1.dropna().index])
+    idx2 = pd.DatetimeIndex([d.date() for d in series2.dropna().index])
+    common = idx1.intersection(idx2)
+    s1 = pd.Series(series1.dropna().values, index=idx1).loc[common]
+    s2 = pd.Series(series2.dropna().values, index=idx2).loc[common]
     
-    corr = correlate(s1, s2, mode='full')
-    lags = np.arange(-len(s1) + 1, len(s1))
+    lags = np.arange(-max_lag, max_lag + 1)
+    cors = np.empty(len(lags))
+    for i, lag in enumerate(lags):
+        if lag < 0:
+            cors[i] = s1.shift(-lag).corr(s2)
+        else:
+            cors[i] = s1.corr(s2.shift(lag))
     
-    # Restrict to max_lag
-    mask = (lags >= -max_lag) & (lags <= max_lag)
-    subset_corr = corr[mask]
-    subset_lags = lags[mask]
-    
-    idx = np.argmax(np.abs(subset_corr))
-    max_corr = subset_corr[idx]
-    best_lag = subset_lags[idx]
+    idx = np.nanargmax(np.abs(cors))
+    max_corr = float(cors[idx])
+    best_lag = int(lags[idx])
     
     # 2. Granger Causality
     # We test if series2 leads series1 (lagged series2 helps predict series1)

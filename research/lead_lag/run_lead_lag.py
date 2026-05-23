@@ -1,6 +1,9 @@
 import os
+import sys
 import logging
 import pandas as pd
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from features.registry import FEATURE_REGISTRY
 from research.lead_lag.lead_lag_matrix import (
     build_lead_lag_matrix,
@@ -25,15 +28,42 @@ def run():
     series_dict = {}
     tickers = list(FEATURE_REGISTRY.keys())
     
+    import yfinance as yf
     for ticker in tickers:
-        # Try to find data
-        path = os.path.join(PROJECT_ROOT, "data", "raw", f"{ticker.replace('^', '').replace('=', '')}_1d.parquet")
-        if not os.path.exists(path):
-            continue
-            
-        df = pd.read_parquet(path)
+        # Try multiple filename patterns
+        clean = ticker.replace('^', '').replace('=', '')
+        candidates = [
+            f"{clean}_1d.parquet",
+            f"{ticker.replace('^', '').replace('=X', '').replace('=F', '')}_1d.parquet",
+            f"{ticker}_1d.parquet",
+        ]
+        found = None
+        for c in candidates:
+            p = os.path.join(PROJECT_ROOT, "data", "raw", c)
+            if os.path.exists(p):
+                found = p
+                break
+        if found is not None:
+            df = pd.read_parquet(found)
+        else:
+            # Fallback to yfinance
+            try:
+                df = yf.download(ticker, period='10y', auto_adjust=True, progress=False)
+                if isinstance(df.columns, pd.MultiIndex):
+                    df.columns = [c[0] for c in df.columns]
+                df = df.rename(columns={'Close': 'close', 'High': 'high', 'Low': 'low', 'Open': 'open', 'Volume': 'volume'})
+                if df.index.tz is None:
+                    df.index = df.index.tz_localize('America/New_York')
+                else:
+                    df.index = df.index.tz_convert('America/New_York')
+            except Exception:
+                continue
         if "close" in df.columns:
             rets = df["close"].pct_change().dropna()
+            if rets.index.tz is None:
+                rets.index = rets.index.tz_localize("America/New_York")
+            else:
+                rets.index = rets.index.tz_convert("America/New_York")
             series_dict[ticker] = rets
             
     if not series_dict:
