@@ -15,6 +15,9 @@ Operational procedures for the paper trading system. This document is for the pe
 | Model pickles | `paper_trading/models/*.pkl` |
 | Logs | stdout (redirect to file as needed) |
 | Refresh interval | 300s / 5 min (configurable via `QUANTFORGE_REFRESH_INTERVAL` env var) |
+| Weekend behavior | Auto-pauses Fri 17:00 ET — Sun 17:00 ET; dashboard stays live with CLSD badge |
+| Weekend polling | Reduced to every 120s (state) / 5 min (secondary endpoints) |
+| Market hours logic | `paper_trading/market_hours.py` — `is_market_closed()` |
 | Retrain frequency | Annual (January 1) |
 | Training window | 5-year expanding |
 | Hardening guide | `docs/HARDENING_ROADMAP.md` |
@@ -68,7 +71,7 @@ config:
 
 ## 1. Daily Procedure
 
-### Morning Check (before market open, ~08:30 ET)
+### Morning Check (before market open, ~08:30 ET, Mon–Fri)
 
 ```
 ./monitor_all
@@ -84,6 +87,8 @@ The script:
 7. Serves dashboard on port 5000
 8. Repeats every refresh interval (default 300s, configurable via `QUANTFORGE_REFRESH_INTERVAL` env var)
 
+**Weekend / after-hours:** The engine auto-detects market closure (Fri after 17:00 ET, all day Sat/Sun). Refresh cycles are skipped — no yfinance data pulls, no signal generation, no SL/TP checks. The dashboard stays live showing the last pre-close state with a yellow **CLSD** badge. Normal operation resumes at the next scheduled refresh after Sun 17:00 ET.
+
 A quick health check via `/ping`:
 ```bash
 curl http://127.0.0.1:5000/ping
@@ -98,10 +103,12 @@ curl http://127.0.0.1:5000/ping
 - No asset is in halt (check asset cards for RED status)
 - Per-asset drawdown % is not approaching per-asset limits
 - Portfolio drawdown value is not approaching -15% circuit breaker threshold
+- Market status badge shows **OPEN** (green) during trading hours, **CLSD** (yellow) on weekends
+- **LAST** timestamp in the header shows when signals were last refreshed
 
 ### Log Check
 
-After startup, verify log output shows:
+After startup (Mon–Fri during market hours), verify log output shows:
 ```
 EURAUD: BUY conf=XX% @ $XX.XX
 GC: SELL conf=XX% @ $XX.XX
@@ -128,6 +135,8 @@ Run once more to capture the closing signal:
 # If process is still running, signals refresh automatically
 # If not, start it: ./monitor_all
 ```
+
+After 17:00 ET on Friday, the engine auto-pauses for the weekend. The dashboard remains accessible, showing the pre-close state with a yellow CLSD badge. No further yfinance data or signal computation occurs until Sunday 17:00 ET.
 
 Log the daily summary to a file:
 ```
@@ -502,6 +511,7 @@ Project Root/
 ├── paper_trading/
 │   ├── engine.py                 # PaperTradingEngine + PaperBroker
 │   ├── execution_bridge.py       # Slippage-aware fills for AssetEngine
+│   ├── market_hours.py           # Weekend detection: is_market_closed()
 │   ├── serve.py                  # HTTP server + dashboard
 │   └── models/
 │       ├── BTC_model.pkl
@@ -535,3 +545,7 @@ Project Root/
 | BTC drawdown > 15% | Normal for BTC (limit is -15%) | Let it run unless RED state persists > 5 days |
 | NZDJPY entering RED state | VIX spike or yield spread inversion | Check VIX level and US-JP 10y spread |
 | GC=F showing flat/neutral bias | Real yields not updating on weekends | Normal — gold macro features are daily |
+| Dashboard shows CLSD / "weekend — no refresh" | Normal — market is closed | Engine resumes automatically Sun 17:00 ET |
+| "Market closed — skipping refresh" in logs | Normal — engine is paused for weekend | No action needed; data is stale but preserved |
+| State API `market_closed: true` | Engine correctly detected weekend | N/A — server-driven indicator |
+| Dashboard polling slower than usual | Intended — hooks reduce refetch rate 4-20x when markets closed | Saves bandwidth; restore normal rate on market open |
