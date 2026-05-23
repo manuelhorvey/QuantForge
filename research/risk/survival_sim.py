@@ -34,6 +34,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+from features.registry import FEATURE_REGISTRY
 from research.execution_surface.mae_mfe_analyzer import compute_mae_mfe_for_trade
 from research.execution_surface.replay_engine import ReplayConfig, ReplayRegimeConfig, replay, replay_regime
 from research.execution_surface.trade_outcome_analyzer import analyze_trade_outcomes
@@ -249,7 +250,7 @@ def load_allocations() -> dict:
     return {name: acfg["allocation"] for name, acfg in cfg["assets"].items()}
 
 
-def load_asset_data(configs: dict, confidence_threshold: float = 0.0, regime_configs: dict = None) -> dict:
+def load_asset_data(configs: dict, confidence_threshold: float = 0.0, regime_configs: dict = None, extended_history: bool = False, ensemble: bool = False) -> dict:
     """Load OOS predictions and compute daily returns for each asset.
 
     Uses correlated approach: all daily return series are aligned to the
@@ -260,6 +261,8 @@ def load_asset_data(configs: dict, confidence_threshold: float = 0.0, regime_con
         confidence_threshold: optional filter for low-confidence signals
         regime_configs: dict mapping asset name -> ReplayRegimeConfig,
                        or None to use fixed plateau geometry
+        extended_history: if True, loads from data/raw/historical_extended/
+        ensemble: if True, loads ensemble_oos_predictions.parquet instead
 
     Returns:
         asset_data: {name: {'daily_returns': Series, 'config': ..., ...}}
@@ -268,12 +271,57 @@ def load_asset_data(configs: dict, confidence_threshold: float = 0.0, regime_con
     raw = {}
     indices = []
 
-    for name, cfg in configs.items():
-        oos_path = os.path.join(SANDBOX_BASE, name, "oos_predictions.parquet")
-        if not os.path.exists(oos_path):
-            continue
+    def _name_to_ticker(n: str) -> str:
+        for t, c in FEATURE_REGISTRY.items():
+            if c.name == n:
+                return t
+        return n
 
-        predictions = pd.read_parquet(oos_path)
+    for name, cfg in configs.items():
+        if extended_history:
+            ticker = cfg.get("ticker") or _name_to_ticker(name)
+            clean_t = ticker.replace('^', '').replace('=', '')
+            path = os.path.join(PROJECT_ROOT, "data", "raw", "historical_extended", f"{clean_t}_2000.parquet")
+            if not os.path.exists(path):
+                logger.warning("%s: extended history not found at %s", name, path)
+                continue
+            
+            # For extended history, we might not have OOS predictions.
+            # If so, we can't run 'replay'.
+            # A common use case for survival sim with 2000+ is to test 
+            # how the ASSET itself behaves in regimes, or if we have full-history predictions.
+            # Let's check if there's an extended predictions file.
+            pred_path = os.path.join(SANDBOX_BASE, name, "extended_predictions.parquet")
+            if os.path.exists(pred_path):
+                predictions = pd.read_parquet(pred_path)
+            else:
+                logger.warning("%s: extended predictions not found, using raw returns with always-long signal", name)
+                df = pd.read_parquet(path)
+                predictions = df.copy()
+                predictions["signal"] = 2
+                predictions["confidence"] = 100
+                for c in ["prob_long", "prob_short", "prob_neutral"]:
+                    if c not in predictions.columns:
+                        predictions[c] = 0.0
+                if "volatility" not in predictions.columns:
+                    predictions["volatility"] = df["close"].pct_change().rolling(21).std()
+                    predictions["volatility"] = predictions["volatility"].fillna(0.01)
+                if "atr" not in predictions.columns:
+                    predictions["atr"] = predictions["volatility"] * df["close"]
+                if "regime" not in predictions.columns:
+                    predictions["regime"] = "neutral"
+                if "year" not in predictions.columns:
+                    predictions["year"] = predictions.index.year
+        else:
+            oos_name = "ensemble_oos_predictions.parquet" if ensemble else "oos_predictions.parquet"
+            oos_path = os.path.join(SANDBOX_BASE, name, oos_name)
+            if not os.path.exists(oos_path):
+                if ensemble:
+                    logger.warning("%s: no ensemble predictions at %s, falling back to XGBoost", name, oos_path)
+                    oos_path = os.path.join(SANDBOX_BASE, name, "oos_predictions.parquet")
+                if not os.path.exists(oos_path):
+                    continue
+            predictions = pd.read_parquet(oos_path)
         replay_cfg = ReplayConfig(sl_mult=cfg["sl_mult"], tp_mult=cfg["tp_mult"])
 
         # Optional: filter low-confidence signals before replay
@@ -1724,6 +1772,12 @@ def main():
             "(default: recommended_geometries.json)"
         ),
     )
+    parser.add_argument(
+        "--extended-history", action="store_true", help="Use extended history (2000+) for simulation"
+    )
+    parser.add_argument(
+        "--ensemble", action="store_true", help="Use HybridRegimeEnsemble predictions instead of XGBoost"
+    )
     args = parser.parse_args()
 
     n_paths = args.paths
@@ -1765,7 +1819,15 @@ def main():
         else:
             logger.warning("Regime geometry file not found at %s — using defaults", geom_path)
 
-    asset_data = load_asset_data(configs, confidence_threshold=args.confidence_filter, regime_configs=regime_configs)
+    asset_data = load_asset_data(
+        configs, 
+        confidence_threshold=args.confidence_filter, 
+        regime_configs=regime_configs,
+        extended_history=args.extended_history,
+        ensemble=args.ensemble
+    )
+
+    synthetic_injection_rate = args.synthetic_stress or 0.0
 
     # Compute composite vol index and regimes (for regime-aware bootstrap)
     regimes = None
@@ -1775,6 +1837,19 @@ def main():
         regimes = classify_regimes(composite_vol)
         r_counts = {int(r): (regimes == r).sum() for r in VolRegime}
         logger.info("Regime classification: CALM=%d ELEVATED=%d CRISIS=%d", r_counts[0], r_counts[1], r_counts[2])
+        if args.extended_history and synthetic_injection_rate > 0:
+            from research.risk.synthetic_stress import adjust_injection_rate_for_crisis_density
+
+            crisis_frac = float((regimes == VolRegime.CRISIS).mean())
+            adjusted = adjust_injection_rate_for_crisis_density(crisis_frac, base_rate=synthetic_injection_rate)
+            if adjusted != synthetic_injection_rate:
+                logger.info(
+                    "Extended history CRISIS fraction %.2f%% — synthetic injection %.2f → %.2f",
+                    100 * crisis_frac,
+                    synthetic_injection_rate,
+                    adjusted,
+                )
+                synthetic_injection_rate = adjusted
 
     # Build execution config (after asset_data so we know asset names)
     execution_config = None
@@ -1793,7 +1868,6 @@ def main():
 
     # 2. Run each variant
     variant_results = {}
-    synthetic_injection_rate = args.synthetic_stress or 0.0
     for vname in variants:
         logger.info("Running variant: %s", vname)
         result = run_variant(
@@ -1907,6 +1981,15 @@ def main():
     with open(cpath, "w") as f:
         json.dump(comparison, f, indent=2)
     logger.info("Consolidated comparison saved to %s", cpath)
+
+    if "full" in variant_results:
+        research_dir = os.path.join(PROJECT_ROOT, "data", "research")
+        os.makedirs(research_dir, exist_ok=True)
+        export_name = "survival_extended.json" if args.extended_history else "survival_baseline.json"
+        export_path = os.path.join(research_dir, export_name)
+        with open(export_path, "w") as f:
+            json.dump(variant_results["full"]["metrics"], f, indent=2, default=str)
+        logger.info("Exported full-variant metrics to %s", export_path)
 
     # 9. Tail validation against historical crisis benchmarks
     if args.validate_tails and "full" in variant_results:

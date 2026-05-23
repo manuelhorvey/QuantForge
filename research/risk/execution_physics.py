@@ -16,11 +16,12 @@ Usage:
 
 import os
 import json
+from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 from enum import IntEnum
-from dataclasses import dataclass
 from typing import Optional
+from shared.execution_config import ExecutionConfig, btc_execution_config, compute_slippage_cost as _compute_slippage_cost
 
 
 class VolRegime(IntEnum):
@@ -29,37 +30,6 @@ class VolRegime(IntEnum):
     CALM = 0
     ELEVATED = 1
     CRISIS = 2
-
-
-@dataclass
-class ExecutionConfig:
-    """Configurable parameters for execution degradation models.
-
-    Sensible defaults for FX-major systematic strategies.  Tune per-asset
-    for crypto, commodities, or emerging-market FX.
-    """
-
-    # ── Spread expansion ──────────────────────────────────────────
-    base_spread_bps: float = 0.5  # 0.5 bps for FX majors
-    spread_vol_slope: float = 2.0  # multiple per vol z-score > 1
-    spread_max_bps: float = 50.0  # cap at 50 bps in extreme stress
-
-    # ── Stop-loss gap risk ────────────────────────────────────────
-    base_gap_bps: float = 0.5  # base gap noise (0.5 bps)
-    gap_vol_slope: float = 3.0  # gap grows nonlinearly with vol
-    gap_max_bps: float = 300.0  # 3% max gap (flash crash scenario)
-
-    # ── Partial fills / liquidity ─────────────────────────────────
-    fill_vol_threshold: float = 2.0  # vol z-score above this reduces fill rate
-    fill_prob_slope: float = -0.12  # fill prob drops 12pp per z-score > threshold
-    min_fill_prob: float = 0.60  # never below 60% fill rate
-
-    # ── Execution delay ───────────────────────────────────────────
-    delay_vol_threshold: float = 2.5  # vol z-score above this introduces delay
-    delay_bars_max: int = 2  # max bars of execution delay
-
-    # ── Volatility computation ────────────────────────────────────
-    vol_window: int = 21  # rolling window for vol estimation
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -127,10 +97,7 @@ def compute_slippage_cost(vol_zscore: np.ndarray, config: ExecutionConfig) -> np
 
     Returns: decimal fraction to subtract from returns.
     """
-    excess = np.maximum(0.0, vol_zscore - 1.0)
-    spread_bps = config.base_spread_bps * (1.0 + config.spread_vol_slope * excess)
-    spread_bps = np.minimum(spread_bps, config.spread_max_bps)
-    return spread_bps / 10000.0  # bps → decimal
+    return _compute_slippage_cost(vol_zscore, config)
 
 
 def compute_gap_noise(vol_zscore: np.ndarray, config: ExecutionConfig, rng: np.random.Generator) -> np.ndarray:
@@ -311,32 +278,6 @@ def apply_deleveraging(
             adjusted[p, t] = prev_val * (1.0 + raw_ret * scale)
 
     return adjusted
-
-
-# ══════════════════════════════════════════════════════════════════════
-#  IV.  BTC-Specific Execution Config
-# ══════════════════════════════════════════════════════════════════════
-
-
-def btc_execution_config() -> ExecutionConfig:
-    """BTC-specific execution parameters.
-
-    Crypto markets have wider spreads, larger gaps, and worse liquidity
-    during stress compared to FX majors.
-    """
-    return ExecutionConfig(
-        base_spread_bps=2.0,  # 2 bps base (crypto is wider)
-        spread_vol_slope=3.0,  # spreads widen faster
-        spread_max_bps=150.0,  # up to 150 bps in crisis
-        base_gap_bps=2.0,  # 2 bps base gap noise
-        gap_vol_slope=5.0,  # gaps are far more severe for crypto
-        gap_max_bps=1000.0,  # 10% max gap (crypto flash crash)
-        fill_vol_threshold=1.5,  # fills degrade at lower vol threshold
-        fill_prob_slope=-0.20,  # fills drop faster
-        min_fill_prob=0.30,  # can go down to 30% fill rate
-        delay_vol_threshold=2.0,  # delays start earlier
-        delay_bars_max=3,  # longer delays
-    )
 
 
 # ══════════════════════════════════════════════════════════════════════

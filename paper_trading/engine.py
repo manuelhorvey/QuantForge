@@ -29,6 +29,9 @@ from paper_trading.satellite_runner import (
 )
 from paper_trading.simulation_snapshot import SimulationStore, build_asset_snapshot
 from paper_trading.state_store import _SKIP_JOURNAL, EngineSnapshot, StateStore, sanitize  # noqa: F401
+from execution.paper_broker import PaperBroker
+from paper_trading.execution_bridge import ExecutionBridge
+from shared.execution_config import build_execution_configs
 from shared.registry import StrategyRegistry
 
 
@@ -96,6 +99,16 @@ class PaperTradingEngine:
             )
         saved_positions = (snapshot.open_positions or {}) if snapshot else {}
 
+        cfg = get_config()
+        self.execution_configs = build_execution_configs(
+            cfg.assets, defaults=cfg.execution_defaults
+        )
+        self.broker = PaperBroker(
+            initial_capital=cfg.capital,
+            execution_configs=self.execution_configs,
+        )
+        self.execution_bridge = ExecutionBridge(self.broker)
+
         self._build_asset_registry()
         self._init_satellite()
         self._restore_positions(saved_positions)
@@ -116,6 +129,7 @@ class PaperTradingEngine:
                 tp_mult=spec.get("tp_mult", 2.5),
                 regime_geometry=spec.get("regime_geometry", {}),
                 state_store=self.state_store,
+                execution_bridge=self.execution_bridge,
             )
 
     def _init_satellite(self) -> None:

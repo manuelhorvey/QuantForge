@@ -9,6 +9,10 @@ import pytz
 import xgboost as xgb
 
 from features.builder import build_features, compute_macro_derived, model_path
+from features.contract import validate_no_cross_asset_leakage
+from features.regime_features import generate_regime_features
+from features.registry import FEATURE_REGISTRY
+from models.regime.regime_classifier import RegimeClassifier
 from monitoring.importance_tracker import ImportanceStore, StabilityResult
 from monitoring.validity_state_machine import (
     ValidityStateMachine as _ValidityStateMachine,
@@ -61,6 +65,7 @@ class AssetEngine:
         initial_capital=None,
         position_size=None,
         retrain_window=None,
+        execution_bridge=None,
     ):
         self.ticker = ticker
         self.name = name
@@ -103,7 +108,11 @@ class AssetEngine:
         self.sl_mult = sl_mult
         self.tp_mult = tp_mult
         self.regime_geometry = regime_geometry or {}
+        self.execution_bridge = execution_bridge
         self._research_mode = engine_cfg.research_mode
+        self._last_macro_dir: int | None = None
+        self._last_blend_dir: int | None = None
+        self._entry_signal_dir: int = 0
         self._retrain_window = retrain_window if retrain_window is not None else engine_cfg.retrain_window
         if state_store is not None:
             self.state_store = state_store
@@ -113,6 +122,10 @@ class AssetEngine:
             self.state_store = _STORE
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self._importance_store = ImportanceStore(base_dir)
+        self.regime_classifier = RegimeClassifier()
+        if self.config.get("regime_sizing"):
+            self._sizing_strategy.regime_aware = True
+
         self._window_id_counter = 0
         self._current_window_train_start = ""
         self._current_window_train_end = ""
@@ -120,6 +133,56 @@ class AssetEngine:
 
     def _build_features(self, df, ref, macro):
         return build_features(df, macro, ref, self.contract)
+
+    def _sizing_config(self, close: pd.Series, position_size_scalar: float = 1.0) -> dict:
+        cfg = dict(self.config)
+        if self.execution_bridge is None:
+            return cfg
+        price = float(close.iloc[-1]) if len(close) else 0.0
+        if price <= 0:
+            return cfg
+        notional = (
+            self.current_value * self.pos_mgr.position_size * self.pos_mgr.exposure_multiplier * position_size_scalar
+        )
+        cfg["impact_bps"] = self.execution_bridge.estimate_impact_bps(self.ticker, notional)
+        return cfg
+
+    def _record_inference_proxies(self, proba: np.ndarray, X: pd.DataFrame, signal: str) -> None:
+        """Store macro vs blend directions for adaptive weight feedback on trade close."""
+        self._last_macro_dir = None
+        self._last_blend_dir = None
+        self._entry_signal_dir = 1 if signal == "BUY" else (-1 if signal == "SELL" else 0)
+
+        macro_head = getattr(self.model, "macro_head", None) if self.model else None
+        if macro_head is None or X.empty:
+            return
+        try:
+            macro_cols = [c for c in macro_head.features if c in X.columns]
+            if len(macro_cols) < 3:
+                return
+            macro_probs = macro_head.predict_proba(X.iloc[[-1]][macro_cols])[0]
+            self._last_macro_dir = int(np.argmax(macro_probs)) - 1
+            self._last_blend_dir = int(np.argmax(proba[-1])) - 1
+        except Exception:
+            pass
+
+    def _macro_blend_trade_returns(self, trade_ret: float) -> tuple[float, float]:
+        """Attribute trade PnL to macro-only vs blended heads by directional agreement."""
+        entry = self._entry_signal_dir
+        if entry == 0:
+            return trade_ret, trade_ret
+        macro_dir = self._last_macro_dir
+        blend_dir = self._last_blend_dir
+        macro_ret = trade_ret if macro_dir is None or macro_dir == entry else -trade_ret
+        blend_ret = trade_ret if blend_dir is None or blend_dir == entry else -trade_ret
+        return macro_ret, blend_ret
+
+    def _enable_adaptive_macro(self) -> None:
+        if not self.config.get("adaptive_macro") or self.model is None:
+            return
+        macro_head = getattr(self.model, "macro_head", None)
+        if macro_head is not None:
+            macro_head.online_weight = True
 
     def _tb_vol(self, df):
         returns = np.log(df["close"] / df["close"].shift(1))
@@ -152,7 +215,14 @@ class AssetEngine:
                 geom.get("tp_mult", 1.0),
             )
 
-        intent = PositionIntent.from_price_and_vol(side, entry_price, entry_date, vol, sl_mult, tp_mult)
+        fill_price = entry_price
+        if self.execution_bridge is not None:
+            broker_side = "buy" if side == "long" else "sell"
+            notional = self.current_value * self.pos_mgr.position_size * self.pos_mgr.exposure_multiplier
+            qty = max(notional / entry_price, 1e-6)
+            fill_price, _, _ = self.execution_bridge.fill_price(self.ticker, broker_side, qty, entry_price)
+
+        intent = PositionIntent.from_price_and_vol(side, fill_price, entry_date, vol, sl_mult, tp_mult)
         self.pos_mgr.open(intent)
         self.position = {
             "side": intent.side,
@@ -166,11 +236,29 @@ class AssetEngine:
         }
 
     def _close_position(self, exit_price, exit_date, reason):
-        trade = self.pos_mgr.close(exit_price, exit_date, reason)
+        fill_price = exit_price
+        if self.execution_bridge is not None and self.pos_mgr.has_position():
+            side = self.pos_mgr.position.side
+            broker_side = "sell" if side == "long" else "buy"
+            notional = self.current_value * self.pos_mgr.position_size * self.pos_mgr.exposure_multiplier
+            qty = max(notional / exit_price, 1e-6)
+            fill_price, _, _ = self.execution_bridge.fill_price(self.ticker, broker_side, qty, exit_price)
+
+        trade = self.pos_mgr.close(fill_price, exit_date, reason)
         if trade is None:
             return
         trade["asset"] = self.name
         trade["conf_at_entry"] = self.position.get("confidence") if self.position else None
+
+        try:
+            macro_head = getattr(self.model, "macro_head", None) if self.model else None
+            if macro_head is not None and macro_head.online_weight:
+                trade_ret = float(trade.get("return", 0.0))
+                macro_ret, blend_ret = self._macro_blend_trade_returns(trade_ret)
+                macro_head.update_weight(macro_ret, blend_ret)
+        except Exception:
+            pass
+
         self.position = None
         self.current_value = self.pos_mgr.current_value
         self.trade_log = list(self.pos_mgr.trade_log)
@@ -191,6 +279,7 @@ class AssetEngine:
             with open(self.model_path, "rb") as f:
                 self.model = pickle.load(f)
                 self._trained = True
+            self._enable_adaptive_macro()
             return
 
         logger.info("%s: downloading history...", self.name)
@@ -198,6 +287,7 @@ class AssetEngine:
         ref = fetch_ref("SPY")
         macro = compute_macro_derived(pd.read_parquet(os.path.join(BASE, "data/processed/macro_factors.parquet")))
         features = self._build_features(df, ref, macro)
+        validate_no_cross_asset_leakage(features, self.contract, known_slugs=FEATURE_REGISTRY.keys())
         logger.info("%s: %d feature rows", self.name, len(features))
 
         end_date = features.index[-1]
@@ -229,6 +319,7 @@ class AssetEngine:
         )
         self.model = model
         self._trained = True
+        self._enable_adaptive_macro()
         with open(self.model_path, "wb") as f:
             pickle.dump(model, f)
 
@@ -283,6 +374,7 @@ class AssetEngine:
             pd.read_parquet(os.path.join(BASE, "data/processed/macro_factors.parquet"))
         )
         features_df = self._feature_pipeline.build(df, macro, ref, self.contract)
+        validate_no_cross_asset_leakage(features_df, self.contract, known_slugs=FEATURE_REGISTRY.keys())
 
         X = features_df[self.features]
         if len(X) == 0:
@@ -292,10 +384,18 @@ class AssetEngine:
         if proba.shape[1] < 3:
             raise ValueError(f"Model returned {proba.shape[1]} classes, expected 3")
 
-        pos_size = self._sizing_strategy.compute(df["close"], self.config)
+        sizing_cfg = self._sizing_config(df["close"])
+        if self.config.get("regime_sizing"):
+            regime_features_df = generate_regime_features(df)
+            regime_results = self.regime_classifier.classify(regime_features_df)
+            current_regime = regime_results["regime"].iloc[-1]
+            pos_size = self._sizing_strategy.compute(df["close"], sizing_cfg, regime=current_regime)
+        else:
+            pos_size = self._sizing_strategy.compute(df["close"], sizing_cfg)
 
-        # Meta-model: train on accumulated trades if enough data
         result = self._signal_strategy.compute(proba, X.index, threshold, df["close"], pos_size)
+
+        self._record_inference_proxies(proba, X, result.signal_type)
         self.signal_data = result.signal_data
 
         latest = self.signal_data.iloc[-1]
@@ -445,10 +545,16 @@ class AssetEngine:
 
     def _decision_to_dict(self, decision: TradeDecision):
         pos = self.pos_mgr.position
+        macro_weight = None
+        macro_head = getattr(self.model, "macro_head", None) if self.model else None
+        if macro_head is not None:
+            macro_weight = round(float(getattr(macro_head, "current_weight", 0.45)), 4)
+
         return {
             "asset": self.name,
             "signal": decision.signal,
             "confidence": decision.confidence,
+            "macro_weight": macro_weight,
             "close_price": decision.close_price,
             "date": decision.timestamp,
             "label": decision.label,

@@ -20,6 +20,14 @@ def yf_download_safe(symbol, start='2008-01-01', end='2026-12-31'):
     except Exception:
         return None
 
+def build_lead_lag_features(target_price, other_asset_price, lag=3):
+    """
+    Exposes lead-lag relationship as a feature.
+    If other_asset leads target_price by 'lag' days, this returns that lagged signal.
+    """
+    other_rets = other_asset_price['close'].pct_change()
+    return other_rets.shift(lag)
+
 
 def build_nzdjpy_features(price, macro):
     """

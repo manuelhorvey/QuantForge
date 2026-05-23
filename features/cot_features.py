@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 
 
 def cot_index(net_position: pd.Series, window: int = 52) -> pd.Series:

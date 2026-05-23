@@ -1,6 +1,7 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 import ta
+
 
 def compute_hurst(series: pd.Series, window: int = 63) -> pd.Series:
     """
@@ -14,14 +15,14 @@ def compute_hurst(series: pd.Series, window: int = 63) -> pd.Series:
         lags = np.array([2, 4, 8, 16, 32])
         lags = lags[lags < len(z) // 2]
         if len(lags) < 3: return 0.5
-        
+
         tau = [np.std(np.subtract(z[lag:], z[:-lag])) for lag in lags]
         tau = np.array(tau)
-        
+
         # Filter zero/negative std to avoid log errors
         valid = tau > 0
         if not valid.any(): return 0.5
-        
+
         reg = np.polyfit(np.log(lags[valid]), np.log(tau[valid]), 1)
         return reg[0]
 
@@ -51,16 +52,16 @@ def generate_regime_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     if not isinstance(df.index, pd.DatetimeIndex):
         df.index = pd.to_datetime(df.index)
-        
+
     # --- Structural Features ---
     # Reduce window to 21 for better sensitivity to microstructure shifts
-    df['hurst'] = compute_hurst(df['close'], window=21) 
+    df['hurst'] = compute_hurst(df['close'], window=21)
     df['kaufman_er'] = compute_kaufman_er(df['close'], window=10)
-    
+
     # --- Dynamic Features ---
     # ADX (Trend Strength)
     df['adx'] = ta.trend.adx(df['high'], df['low'], df['close'], window=14)
-    
+
     # Volatility Z-Score (Shock Detection)
     returns = np.log(df['close'] / df['close'].shift(1))
     vol_10 = returns.rolling(window=10).std()
@@ -72,22 +73,22 @@ def generate_regime_features(df: pd.DataFrame) -> pd.DataFrame:
     atr_5 = ta.volatility.average_true_range(df['high'], df['low'], df['close'], window=5)
     atr_20 = ta.volatility.average_true_range(df['high'], df['low'], df['close'], window=20)
     df['compression'] = (atr_5 / atr_20).fillna(1.0)
-    
+
     # --- Temporal / Session Features ---
     df['utc_hour'] = df.index.hour
-    
+
     # Session Volatility Profile
-    df['hourly_vol'] = returns.rolling(window=24).std() 
+    df['hourly_vol'] = returns.rolling(window=24).std()
     df['session_vol_profile'] = df.groupby(df.index.hour)['hourly_vol'].transform(
         lambda x: x / x.rolling(window=20, min_periods=5).mean()
     ).fillna(1.0)
-    
+
     # --- Clean up ---
     feature_cols = [
-        'hurst', 'kaufman_er', 'adx', 'vol_zscore', 
+        'hurst', 'kaufman_er', 'adx', 'vol_zscore',
         'compression', 'utc_hour', 'session_vol_profile'
     ]
-    
+
     return df[feature_cols].dropna()
 
 if __name__ == "__main__":
@@ -98,7 +99,7 @@ if __name__ == "__main__":
         regime_df = generate_regime_features(data)
         print("\nRegime Features Sample:")
         print(regime_df.tail())
-        
+
         # Save to data/processed
         regime_df.to_parquet("data/processed/EURUSD_regime_features.parquet")
         print("\nSaved regime features to data/processed/EURUSD_regime_features.parquet")
