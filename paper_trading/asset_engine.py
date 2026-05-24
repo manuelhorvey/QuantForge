@@ -1160,6 +1160,7 @@ class AssetEngine:
                 for t in self._scale_out_plan.tiers
             ]
 
+        _psi = self._last_psi_drift
         return {
             "asset": self.name,
             "current_value": round(self.current_value, 2),
@@ -1197,13 +1198,13 @@ class AssetEngine:
                 "per_feature": [
                     {"feature": e.feature, "psi": e.psi, "classification": e.classification,
                      "trend": e.trend, "importance_score": e.importance_score}
-                    for e in (self._last_psi_drift.per_feature if self._last_psi_drift else [])
+                    for e in (_psi.per_feature if _psi else [])
                 ],
-                "worst_classification": self._last_psi_drift.worst_classification if self._last_psi_drift else "NO_DRIFT",
-                "moderate_count": self._last_psi_drift.moderate_count if self._last_psi_drift else 0,
-                "severe_count": self._last_psi_drift.severe_count if self._last_psi_drift else 0,
-                "psi_ok": self._last_psi_drift.psi_ok if self._last_psi_drift else True,
-                "penalty": self._last_psi_drift.penalty if self._last_psi_drift else 0.0,
+                "worst_classification": _psi.worst_classification if _psi else "NO_DRIFT",
+                "moderate_count": _psi.moderate_count if _psi else 0,
+                "severe_count": _psi.severe_count if _psi else 0,
+                "psi_ok": _psi.psi_ok if _psi else True,
+                "penalty": _psi.penalty if _psi else 0.0,
             },
         }
 
