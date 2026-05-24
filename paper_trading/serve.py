@@ -47,6 +47,7 @@ _CACHE_TTL: dict[str, float] = {
     "/health.json": 30.0,
     "/narrative.json": 30.0,
     "/liquidity.json": 30.0,
+    "/governance.json": 30.0,
 }
 
 
@@ -405,6 +406,43 @@ def serve(port=DEFAULT_PORT, shutdown_event=None):
                     self._send_json(json.dumps(signal, indent=2, default=str))
                 else:
                     self._send_json(json.dumps({"error": f"No health score for {asset}", "asset": asset}), status=404)
+            elif path == "/governance.json":
+                snapshot = _STORE.load_snapshot()
+                governance = {}
+                if snapshot and snapshot.assets:
+                    for name, asset in sorted(snapshot.assets.items()):
+                        regime_sl = 1.0
+                        regime_size = 1.0
+                        validity = (asset.get("validity_state") or "YELLOW").upper()
+                        rg = (asset.get("regime_geometry") or {}).get(validity, {})
+                        regime_sl = rg.get("sl_mult", 1.0)
+                        regime_size = rg.get("tp_mult", 1.0)
+                        narr_sl = asset.get("narrative_sl_mult", 1.0)
+                        narr_size = asset.get("narrative_size_scalar", 1.0)
+                        liq_sl = asset.get("liquidity_sl_mult", 1.0)
+                        liq_size = asset.get("liquidity_size_scalar", 1.0)
+                        combined_sl = regime_sl * narr_sl * liq_sl
+                        raw_size = regime_size * narr_size * liq_size
+                        combined_size = max(raw_size, 0.30)
+                        governance[name] = {
+                            "regime_sl_mult": regime_sl,
+                            "regime_size_scalar": regime_size,
+                            "narrative_sl_mult": narr_sl,
+                            "narrative_size_scalar": narr_size,
+                            "liquidity_sl_mult": liq_sl,
+                            "liquidity_size_scalar": liq_size,
+                            "combined_sl_mult": round(combined_sl, 4),
+                            "combined_size_scalar": round(combined_size, 4),
+                            "floor_active": combined_size == 0.30,
+                            "validity_state": validity,
+                            "narrative_regime": asset.get("narrative_regime"),
+                            "narrative_stale": asset.get("narrative_stale", False),
+                            "liquidity_regime": asset.get("liquidity_regime", "NORMAL"),
+                            "halted": asset.get("halt", {}).get("halted", False),
+                        }
+                data = json.dumps(governance, indent=2, default=str)
+                _cache_set("/governance.json", data)
+                self._send_json(data)
             elif path == "/narrative.json":
                 status = get_narrative_status()
                 data = json.dumps(status, indent=2, default=str)

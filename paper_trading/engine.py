@@ -413,6 +413,11 @@ class PaperTradingEngine:
                 "liquidity_regime": asset._liquidity_regime,
                 "liquidity_sl_mult": asset._liquidity_sl_mult,
                 "liquidity_size_scalar": asset._liquidity_size_scalar,
+                "narrative_sl_mult": asset._narrative_sl_mult,
+                "narrative_size_scalar": asset._narrative_size_scalar,
+                "narrative_regime": asset._narrative_active.overall_regime if asset._narrative_active else None,
+                "narrative_stale": asset._narrative_stale,
+                "regime_geometry": asset.regime_geometry,
             }
         return {
             "portfolio": self._compute_portfolio_summary(overall_validity, any_halted),
