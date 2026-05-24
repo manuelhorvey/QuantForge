@@ -49,7 +49,7 @@ def compute_liquidity_features(df: pd.DataFrame, window: int = 21) -> dict[str, 
         amihud_z = 0.0
 
     dp = np.log(high / low).replace([np.inf, -np.inf], 0.0).fillna(0.0)
-    dp_sq = dp ** 2
+    dp_sq = dp**2
 
     alpha = dp_sq.rolling(2).sum().iloc[-1] if len(dp_sq) >= 2 else 0.0
     spread = 2 * (np.exp(np.clip(alpha, -5, 5)) - 1) if alpha < 0 else 0.0

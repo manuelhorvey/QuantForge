@@ -53,9 +53,7 @@ def fetch_fxstreet_article() -> str | None:
         soup = BeautifulSoup(resp.text, "html.parser")
         articles = soup.find_all("a", href=True, string=re.compile(r"Week ahead", re.I))
         if not articles:
-            articles = soup.find_all(
-                "a", href=True, string=re.compile(r"Weekly (outlook|forecast)", re.I)
-            )
+            articles = soup.find_all("a", href=True, string=re.compile(r"Weekly (outlook|forecast)", re.I))
         if articles:
             href = articles[0]["href"]
             if href.startswith("/"):
@@ -63,9 +61,7 @@ def fetch_fxstreet_article() -> str | None:
             article_resp = requests.get(href, headers=headers, timeout=15)
             article_resp.raise_for_status()
             article_soup = BeautifulSoup(article_resp.text, "html.parser")
-            content = article_soup.find(
-                "div", class_=re.compile(r"article-content|entry-content|post-content")
-            )
+            content = article_soup.find("div", class_=re.compile(r"article-content|entry-content|post-content"))
             if content:
                 for tag in content.find_all(["script", "style", "nav", "footer"]):
                     tag.decompose()
@@ -143,6 +139,7 @@ def confirm_pending_narrative() -> bool:
         return False
     try:
         import shutil
+
         shutil.copy2(NARRATIVE_PENDING, NARRATIVE_ACTIVE)
         logger.info("Narrative confirmed: %s → %s", NARRATIVE_PENDING, NARRATIVE_ACTIVE)
         if os.path.exists(NARRATIVE_ERROR):
@@ -214,7 +211,5 @@ def get_narrative_status() -> dict:
         "stale": stale,
         "fetch_error": error,
         "has_pending": pending is not None,
-        "needs_confirmation": pending is not None and (
-            active is None or pending.week_start != active.week_start
-        ),
+        "needs_confirmation": pending is not None and (active is None or pending.week_start != active.week_start),
     }

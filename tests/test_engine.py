@@ -1,4 +1,5 @@
 import os
+from types import SimpleNamespace
 import tempfile
 
 import pytest
@@ -14,9 +15,11 @@ from paper_trading.config_manager import (
 from paper_trading.engine import (
     _SKIP_JOURNAL,
     CONFIG,
+    ET,
     HALT,
     PAPER_PORTFOLIO,
     AssetEngine,
+    PaperTradingEngine,
     flatten,
     norm_index,
 )
@@ -165,6 +168,58 @@ class TestConfigManager:
         assert cfg.halt["monthly_pf"] == 0.70
         assert cfg.halt["signal_drought"] == 30
         assert cfg.halt["prob_drift"] == 0.15
+
+
+class TestPaperTradingEngineState:
+    def test_get_state_returns_dashboard_snapshot(self):
+        asset = SimpleNamespace(
+            allocation=1.0,
+            initial_capital=100_000,
+            current_value=100_000,
+            capital_base=100_000,
+            peak_value=100_000,
+            current_price=100.0,
+            trade_log=[],
+            prob_history=[{"signal": "BUY", "confidence": 60, "close_price": 100.0}],
+            sl_mult=1.0,
+            tp_mult=2.0,
+            regime_geometry={},
+            _liquidity_regime="NORMAL",
+            _liquidity_sl_mult=1.0,
+            _liquidity_size_scalar=1.0,
+            _narrative_sl_mult=1.0,
+            _narrative_size_scalar=1.0,
+            _narrative_active=None,
+            _narrative_stale=False,
+            pos_mgr=SimpleNamespace(
+                has_position=lambda: False,
+                exposure_multiplier=1.0,
+            ),
+            refresh_price=lambda: None,
+            get_metrics=lambda: {
+                "current_value": 100_000,
+                "current_price": 100.0,
+                "position": None,
+                "meta_inference": {},
+                "feature_stability": {},
+                "drawdown": 0,
+            },
+            check_halt_conditions=lambda: {"halted": False},
+            update_validity=lambda: {"state": "GREEN", "exposure": 1.0},
+        )
+        engine = PaperTradingEngine.__new__(PaperTradingEngine)
+        engine.assets = {"TEST": asset}
+        engine.satellite = None
+        engine.start_date = __import__("datetime").datetime.now(tz=ET)
+        engine.last_update = None
+        engine.portfolio_peak_value = None
+        engine._rebalance_weights = {}
+
+        state = engine.get_state()
+
+        assert state["portfolio"]["execution_state"] == "ACTIVE"
+        assert state["assets"]["TEST"]["validity_state"] == "GREEN"
+        assert state["risk_parity"]["weights"] == {}
 
 
 class TestUpdatePnl:

@@ -65,6 +65,21 @@ class TestPaperBroker:
         order_id = broker.place_order(order)
         assert order_id == ""
 
+    def test_place_sell_no_position_can_open_short_when_enabled(self, zero_spread_config):
+        broker = PaperBroker(
+            initial_capital=100000,
+            execution_configs={"TEST": zero_spread_config},
+            fees=0.0,
+            allow_short=True,
+        )
+        broker.set_price("TEST", 100.0)
+        order_id = broker.place_order(Order(asset="TEST", side="sell", quantity=10, order_type="market"))
+
+        assert order_id != ""
+        position = broker.get_positions()[0]
+        assert position.quantity == -10
+        assert broker.get_account_summary().portfolio_value == 100000
+
     def test_cancel_order(self, broker):
         assert broker.cancel_order("1") is False
 

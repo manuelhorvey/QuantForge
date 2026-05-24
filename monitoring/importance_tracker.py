@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -106,7 +105,9 @@ class ImportanceStore:
         model_type: str = "xgboost",
     ) -> None:
         if len(feature_names) != len(importances):
-            logger.error("feature_names (%d) and importances (%d) length mismatch", len(feature_names), len(importances))
+            logger.error(
+                "feature_names (%d) and importances (%d) length mismatch", len(feature_names), len(importances)
+            )
             return
         if len(feature_names) == 0:
             return
@@ -114,17 +115,19 @@ class ImportanceStore:
         records = []
         now = datetime.utcnow().isoformat()
         for rank, idx in enumerate(ranked_idx):
-            records.append(FeatureImportanceRecord(
-                window_id=window_id,
-                asset=asset,
-                train_start=train_start,
-                train_end=train_end,
-                feature=feature_names[idx],
-                importance_score=float(importances[idx]),
-                rank=rank + 1,
-                model_type=model_type,
-                logged_at=now,
-            ))
+            records.append(
+                FeatureImportanceRecord(
+                    window_id=window_id,
+                    asset=asset,
+                    train_start=train_start,
+                    train_end=train_end,
+                    feature=feature_names[idx],
+                    importance_score=float(importances[idx]),
+                    rank=rank + 1,
+                    model_type=model_type,
+                    logged_at=now,
+                )
+            )
         df = pd.DataFrame([asdict(r) for r in records])
         if os.path.exists(self.path) and os.path.getsize(self.path) > 0:
             try:
@@ -135,7 +138,7 @@ class ImportanceStore:
         df.to_parquet(self.path)
         logger.info("logged %d feature importances for %s (window=%s)", len(records), asset, window_id)
 
-    def load_history(self, asset: Optional[str] = None) -> pd.DataFrame:
+    def load_history(self, asset: str | None = None) -> pd.DataFrame:
         if not os.path.exists(self.path):
             return pd.DataFrame()
         try:
@@ -147,7 +150,7 @@ class ImportanceStore:
             logger.warning("failed to load importance history: %s", e)
             return pd.DataFrame()
 
-    def get_latest_two_snapshots(self, asset: str) -> tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]:
+    def get_latest_two_snapshots(self, asset: str) -> tuple[pd.DataFrame | None, pd.DataFrame | None]:
         """Return (latest_snapshot_df, previous_snapshot_df) for the given asset."""
         df = self.load_history(asset)
         if df.empty:
@@ -164,7 +167,7 @@ class ImportanceStore:
         prev = df[df["window_id"] == prev_wid]
         return latest, prev
 
-    def compute_stability(self, asset: str) -> Optional[StabilityResult]:
+    def compute_stability(self, asset: str) -> StabilityResult | None:
         latest_df, prev_df = self.get_latest_two_snapshots(asset)
         if latest_df is None or prev_df is None:
             return None

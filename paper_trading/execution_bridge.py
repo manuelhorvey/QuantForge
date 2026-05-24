@@ -18,6 +18,7 @@ class ExecutionBridge:
 
     def __init__(self, broker: PaperBroker):
         self.broker = broker
+        self.broker.allow_short = True
         self.orders = OrderManager(broker)
 
     def estimate_impact_bps(self, asset: str, notional: float) -> float:
@@ -72,6 +73,5 @@ class ExecutionBridge:
     ) -> tuple[float, str]:
         """Place order through OrderManager; returns (fill_price, order_id)."""
         fill, _, _ = self.fill_price(asset, side, quantity, mid_price)
-        self.broker.set_price(asset, fill)
-        order_id = self.orders.submit_market_order(asset, side, quantity)
+        order_id = self.orders.submit_market_order(asset, side, quantity, fill_price=fill)
         return fill, order_id or ""

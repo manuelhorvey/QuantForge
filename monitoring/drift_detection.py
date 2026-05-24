@@ -1,21 +1,34 @@
 import numpy as np
 import pandas as pd
 from scipy.stats import ks_2samp
-from typing import Optional, Dict, List, Tuple
-
 
 STRUCTURAL_PSI_COLUMNS = [
-    "ema_spread", "adx", "rsi", "bb_zscore", "slope_20",
-    "curvature_10", "path_efficiency_63", "skew", "kurt", "tail_ratio",
+    "ema_spread",
+    "adx",
+    "rsi",
+    "bb_zscore",
+    "slope_20",
+    "curvature_10",
+    "path_efficiency_63",
+    "skew",
+    "kurt",
+    "tail_ratio",
 ]
 
 BEHAVIORAL_PSI_COLUMNS = [
-    "P_trend", "P_range", "P_volatile", "regime_confidence",
+    "P_trend",
+    "P_range",
+    "P_volatile",
+    "regime_confidence",
 ]
 
 INTERACTION_PSI_COLUMNS = [
-    "regime_contrast", "regime_entropy", "transition_risk",
-    "ema_contrast", "slope_contrast", "path_contrast",
+    "regime_contrast",
+    "regime_entropy",
+    "transition_risk",
+    "ema_contrast",
+    "slope_contrast",
+    "path_contrast",
 ]
 
 
@@ -58,15 +71,13 @@ def grouped_feature_psi(train: pd.DataFrame, oos: pd.DataFrame) -> dict:
 
 
 def signal_distribution_drift(
-    live_signals: Dict[str, int],
-    backtest_baseline: Dict[str, float],
+    live_signals: dict[str, int],
+    backtest_baseline: dict[str, float],
 ) -> float:
     total = sum(live_signals.values())
     if total == 0:
         return 0.0
-    live_pcts = {
-        k: v / total for k, v in live_signals.items()
-    }
+    live_pcts = {k: v / total for k, v in live_signals.items()}
     drift = 0.0
     for k in set(list(live_pcts.keys()) + list(backtest_baseline.keys())):
         lv = live_pcts.get(k, 0.0)
@@ -106,19 +117,17 @@ class DriftDetector:
 
     def check_signal_drift(
         self,
-        live_signals: Dict[str, int],
-        backtest_baseline: Dict[str, float],
+        live_signals: dict[str, int],
+        backtest_baseline: dict[str, float],
     ) -> dict:
         drift = signal_distribution_drift(live_signals, backtest_baseline)
         return {"drift": drift, "passed": drift < self.signal_drift_threshold}
 
-    def check_confidence_drift(
-        self, mean_confidence: float, baseline_confidence: float
-    ) -> dict:
+    def check_confidence_drift(self, mean_confidence: float, baseline_confidence: float) -> dict:
         drift = confidence_drift(mean_confidence, baseline_confidence)
         return {"drift": drift, "passed": drift < self.confidence_drift_threshold}
 
-    def check_ks_drift(self, train: pd.DataFrame, live: pd.DataFrame, features: Optional[list[str]] = None) -> dict:
+    def check_ks_drift(self, train: pd.DataFrame, live: pd.DataFrame, features: list[str] | None = None) -> dict:
         if features is None:
             features = [c for c in train.columns if c in live.columns]
         results = {}
@@ -131,11 +140,11 @@ class DriftDetector:
         self,
         train: pd.DataFrame,
         live: pd.DataFrame,
-        live_signals: Dict[str, int],
-        backtest_baseline: Dict[str, float],
+        live_signals: dict[str, int],
+        backtest_baseline: dict[str, float],
         mean_confidence: float,
         baseline_confidence: float,
-        ks_features: Optional[list[str]] = None,
+        ks_features: list[str] | None = None,
     ) -> dict:
         return {
             "feature_psi": self.check_feature_psi(train, live),

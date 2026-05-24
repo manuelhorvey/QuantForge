@@ -1,5 +1,7 @@
 from dataclasses import dataclass, fields
+
 import numpy as np
+
 
 @dataclass
 class ExecutionConfig:
@@ -11,9 +13,9 @@ class ExecutionConfig:
     spread_max_bps: float = 50.0  # cap at 50 bps in extreme stress
 
     # ── Market impact ─────────────────────────────────────────────
-    impact_model: str = "none" # none, linear, square_root
+    impact_model: str = "none"  # none, linear, square_root
     impact_coeff: float = 0.1
-    avg_daily_volume: float = 1e9 # 1B notional
+    avg_daily_volume: float = 1e9  # 1B notional
 
     # ── Stop-loss gap risk ────────────────────────────────────────
     base_gap_bps: float = 0.5  # base gap noise (0.5 bps)
@@ -50,10 +52,7 @@ def btc_execution_config() -> ExecutionConfig:
     )
 
 
-DEFAULT_EXECUTION_CONFIGS = {
-    "BTC": btc_execution_config(),
-    "default": ExecutionConfig()
-}
+DEFAULT_EXECUTION_CONFIGS = {"BTC": btc_execution_config(), "default": ExecutionConfig()}
 
 
 def compute_slippage_cost(vol_zscore: np.ndarray, config: ExecutionConfig) -> np.ndarray:
@@ -106,7 +105,7 @@ def compute_market_impact(position_notional: float, config: ExecutionConfig) -> 
     """Market impact as a function of trade size relative to ADV."""
     if config.impact_model == "none" or config.avg_daily_volume <= 0:
         return 0.0
-    
+
     participation_rate = position_notional / config.avg_daily_volume
     if config.impact_model == "linear":
         impact_bps = config.impact_coeff * participation_rate * 10000.0
@@ -114,5 +113,5 @@ def compute_market_impact(position_notional: float, config: ExecutionConfig) -> 
         impact_bps = config.impact_coeff * np.sqrt(participation_rate) * 10000.0
     else:
         return 0.0
-        
+
     return impact_bps / 10000.0

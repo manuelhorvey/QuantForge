@@ -1,10 +1,9 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 from scipy.cluster.hierarchy import linkage
-from typing import Dict, List, Optional, Tuple
 
 
-def _get_quasi_diag(link: np.ndarray) -> List[int]:
+def _get_quasi_diag(link: np.ndarray) -> list[int]:
     link = link.astype(int)
     n = link.shape[0] + 1
     items = [[i] for i in range(n)]
@@ -15,7 +14,7 @@ def _get_quasi_diag(link: np.ndarray) -> List[int]:
     return items[-1]
 
 
-def _get_cluster_variance(cov: pd.DataFrame, cluster_indices: List[int]) -> float:
+def _get_cluster_variance(cov: pd.DataFrame, cluster_indices: list[int]) -> float:
     cluster_cov = cov.iloc[cluster_indices, cluster_indices]
     w = np.ones(len(cluster_indices)) / len(cluster_indices)
     return w @ cluster_cov.values @ w
@@ -25,9 +24,7 @@ def _hrp_weights(cov: pd.DataFrame, link: np.ndarray) -> pd.Series:
     weights = pd.Series(1.0, index=cov.index)
     n = link.shape[0] + 1
     for i in range(link.shape[0]):
-        left = int(link[i, 0])
-        right = int(link[i, 1])
-        left_items = [j for j in range(n) if j in _get_quasi_diag(link[:i+1])]
+        left_items = [j for j in range(n) if j in _get_quasi_diag(link[: i + 1])]
         right_items = [j for j in range(n) if j not in left_items]
         if not left_items or not right_items:
             continue
@@ -38,11 +35,11 @@ def _hrp_weights(cov: pd.DataFrame, link: np.ndarray) -> pd.Series:
         for j in left_items:
             weights.iloc[j] *= alpha
         for j in right_items:
-            weights.iloc[j] *= (1 - alpha)
+            weights.iloc[j] *= 1 - alpha
     return weights / weights.sum()
 
 
-def hrp_allocation(returns: pd.DataFrame, method: str = "single") -> Dict[str, float]:
+def hrp_allocation(returns: pd.DataFrame, method: str = "single") -> dict[str, float]:
     cov = returns.cov()
     corr = returns.corr()
     dist = np.sqrt(2 * (1 - corr.clip(-1, 1)))
@@ -55,7 +52,7 @@ def hrp_allocation_with_vol_target(
     returns: pd.DataFrame,
     target_vol: float = 0.15,
     method: str = "single",
-) -> Dict[str, float]:
+) -> dict[str, float]:
     w = hrp_allocation(returns, method=method)
     cov = returns.cov() * 252
     assets = list(w.keys())

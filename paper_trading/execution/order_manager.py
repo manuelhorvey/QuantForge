@@ -10,7 +10,9 @@ class OrderManager:
         self.filled_orders: list[Order] = []
         self.cancelled_orders: list[Order] = []
 
-    def submit_market_order(self, asset: str, side: str, quantity: float) -> str | None:
+    def submit_market_order(
+        self, asset: str, side: str, quantity: float, fill_price: float | None = None
+    ) -> str | None:
         order = Order(
             asset=asset,
             side=side,
@@ -18,9 +20,13 @@ class OrderManager:
             order_type="market",
             timestamp=datetime.now(),
         )
-        order_id = self.broker.place_order(order)
+        if fill_price is None:
+            order_id = self.broker.place_order(order)
+        else:
+            order_id = self.broker.place_filled_order(order, fill_price)
         order.order_id = order_id
-        self.pending_orders[order_id] = order
+        if order_id:
+            self.pending_orders[order_id] = order
         return order_id
 
     def submit_limit_order(self, asset: str, side: str, quantity: float, limit_price: float) -> str | None:

@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Dict
 
 import numpy as np
 import pandas as pd
@@ -13,7 +12,7 @@ def risk_contribution(weights: np.ndarray, cov: np.ndarray) -> np.ndarray:
     return risk_contrib
 
 
-def risk_parity_weights(cov: np.ndarray, target_risk: Optional[np.ndarray] = None) -> np.ndarray:
+def risk_parity_weights(cov: np.ndarray, target_risk: np.ndarray | None = None) -> np.ndarray:
     n = cov.shape[0]
     if target_risk is None:
         target_risk = np.ones(n) / n
@@ -30,7 +29,7 @@ def risk_parity_weights(cov: np.ndarray, target_risk: Optional[np.ndarray] = Non
     return result.x / result.x.sum()
 
 
-def compute_equal_risk_weights(returns: pd.DataFrame, target_risk: Optional[Dict[str, float]] = None) -> Dict[str, float]:
+def compute_equal_risk_weights(returns: pd.DataFrame, target_risk: dict[str, float] | None = None) -> dict[str, float]:
     cov = returns.cov() * 252
     assets = returns.columns.tolist()
     w = risk_parity_weights(cov.values)
@@ -39,8 +38,7 @@ def compute_equal_risk_weights(returns: pd.DataFrame, target_risk: Optional[Dict
 
 class PositionSizingStrategy(ABC):
     @abstractmethod
-    def compute(self, close: pd.Series, config: dict) -> float:
-        ...
+    def compute(self, close: pd.Series, config: dict) -> float: ...
 
 
 class VolTargetSizing(PositionSizingStrategy):
@@ -52,7 +50,7 @@ class VolTargetSizing(PositionSizingStrategy):
     def compute(self, close: pd.Series, config: dict, regime: str = "neutral") -> float:
         if not config.get("vol_scalar"):
             return 1.0
-        
+
         target = self.target_vol
         if self.regime_aware:
             # CALM/range expands target; CRISIS/volatile contracts (plan aliases included)
@@ -65,11 +63,11 @@ class VolTargetSizing(PositionSizingStrategy):
                 "neutral": 1.0,
             }
             target *= multipliers.get(str(regime).lower(), 1.0)
-            
+
         rets = close.pct_change().dropna()
         if len(rets) < self.window:
             return 1.0
-        rv = rets.iloc[-self.window:].std() * np.sqrt(252)
+        rv = rets.iloc[-self.window :].std() * np.sqrt(252)
         if pd.isna(rv) or np.isinf(rv):
             return 1.0
         vol_baseline = config.get("vol_baseline")

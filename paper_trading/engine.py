@@ -481,6 +481,9 @@ class PaperTradingEngine:
             len(self.assets),
             {n: f"{w:.3f}" for n, w in self._rebalance_weights.items()},
         )
+
+    def get_state(self) -> dict:
+        """Build the dashboard/state snapshot for the current engine state."""
         ad = {}
         overall_validity = 0.0
         any_halted = False

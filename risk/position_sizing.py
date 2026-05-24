@@ -1,30 +1,25 @@
 import pandas as pd
-import numpy as np
 
-def calculate_position_size(signal_df: pd.DataFrame, 
-                            base_risk: float = 0.01, 
-                            account_value: float = 100000) -> pd.Series:
+
+def calculate_position_size(
+    signal_df: pd.DataFrame, base_risk: float = 0.01, account_value: float = 100000
+) -> pd.Series:
     """
     Calculates position sizes based on signals and regime multipliers.
-    
+
     Args:
         signal_df: DataFrame with 'signal' and 'risk_multiplier'.
         base_risk: Percentage of account to risk per trade (e.g., 0.01 for 1%).
         account_value: Total account equity.
-        
+
     Returns:
         pd.Series: Position size in units/lots.
     """
-    # Simple position sizing logic
-    # In a real system, this would incorporate ATR or distance to stop loss.
-    # Here we scale the base dollar risk by the regime multiplier.
-    
-    dollar_risk = account_value * base_risk * signal_df['risk_multiplier']
-    
-    # For simulation, we return the relative size (multiplier) 
+    # For simulation, we return the relative size (multiplier)
     # as we don't have asset price/volatility here yet.
     # A value of 1.0 means full base risk.
-    return signal_df['signal'] * signal_df['risk_multiplier']
+    return signal_df["signal"] * signal_df["risk_multiplier"]
+
 
 if __name__ == "__main__":
     try:

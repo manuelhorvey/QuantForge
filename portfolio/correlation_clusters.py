@@ -1,8 +1,7 @@
-import pandas as pd
 import numpy as np
-from scipy.cluster.hierarchy import linkage, fcluster
+import pandas as pd
+from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import squareform
-from typing import List, Dict, Optional, Tuple
 
 
 def compute_correlation_matrix(returns: pd.DataFrame, method: str = "pearson") -> pd.DataFrame:
@@ -19,9 +18,9 @@ def correlation_to_distance(corr: pd.DataFrame) -> pd.DataFrame:
 def cluster_assets(
     returns: pd.DataFrame,
     method: str = "ward",
-    n_clusters: Optional[int] = None,
-    threshold: Optional[float] = None,
-) -> Dict[str, int]:
+    n_clusters: int | None = None,
+    threshold: float | None = None,
+) -> dict[str, int]:
     corr = compute_correlation_matrix(returns)
     dist = correlation_to_distance(corr)
     condensed = squareform(dist.values, checks=False)
@@ -35,7 +34,7 @@ def cluster_assets(
     return dict(zip(corr.index, labels))
 
 
-def get_cluster_summary(returns: pd.DataFrame, cluster_labels: Dict[str, int]) -> pd.DataFrame:
+def get_cluster_summary(returns: pd.DataFrame, cluster_labels: dict[str, int]) -> pd.DataFrame:
     labels = pd.Series(cluster_labels)
     summary = []
     for cluster_id in sorted(labels.unique()):
@@ -45,10 +44,12 @@ def get_cluster_summary(returns: pd.DataFrame, cluster_labels: Dict[str, int]) -
         cluster_returns = returns[members]
         intra_corr = cluster_returns.corr().values
         mean_intra_corr = (intra_corr.sum() - len(members)) / (len(members) * (len(members) - 1))
-        summary.append({
-            "cluster": cluster_id,
-            "n_assets": len(members),
-            "members": members,
-            "mean_intra_correlation": mean_intra_corr,
-        })
+        summary.append(
+            {
+                "cluster": cluster_id,
+                "n_assets": len(members),
+                "members": members,
+                "mean_intra_correlation": mean_intra_corr,
+            }
+        )
     return pd.DataFrame(summary)

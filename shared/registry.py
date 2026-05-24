@@ -1,10 +1,10 @@
 import logging
 
+from shared.features import DefaultFeaturePipeline
 from shared.model import XGBoostModel
+from shared.pnl import DefaultPnLStrategy
 from shared.signal import FixedThresholdStrategy
 from shared.sizing import VolTargetSizing
-from shared.pnl import DefaultPnLStrategy
-from shared.features import DefaultFeaturePipeline
 
 _logger = logging.getLogger("quantforge.registry")
 
@@ -94,9 +94,10 @@ class StrategyRegistry:
         expected = _BASELINE_CLASSES[category]
         if not isinstance(impl, expected):
             _logger.warning(
-                "Registry: %s impl %s is not baseline %s "
-                "(allowed for future use, no behavior change in live)",
-                category, type(impl).__name__, expected.__name__,
+                "Registry: %s impl %s is not baseline %s (allowed for future use, no behavior change in live)",
+                category,
+                type(impl).__name__,
+                expected.__name__,
             )
 
     def validate_strategies(self, asset: str, strategies: dict) -> None:
@@ -106,7 +107,10 @@ class StrategyRegistry:
             if actual is not None and not isinstance(actual, expected_cls):
                 _logger.warning(
                     "Validation [%s]: %s is %s, expected %s",
-                    asset, category, type(actual).__name__, expected_cls.__name__,
+                    asset,
+                    category,
+                    type(actual).__name__,
+                    expected_cls.__name__,
                 )
 
 

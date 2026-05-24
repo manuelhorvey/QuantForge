@@ -10,8 +10,7 @@ class PnLStrategy(ABC):
         ret: float,
         position_size_fraction: float,
         pos_size: float = 1.0,
-    ) -> float:
-        ...
+    ) -> float: ...
 
 
 class DefaultPnLStrategy(PnLStrategy):

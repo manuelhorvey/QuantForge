@@ -148,5 +148,10 @@ def audit_lookahead(
             continue
         logger.info(
             "Lag audit [%s] '%s': pub_lag=%dd, last=%s, %d-back=%s",
-            contract_name, col, lag, latest_val, -min(lag + 1, row_count), earlier_val,
+            contract_name,
+            col,
+            lag,
+            latest_val,
+            -min(lag + 1, row_count),
+            earlier_val,
         )

@@ -80,10 +80,12 @@ def _resolve_leader_path(leader: str, raw_dir: str) -> str | None:
             return path
     # Fallback: download via yfinance
     import warnings
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         try:
             import yfinance as yf
+
             df = yf.download(leader, period="10y", auto_adjust=True, progress=False)
             if isinstance(df.columns, pd.MultiIndex):
                 df.columns = [c[0] for c in df.columns]

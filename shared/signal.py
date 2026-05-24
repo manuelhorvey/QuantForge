@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+
 import numpy as np
 import pandas as pd
 
@@ -21,8 +22,7 @@ class SignalStrategy(ABC):
         threshold: float,
         close: pd.Series,
         position_size: float,
-    ) -> SignalResult:
-        ...
+    ) -> SignalResult: ...
 
 
 class FixedThresholdStrategy(SignalStrategy):
@@ -40,20 +40,20 @@ class FixedThresholdStrategy(SignalStrategy):
         signals[probs_long > threshold] = 2
         signals[probs_short > threshold] = 0
 
-        signal_data = pd.DataFrame({
-            "close": close.reindex(index),
-            "signal": signals,
-            "prob_long": probs_long,
-            "prob_short": probs_short,
-            "prob_neutral": proba[:, 1],
-            "position_size": position_size,
-        }, index=index)
+        signal_data = pd.DataFrame(
+            {
+                "close": close.reindex(index),
+                "signal": signals,
+                "prob_long": probs_long,
+                "prob_short": probs_short,
+                "prob_neutral": proba[:, 1],
+                "position_size": position_size,
+            },
+            index=index,
+        )
 
         latest = signal_data.iloc[-1]
-        signal_type = (
-            "BUY" if latest["signal"] == 2
-            else ("SELL" if latest["signal"] == 0 else "FLAT")
-        )
+        signal_type = "BUY" if latest["signal"] == 2 else ("SELL" if latest["signal"] == 0 else "FLAT")
         confidence = max(latest["prob_long"], latest["prob_short"])
         confidence_pct = round(float(confidence * 100), 2)
         label = int(latest["signal"])

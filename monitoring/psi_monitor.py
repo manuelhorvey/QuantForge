@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -44,15 +43,15 @@ class PSIMonitor:
     def persist_baseline(
         self,
         asset: str,
-        X: pd.DataFrame,
+        features: pd.DataFrame,
     ) -> None:
-        if X.empty:
+        if features.empty:
             logger.warning("%s: empty training data, skipping PSI baseline", asset)
             return
         os.makedirs(self.baseline_dir, exist_ok=True)
         path = os.path.join(self.baseline_dir, f"{asset}.parquet")
-        X.to_parquet(path)
-        logger.info("%s: PSI baseline persisted (%d rows, %d cols)", asset, len(X), len(X.columns))
+        features.to_parquet(path)
+        logger.info("%s: PSI baseline persisted (%d rows, %d cols)", asset, len(features), len(features.columns))
 
     def load_baseline(self, asset: str) -> pd.DataFrame | None:
         path = os.path.join(self.baseline_dir, f"{asset}.parquet")
@@ -115,9 +114,9 @@ class PSIMonitor:
     def compute_drift(
         self,
         asset: str,
-        X_current: pd.DataFrame,
+        current_features: pd.DataFrame,
         top_features: list[tuple[str, float]],
-    ) -> Optional[PSISnapshot]:
+    ) -> PSISnapshot | None:
         baseline = self.load_baseline(asset)
         if baseline is None:
             logger.debug("%s: no PSI baseline available", asset)
@@ -130,10 +129,10 @@ class PSIMonitor:
         severe_count = 0
 
         for feat_name, imp_score in top_features:
-            if feat_name not in baseline.columns or feat_name not in X_current.columns:
+            if feat_name not in baseline.columns or feat_name not in current_features.columns:
                 continue
             expected_series = baseline[feat_name]
-            actual_series = X_current[feat_name]
+            actual_series = current_features[feat_name]
 
             psi = self.compute_psi(expected_series, actual_series)
             cls = self.classify_drift(psi)
@@ -141,13 +140,15 @@ class PSIMonitor:
             prev_entry = next((e for e in (prev.per_feature if prev else []) if e.feature == feat_name), None)
             trend = self._compute_trend(prev_entry.psi if prev_entry else None, psi)
 
-            entries.append(PSIDriftEntry(
-                feature=feat_name,
-                psi=round(psi, 6),
-                classification=cls,
-                trend=trend,
-                importance_score=imp_score,
-            ))
+            entries.append(
+                PSIDriftEntry(
+                    feature=feat_name,
+                    psi=round(psi, 6),
+                    classification=cls,
+                    trend=trend,
+                    importance_score=imp_score,
+                )
+            )
 
             if cls == "MODERATE":
                 moderate_count += 1

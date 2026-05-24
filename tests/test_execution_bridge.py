@@ -26,3 +26,29 @@ def test_estimate_impact_bps_square_root():
     bridge = ExecutionBridge(broker)
     bps = bridge.estimate_impact_bps("AAPL", 100_000)
     assert bps > 0
+
+
+def test_submit_market_order_uses_single_precomputed_fill():
+    config = ExecutionConfig(base_spread_bps=100.0, spread_vol_slope=0.0, spread_max_bps=200.0, impact_model="none")
+    broker = PaperBroker(execution_configs={"EURUSD=X": config})
+    bridge = ExecutionBridge(broker)
+
+    fill, order_id = bridge.submit_market_order("EURUSD=X", "buy", 10, 100.0)
+
+    assert order_id
+    assert fill == 101.0
+    assert broker.get_positions()[0].avg_entry_price == 101.0
+
+
+def test_execution_bridge_can_open_short():
+    config = ExecutionConfig(base_spread_bps=0.0, spread_vol_slope=0.0, impact_model="none")
+    broker = PaperBroker(execution_configs={"TEST": config})
+    bridge = ExecutionBridge(broker)
+
+    fill, order_id = bridge.submit_market_order("TEST", "sell", 5, 100.0)
+
+    assert order_id
+    assert fill == 100.0
+    position = broker.get_positions()[0]
+    assert position.quantity == -5
+    assert position.avg_entry_price == 100.0

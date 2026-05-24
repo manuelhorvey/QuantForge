@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional
+
 import pandas as pd
 
 from features.builder import build_features, compute_macro_derived
@@ -12,14 +12,12 @@ class FeaturePipeline(ABC):
         self,
         df: pd.DataFrame,
         macro: pd.DataFrame,
-        ref: Optional[pd.DataFrame],
+        ref: pd.DataFrame | None,
         contract: FeatureContract,
-    ) -> pd.DataFrame:
-        ...
+    ) -> pd.DataFrame: ...
 
     @abstractmethod
-    def macro_derived(self, macro_df: pd.DataFrame) -> pd.DataFrame:
-        ...
+    def macro_derived(self, macro_df: pd.DataFrame) -> pd.DataFrame: ...
 
 
 class DefaultFeaturePipeline(FeaturePipeline):
@@ -27,7 +25,7 @@ class DefaultFeaturePipeline(FeaturePipeline):
         self,
         df: pd.DataFrame,
         macro: pd.DataFrame,
-        ref: Optional[pd.DataFrame],
+        ref: pd.DataFrame | None,
         contract: FeatureContract,
     ) -> pd.DataFrame:
         return build_features(df, macro, ref, contract)

@@ -1,16 +1,14 @@
-from typing import Dict, List
-
 import numpy as np
 import pandas as pd
 
-from shared.sizing import compute_equal_risk_weights, risk_parity_weights
+from shared.sizing import risk_parity_weights
 
 
 def compute_risk_parity_portfolio(
     returns: pd.DataFrame,
     target_vol: float = 0.15,
     max_leverage: float = 1.0,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     cov = returns.cov() * 252
     assets = returns.columns.tolist()
     raw_weights = risk_parity_weights(cov.values)

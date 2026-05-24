@@ -9,18 +9,9 @@ def cot_index(net_position: pd.Series, window: int = 52) -> pd.Series:
 
 def compute_net_positions(series: pd.DataFrame) -> pd.DataFrame:
     df = pd.DataFrame(index=series.index)
-    df["lev_net"] = (
-        series["Lev_Money_Positions_Long_All"]
-        - series["Lev_Money_Positions_Short_All"]
-    )
-    df["dealer_net"] = (
-        series["Dealer_Positions_Long_All"]
-        - series["Dealer_Positions_Short_All"]
-    )
-    df["asset_mgr_net"] = (
-        series["Asset_Mgr_Positions_Long_All"]
-        - series["Asset_Mgr_Positions_Short_All"]
-    )
+    df["lev_net"] = series["Lev_Money_Positions_Long_All"] - series["Lev_Money_Positions_Short_All"]
+    df["dealer_net"] = series["Dealer_Positions_Long_All"] - series["Dealer_Positions_Short_All"]
+    df["asset_mgr_net"] = series["Asset_Mgr_Positions_Long_All"] - series["Asset_Mgr_Positions_Short_All"]
     df["open_interest"] = series["Open_Interest_All"]
     return df
 
@@ -55,21 +46,15 @@ def build_cot_features(
     total_rept_long += series["Dealer_Positions_Long_All"]
     total_rept_long += series["Lev_Money_Positions_Long_All"]
     total_rept_long += series["Other_Rept_Positions_Long_All"]
-    features["pct_long_lev"] = (
-        series["Lev_Money_Positions_Long_All"] / total_rept_long
-    )
-    features["pct_short_lev"] = (
-        series["Lev_Money_Positions_Short_All"] / total_rept_long
-    )
+    features["pct_long_lev"] = series["Lev_Money_Positions_Long_All"] / total_rept_long
+    features["pct_short_lev"] = series["Lev_Money_Positions_Short_All"] / total_rept_long
 
     denom = net["asset_mgr_net"].abs() + net["lev_net"].abs() + 1e-9
     features["commercial_to_lev_ratio"] = net["asset_mgr_net"] / denom
 
     features["positioning_extreme"] = (
         features["lev_net_cot_index"]
-        .pipe(
-            lambda x: (x < extreme_percentile) | (x > (1 - extreme_percentile))
-        )
+        .pipe(lambda x: (x < extreme_percentile) | (x > (1 - extreme_percentile)))
         .astype(int)
     )
 

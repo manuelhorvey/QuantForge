@@ -3,6 +3,7 @@ import os
 import sys
 import time
 from dataclasses import asdict
+from urllib.parse import unquote
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -109,12 +110,16 @@ def get_index_html():
 
 def try_serve_file(path, resp):
     """Try to serve a static file from dist/ or frontend/ by exact path."""
-    clean = path.split("?")[0].lstrip("/")
+    clean = unquote(path.split("?", 1)[0]).lstrip("/")
     candidates = []
-    if DASHBOARD_DIST:
-        candidates.append(os.path.join(DASHBOARD_DIST, clean))
-    if FRONTEND_DIR:
-        candidates.append(os.path.join(FRONTEND_DIR, clean))
+    for root in (DASHBOARD_DIST, FRONTEND_DIR):
+        if not root:
+            continue
+        root_real = os.path.realpath(root)
+        fp = os.path.realpath(os.path.join(root_real, clean))
+        if os.path.commonpath([root_real, fp]) != root_real:
+            continue
+        candidates.append(fp)
     for fp in candidates:
         if os.path.exists(fp) and os.path.isfile(fp):
             ext = os.path.splitext(fp)[1]
