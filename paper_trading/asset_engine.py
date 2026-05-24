@@ -286,7 +286,9 @@ class AssetEngine:
         self._scale_out_plan = None
         if self._scale_out_engine is not None and intent.take_profit is not None:
             self._scale_out_plan = self._scale_out_engine.build_plan(
-                side, float(intent.entry_price), float(intent.take_profit),
+                side,
+                float(intent.entry_price),
+                float(intent.take_profit),
             )
 
     def _close_position(self, exit_price, exit_date, reason):
@@ -618,7 +620,9 @@ class AssetEngine:
         ):
             logger.info(
                 "%s: meta-label blocking trade (p(TP>SL)=%.2f < threshold=%.2f)",
-                self.name, self._last_meta_proba, self._meta_label_model.threshold,
+                self.name,
+                self._last_meta_proba,
+                self._meta_label_model.threshold,
             )
             new_side = None
 
@@ -704,8 +708,10 @@ class AssetEngine:
                 for so in so_fills:
                     if so.get("fraction", 0) > 0:
                         self.pos_mgr.partial_close(
-                            so["fraction"], so["fill_price"],
-                            str(datetime.now(tz=ET).date()), so["reason"],
+                            so["fraction"],
+                            so["fill_price"],
+                            str(datetime.now(tz=ET).date()),
+                            so["reason"],
                         )
                     breakeven = so.get("breakeven_price")
                     if breakeven is not None:
@@ -742,7 +748,9 @@ class AssetEngine:
                         self.pos_mgr.update_stop_loss(float(trailing.trailing_sl))
                         logger.info(
                             "%s: trailing stop activated to %.4f (locked profit=%.2f%%)",
-                            self.name, trailing.trailing_sl, (trailing.locked_profit or 0) * 100,
+                            self.name,
+                            trailing.trailing_sl,
+                            (trailing.locked_profit or 0) * 100,
                         )
 
                     # ── Post-entry adjustment ────────────────────────
@@ -759,12 +767,18 @@ class AssetEngine:
                     if adjust.new_sl is not None:
                         self.pos_mgr.update_stop_loss(float(adjust.new_sl))
                         logger.info(
-                            "%s: post-entry SL adjusted: %s (new=%.4f)", self.name, adjust.reason, adjust.new_sl,
+                            "%s: post-entry SL adjusted: %s (new=%.4f)",
+                            self.name,
+                            adjust.reason,
+                            adjust.new_sl,
                         )
                     if adjust.new_tp is not None:
                         self.pos_mgr.update_take_profit(float(adjust.new_tp))
                         logger.info(
-                            "%s: post-entry TP adjusted: %s (new=%.4f)", self.name, adjust.reason, adjust.new_tp,
+                            "%s: post-entry TP adjusted: %s (new=%.4f)",
+                            self.name,
+                            adjust.reason,
+                            adjust.new_tp,
                         )
 
             # Time stop check — force close if held beyond max_holding_days
@@ -939,7 +953,7 @@ class AssetEngine:
         remaining_frac = self.pos_mgr.get_remaining_fraction()
         scale_out_active = (
             self.pos_mgr._scale_out_active
-            if hasattr(self.pos_mgr, '_scale_out_active') and self.pos_mgr._scale_out_active
+            if hasattr(self.pos_mgr, "_scale_out_active") and self.pos_mgr._scale_out_active
             else False
         )
 

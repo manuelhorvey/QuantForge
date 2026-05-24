@@ -102,9 +102,7 @@ class PaperTradingEngine:
         saved_positions = (snapshot.open_positions or {}) if snapshot else {}
 
         cfg = get_config()
-        self.execution_configs = build_execution_configs(
-            cfg.assets, defaults=cfg.execution_defaults
-        )
+        self.execution_configs = build_execution_configs(cfg.assets, defaults=cfg.execution_defaults)
         self.broker = PaperBroker(
             initial_capital=cfg.capital,
             execution_configs=self.execution_configs,
@@ -223,10 +221,7 @@ class PaperTradingEngine:
                 logger.error("%s: price/pnl refresh failed: %s", name, e)
 
         # Phase 2: Portfolio-level drawdown check
-        mtm = sum(
-            a.current_value if not pd.isna(a.current_value) else a.initial_capital
-            for a in self.assets.values()
-        )
+        mtm = sum(a.current_value if not pd.isna(a.current_value) else a.initial_capital for a in self.assets.values())
         if self.satellite is not None:
             mtm += self.satellite.current_value
         if self.portfolio_peak_value is None or mtm > self.portfolio_peak_value:
@@ -240,7 +235,8 @@ class PaperTradingEngine:
         if pd_limit is not None and portfolio_dd <= pd_limit:
             logger.warning(
                 "PORTFOLIO CIRCUIT BREAKER: drawdown %.2f%% <= %.2f%% limit — closing all positions",
-                portfolio_dd * 100, pd_limit * 100,
+                portfolio_dd * 100,
+                pd_limit * 100,
             )
             for name, asset in self.assets.items():
                 if asset.pos_mgr.has_position():
@@ -402,8 +398,7 @@ class PaperTradingEngine:
         if self.portfolio_peak_value is None or mtm_total > self.portfolio_peak_value:
             self.portfolio_peak_value = mtm_total
         portfolio_dd = (
-            (mtm_total - self.portfolio_peak_value) / self.portfolio_peak_value
-            if self.portfolio_peak_value else 0.0
+            (mtm_total - self.portfolio_peak_value) / self.portfolio_peak_value if self.portfolio_peak_value else 0.0
         )
 
         return {

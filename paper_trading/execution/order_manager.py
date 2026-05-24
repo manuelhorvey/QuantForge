@@ -12,20 +12,24 @@ class OrderManager:
 
     def submit_market_order(self, asset: str, side: str, quantity: float) -> str | None:
         order = Order(
-            asset=asset, side=side, quantity=quantity,
-            order_type="market", timestamp=datetime.now(),
+            asset=asset,
+            side=side,
+            quantity=quantity,
+            order_type="market",
+            timestamp=datetime.now(),
         )
         order_id = self.broker.place_order(order)
         order.order_id = order_id
         self.pending_orders[order_id] = order
         return order_id
 
-    def submit_limit_order(
-        self, asset: str, side: str, quantity: float, limit_price: float
-    ) -> str | None:
+    def submit_limit_order(self, asset: str, side: str, quantity: float, limit_price: float) -> str | None:
         order = Order(
-            asset=asset, side=side, quantity=quantity,
-            order_type="limit", limit_price=limit_price,
+            asset=asset,
+            side=side,
+            quantity=quantity,
+            order_type="limit",
+            limit_price=limit_price,
             timestamp=datetime.now(),
         )
         order_id = self.broker.place_order(order)
@@ -59,12 +63,8 @@ class OrderManager:
         return filled
 
     def get_open_quantity(self, asset: str) -> float:
-        return sum(
-            o.quantity for o in self.pending_orders.values()
-            if o.asset == asset and o.side == "buy"
-        ) - sum(
-            o.quantity for o in self.pending_orders.values()
-            if o.asset == asset and o.side == "sell"
+        return sum(o.quantity for o in self.pending_orders.values() if o.asset == asset and o.side == "buy") - sum(
+            o.quantity for o in self.pending_orders.values() if o.asset == asset and o.side == "sell"
         )
 
     @property

@@ -98,45 +98,39 @@ class ScaleOutEngine:
             if tier.filled:
                 continue
 
-            hit = (
-                current_price >= tier.price if side == "long"
-                else current_price <= tier.price
-            )
+            hit = current_price >= tier.price if side == "long" else current_price <= tier.price
             if not hit:
                 continue
 
             tier.filled = True
             tier.fill_price = current_price
             entry_px = plan.entry_price
-            pnl_frac = (
-                (current_price / entry_px - 1) if side == "long"
-                else (entry_px / current_price - 1)
-            )
+            pnl_frac = (current_price / entry_px - 1) if side == "long" else (entry_px / current_price - 1)
             tier_pnl = current_value * pnl_frac * position_size * exposure_mult * tier.fraction
             tier.pnl_realized = tier_pnl
             plan.remaining_fraction -= tier.fraction
 
-            fills.append({
-                "fraction": tier.fraction,
-                "fill_price": current_price,
-                "pnl": tier_pnl,
-                "reason": f"scale_out_tier_{_tier_index(plan, tier) + 1}",
-            })
+            fills.append(
+                {
+                    "fraction": tier.fraction,
+                    "fill_price": current_price,
+                    "pnl": tier_pnl,
+                    "reason": f"scale_out_tier_{_tier_index(plan, tier) + 1}",
+                }
+            )
 
         # Activate breakeven on the remainder
         n_filled = sum(1 for t in plan.tiers if t.filled)
-        if (
-            n_filled > self.activate_breakeven_after
-            and not plan.breakeven_activated
-            and plan.remaining_fraction > 0
-        ):
+        if n_filled > self.activate_breakeven_after and not plan.breakeven_activated and plan.remaining_fraction > 0:
             plan.breakeven_activated = True
             plan.breakeven_price = plan.entry_price
-            fills.append({
-                "fraction": 0.0,
-                "reason": "breakeven_stop_activated",
-                "breakeven_price": plan.entry_price,
-            })
+            fills.append(
+                {
+                    "fraction": 0.0,
+                    "reason": "breakeven_stop_activated",
+                    "breakeven_price": plan.entry_price,
+                }
+            )
 
         return fills
 

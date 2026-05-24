@@ -60,9 +60,7 @@ class PositionManager:
             bars = 0
 
         risk_pct = (
-            abs(entry - self.position.stop_loss) / entry
-            if self.position and self.position.stop_loss != entry
-            else 0.0
+            abs(entry - self.position.stop_loss) / entry if self.position and self.position.stop_loss != entry else 0.0
         )
         total_pnl_realized = pnl + sum(pc.get("pnl", 0.0) for pc in self._partial_closes)
 
@@ -111,11 +109,13 @@ class PositionManager:
             self._scale_out_breakeven is not None
             and self._remaining_fraction > 0
             and (
-                self.position.side == "long" and current_price <= self._scale_out_breakeven
-                or self.position.side == "short" and current_price >= self._scale_out_breakeven
+                self.position.side == "long"
+                and current_price <= self._scale_out_breakeven
+                or self.position.side == "short"
+                and current_price >= self._scale_out_breakeven
             )
         ):
-                return ("breakeven", self._scale_out_breakeven)
+            return ("breakeven", self._scale_out_breakeven)
 
         sl = self.position.stop_loss
         tp = self.position.take_profit
@@ -185,7 +185,11 @@ class PositionManager:
 
         logger.info(
             "Partial close: %.1f%% @ %.4f (reason=%s, pnl=%.2f, remaining=%.1f%%)",
-            fraction * 100, fill_price, reason, pnl, self._remaining_fraction * 100,
+            fraction * 100,
+            fill_price,
+            reason,
+            pnl,
+            self._remaining_fraction * 100,
         )
         return pc
 

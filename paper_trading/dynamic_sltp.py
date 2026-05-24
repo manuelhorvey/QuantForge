@@ -159,7 +159,10 @@ class DynamicSLTPEngine:
             self.atr_mult_sl = ratio * self.calibration_scale
             logger.info(
                 "ATR calibrated: atr_mult_sl=%.3f (ewm_vol=%.4f, atr_pct=%.4f, scale=%.2f)",
-                self.atr_mult_sl, ewm_vol, atr_pct, self.calibration_scale,
+                self.atr_mult_sl,
+                ewm_vol,
+                atr_pct,
+                self.calibration_scale,
             )
 
     def compute_trailing_stop(
@@ -329,9 +332,7 @@ class DynamicSLTPEngine:
         result = self._atr_barriers(entry_price, side, df, sl_mult, tp_mult, regime)
         result.method_used = "trailing"
         activation = self.trailing_activation_mult * abs(entry_price - result.stop_loss)
-        result.trailing_activation_price = (
-            entry_price + activation if side == "long" else entry_price - activation
-        )
+        result.trailing_activation_price = entry_price + activation if side == "long" else entry_price - activation
         return result
 
     def _static_barriers(

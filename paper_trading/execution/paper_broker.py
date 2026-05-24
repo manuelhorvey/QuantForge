@@ -46,9 +46,7 @@ class PaperBroker(BrokerInterface):
 
     def get_account_summary(self) -> AccountSummary:
         positions = list(self._positions.values())
-        portfolio_value = self.cash + sum(
-            p.quantity * p.current_price for p in positions
-        )
+        portfolio_value = self.cash + sum(p.quantity * p.current_price for p in positions)
         buying_power = self.cash * 2
         return AccountSummary(
             total_cash=round(self.cash, 2),
@@ -81,7 +79,7 @@ class PaperBroker(BrokerInterface):
         if len(history) < config.vol_window:
             return 1.0
 
-        recent = np.array(history[-config.vol_window:])
+        recent = np.array(history[-config.vol_window :])
         full = np.array(history)
 
         recent_std = np.std(recent)
@@ -139,8 +137,17 @@ class PaperBroker(BrokerInterface):
         order.status = "filled"
         order.timestamp = datetime.now()
         self._orders[order_id] = order
-        logger.debug("Order %s: %s %s %.4f @ %.2f (vol_z=%.2f, slippage=%.4f, impact=%.4f)",
-                     order_id, order.side, order.asset, fill_qty, fill_price, vol_z, slippage, impact)
+        logger.debug(
+            "Order %s: %s %s %.4f @ %.2f (vol_z=%.2f, slippage=%.4f, impact=%.4f)",
+            order_id,
+            order.side,
+            order.asset,
+            fill_qty,
+            fill_price,
+            vol_z,
+            slippage,
+            impact,
+        )
         return order_id
 
     def cancel_order(self, order_id: str) -> bool:

@@ -51,7 +51,9 @@ class PortfolioSync:
             quantity = abs(delta) / current_price
             orders.append(
                 Order(
-                    asset=asset, side=side, quantity=round(quantity, 6),
+                    asset=asset,
+                    side=side,
+                    quantity=round(quantity, 6),
                     order_type="market",
                 )
             )
