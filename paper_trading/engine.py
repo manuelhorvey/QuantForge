@@ -439,8 +439,7 @@ class PaperTradingEngine:
 
         # Compute governance-adjusted vols per asset
         total_value = sum(
-            a.current_value if not pd.isna(a.current_value) else a.initial_capital
-            for a in self.assets.values()
+            a.current_value if not pd.isna(a.current_value) else a.initial_capital for a in self.assets.values()
         )
 
         adjusted = returns.copy()
@@ -521,8 +520,7 @@ class PaperTradingEngine:
                 "regime_geometry": asset.regime_geometry,
             }
         total_value = sum(
-            a.current_value if not pd.isna(a.current_value) else a.initial_capital
-            for a in self.assets.values()
+            a.current_value if not pd.isna(a.current_value) else a.initial_capital for a in self.assets.values()
         )
         rp_weights = {}
         rp_allocations = {}

@@ -1196,8 +1196,13 @@ class AssetEngine:
             "scale_out_tiers": scale_out_tiers,
             "psi_drift": {
                 "per_feature": [
-                    {"feature": e.feature, "psi": e.psi, "classification": e.classification,
-                     "trend": e.trend, "importance_score": e.importance_score}
+                    {
+                        "feature": e.feature,
+                        "psi": e.psi,
+                        "classification": e.classification,
+                        "trend": e.trend,
+                        "importance_score": e.importance_score,
+                    }
                     for e in (_psi.per_feature if _psi else [])
                 ],
                 "worst_classification": _psi.worst_classification if _psi else "NO_DRIFT",
