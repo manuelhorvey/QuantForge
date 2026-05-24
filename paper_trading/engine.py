@@ -139,7 +139,7 @@ class PaperTradingEngine:
             )
 
     def _init_narrative(self) -> None:
-        self._narrative_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        self._narrative_api_key = os.environ.get("OPENCODE_ZEN_API_KEY", "")
         self._apply_active_narrative()
 
     def _apply_active_narrative(self) -> None:

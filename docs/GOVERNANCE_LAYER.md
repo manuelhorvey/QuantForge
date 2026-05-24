@@ -78,7 +78,7 @@ Weekly LLM-driven macro context overlay that adjusts execution parameters based 
 - **Integration**: `_narrative_sl_mult` multiplied into SL in `_open_position`; `_narrative_size_scalar` applied in `_sizing_config` and execution bridge notional; `narrative_ok` flag in `check_halt_conditions` with -0.10 validity penalty
 - **State storage**: `data/live/narrative_active.json`, `narrative_pending.json`
 - **Config**: `configs/paper_trading.yaml` → `narrative_config` section
-- **Requires**: `ANTHROPIC_API_KEY` env var
+- **Requires**: `OPENCODE_ZEN_API_KEY` env var
 
 ## 7. Liquidity Regime Model (Per-Tick)
 

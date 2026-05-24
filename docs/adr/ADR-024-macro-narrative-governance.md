@@ -44,7 +44,7 @@ Add a weekly LLM-driven macro narrative pipeline as an execution governance over
 **Negative:**
 - FXStreet HTML changes can break scraper without notice
 - LLM extraction is non-deterministic — same article may produce different scores
-- Requires ANTHROPIC_API_KEY env var
+- Requires OPENCODE_ZEN_API_KEY env var
 - Adds operational complexity (Monday morning check required)
 
 ## Validation

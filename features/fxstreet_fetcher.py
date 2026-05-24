@@ -76,24 +76,25 @@ def fetch_fxstreet_article() -> str | None:
         return None
 
 
-def call_llm(text: str, api_key: str, model: str = "claude-sonnet-4-20250514") -> dict | None:
-    url = "https://api.anthropic.com/v1/messages"
+def call_llm(text: str, api_key: str, model: str = "deepseek-v4-flash-free") -> dict | None:
+    url = "https://opencode.ai/zen/v1/chat/completions"
     headers = {
-        "x-api-key": api_key,
-        "anthropic-version": "2023-06-01",
+        "Authorization": f"Bearer {api_key}",
         "content-type": "application/json",
     }
     payload = {
         "model": model,
         "max_tokens": 1024,
-        "system": LLM_SYSTEM_PROMPT,
-        "messages": [{"role": "user", "content": text}],
+        "messages": [
+            {"role": "system", "content": LLM_SYSTEM_PROMPT},
+            {"role": "user", "content": text},
+        ],
     }
     try:
         resp = requests.post(url, headers=headers, json=payload, timeout=60)
         resp.raise_for_status()
         body = resp.json()
-        content = body.get("content", [{}])[0].get("text", "")
+        content = body.get("choices", [{}])[0].get("message", {}).get("content", "")
         json_match = re.search(r"\{.*\}", content, re.DOTALL)
         if json_match:
             return json.loads(json_match.group())

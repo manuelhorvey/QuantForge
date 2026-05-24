@@ -239,7 +239,7 @@ Check for:
 - `"stale": true` — narrative is ≥7 days old. Governance not applied. Will refresh next Monday.
 - `"fetch_error"` — scrape or LLM call failed. Check logs for details.
 
-If the key `ANTHROPIC_API_KEY` is not set, the pipeline will skip the LLM call and save a neutral narrative instead.
+If the key `OPENCODE_ZEN_API_KEY` is not set, the pipeline will skip the LLM call and save a neutral narrative instead.
 
 ### Liquidity Check
 

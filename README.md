@@ -94,11 +94,11 @@ export FRED_API_KEY=your_key
 | Var | Required | Purpose |
 |-----|----------|---------|
 | `FRED_API_KEY` | Yes | Macro data (yields, VIX, DXY) |
-| `ANTHROPIC_API_KEY` | No* | Weekly LLM narrative extraction |
+| `OPENCODE_ZEN_API_KEY` | No* | Weekly LLM narrative extraction |
 | `PYTHONPATH` | Yes | `PYTHONPATH=.` |
 | `QUANTFORGE_REFRESH_INTERVAL` | No | Engine loop interval (default 300s) |
 
-*\*Without ANTHROPIC_API_KEY, narrative governance skips LLM call and uses neutral defaults.*
+*\*Without OPENCODE_ZEN_API_KEY, narrative governance skips LLM call and uses neutral defaults.*
 
 ---
 
