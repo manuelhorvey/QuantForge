@@ -431,7 +431,8 @@ def serve(port=DEFAULT_PORT, shutdown_event=None):
 
         def do_POST(self):
             length = int(self.headers.get("Content-Length", 0))
-            body = self.rfile.read(length).decode("utf-8") if length > 0 else "{}"
+            if length > 0:
+                self.rfile.read(length)
             path = self.path
             if path == "/narrative/confirm":
                 ok = confirm_pending_narrative()

@@ -2,7 +2,6 @@ import json
 import logging
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Dict, List, Optional
 
 logger = logging.getLogger("quantforge.macro_narrative")
 
@@ -23,15 +22,15 @@ class MacroNarrativeFeatures:
     jpy_bias: str
     cad_bias: str
     eur_bias: str
-    key_events: List[str]
+    key_events: list[str]
     overall_regime: str
     confidence: float
     narrative_version: str = ""
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return asdict(self)
 
-    def to_feature_vector(self) -> Dict[str, float]:
+    def to_feature_vector(self) -> dict[str, float]:
         bias_map = {"bullish": 1.0, "neutral": 0.0, "bearish": -1.0}
         return {
             "usd_strength_narr": self.usd_strength_narrative,
@@ -70,7 +69,7 @@ def narrative_governance_scalars(
     return {"sl_mult": sl_mult, "size_scalar": size_scalar}
 
 
-def neutral_narrative(week_start: Optional[str] = None) -> MacroNarrativeFeatures:
+def neutral_narrative(week_start: str | None = None) -> MacroNarrativeFeatures:
     return MacroNarrativeFeatures(
         week_start=week_start or datetime.now().strftime("%Y-%m-%d"),
         usd_strength_narrative=0.5,
