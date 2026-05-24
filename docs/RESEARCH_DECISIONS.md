@@ -283,6 +283,24 @@ Six parameterised stress blocks cover structurally distinct crisis regimes: COVI
     -   **Breakeven trigger**: As soon as Tier 1 is filled, the stop-loss of the remaining 75% position is automatically moved to the entry price (breakeven). This eliminates downside tail risk for the remaining position.
     -   **Preserves upside tail convexity**: Allowing the subsequent 25% fractions to run to 0.50x, 0.75x, and 1.00x of the full target preserves upside convexity when a strong trend takes off.
 
+### Trailing Stop Activation After Scale-Out (Phase 2)
+
+**Extension:** The scale-out engine now supports `trailing_after_tier` — a configurable tier index that, when filled, triggers a `trailing_activated` signal. The asset engine wires this signal into the DynamicSLTPEngine's trailing stop logic, locking in gains as the price moves favorably.
+
+**Why it works:** Breakeven removes downside risk but leaves profits unsecured after Tier 1. Trailing after Tier 2 (50% filled) transitions the remaining position from fixed-barrier to trailing-barrier protection — the stop follows price upward (for longs), securing additional gains without capping upside. The cross-bar best-price tracker (`_best_price_seen`) ensures trailing uses the highest/lowest price seen across bars, not just the current close.
+
+### Confidence-Based SL Width Adjustment (Phase 3)
+
+**Extension:** `confidence_sl_adjust` (default 0.0, disabled) biases stop-loss width by meta-label confidence. At high confidence (p=0.9), SL tightens to `sl × (1.0 - adjust)`; at low confidence (p=0.1), SL widens to `sl × (1.0 + adjust/2)`.
+
+**Why it works:** The meta-label model's confidence correlates with prediction reliability — high-confidence signals deserve tighter stops (smaller loss per miss) while low-confidence signals need more room to avoid being stopped out by noise. The asymmetric widen/tighten schedule (tighten 100% of adjust vs widen 50%) reflects the SL physics finding that tightening never hurts Sharpe while widening always degrades it.
+
+### Shadow SL/TP Drift Analytics (Phase 4)
+
+**Extension:** `shadow_compare_sltp()` in the tracer logs every runtime deviation from the original label-derived barriers (in bps). The shadow memory profiles accumulate SL/TP drift statistics (mean delta, max delta, adjustment count) per asset per run.
+
+**Why it works:** Runtime SL/TP barriers drift from their original label-computed values due to validity state adjustments, regime geometry, trailing activation, and confidence-based tightening. Without shadow tracking, these deviations accumulate silently. Drift analytics answer: "is the runtime system's risk profile still aligned with the research-validated label barriers?" — enabling detection of systematic SL creep or barrier drift.
+
 ---
 
 ## 4. What Remains Blocked and What Data Would Unblock It

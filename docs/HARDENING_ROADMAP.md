@@ -142,5 +142,37 @@ pytest tests/ -q --tb=short
 
 ## Remaining operational work
 
-1. Synthetic stress hardening: run full survival sim with `--synthetic-stress --paths 5000` to validate circuit breaker + trade quality gates reduce the 83.78% synthetic ruin rate.
-2. Deploy hybrid ensemble pickles for assets with `adaptive_macro: true` (plain XGB ignores macro head).
+1. ~~Synthetic stress hardening~~ (complete — validated circuit breaker + trade quality gates reduce synthetic ruin)
+2. ~~Deploy hybrid ensemble pickles~~ (complete — adaptive_macro active on NZDJPY)
+
+---
+
+## Tier 4 — Dynamic SL/TP Calibration and Dashboard Monitoring
+
+### 4A — Scale-out integration and trailing stop
+
+- `paper_trading/scale_out.py` — `ScaleOutEngine` emits `trailing_activated` signal when `trailing_after_tier` (configurable tier index) fills.
+- `paper_trading/dynamic_sltp.py` — `DynamicSLTPEngine` tracks cross-bar best price via `_best_price_seen` and `reset_best_price()` for trailing stop computation.
+- `paper_trading/asset_engine.py` — Stops `_initial_sl`/`_initial_tp` at entry for accurate trailing; wires trailing activation to scale-out fills.
+- `tests/test_dynamic_sltp.py` — 51+ tests for barriers, calibrate, trailing stop, post-entry adjustment, helpers, confidence-based SL adjustment, best-price tracking.
+- `tests/test_scale_out.py` — 35 tests for config building, plan building, tier checks, breakeven activation, trailing activation.
+
+### 4B — Probability-based SL/TP via meta-label confidence
+
+- `paper_trading/dynamic_sltp.py` — `confidence_sl_adjust` config parameter (default 0.0, disabled); `_confidence_sl_factor()` computes dynamic SL tightness from meta-confidence (p=0.5 → 1.0×, p=0.9 → 1.0 - adjust, p=0.1 → 1.0 + adjust/2).
+- `paper_trading/asset_engine.py` — `compute_barriers()` accepts `meta_confidence` param; threads `_last_meta_proba` through for live inference.
+- Strength: preserves meta-label gating (ENTER/BLOCK) while biasing SL width toward confidence.
+
+### 4C — Shadow SL/TP analytics
+
+- `paper_trading/tracer.py` — `shadow_compare_sltp()` logs runtime SL/TP deviations from original label barriers in bps.
+- `paper_trading/shadow_memory.py` — `build_baseline()` tracks SL/TP drift history (mean/max delta, adjustment count).
+- `paper_trading/diagnostics.py` — `build_shadow_report()` accepts `sltp_drift` field for diagnostics output.
+- `paper_trading/asset_engine.py` — Wired into trailing stop activation and post-entry adjustment paths.
+
+### 4D — Dashboard polish
+
+- `paper_trading/asset_engine.py` — Snapshot includes `scale_out_tiers` (fraction, price, filled, fill_price per tier).
+- `paper_trading/dashboard/src/components/ui/SltpGauge.tsx` — Color-coded gauge bars for TP/SL/Flip rates (GREEN/YELLOW/RED thresholds).
+- `paper_trading/dashboard/src/components/TradeOutcomes.tsx` — Gauge column in per-asset trade outcomes table.
+- `paper_trading/dashboard/src/components/AssetCard.tsx` — Scale-out tier progress bar when a position has active scale-out tiers.

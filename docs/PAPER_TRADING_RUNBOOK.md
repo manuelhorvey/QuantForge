@@ -45,7 +45,10 @@ Operational procedures for the paper trading system. This document is for the pe
 **BTC satellite bucket:** 5% AUM cap, vol target 40%, drawdown limit 25%, 5-condition AND gate.
 **SL/TP base values:** sl=0.30 universal (research-optimized via sweep across 3 regimes). Model-validity adjustments: YELLOW → tp × 0.85, RED → tp × 0.70. SL unchanged across validity states.
 **Dynamic SL/TP ATR Calibration:** ATR-based dynamic barriers auto-calibrated at engine startup to EWM vol using `calibration_scale: 1.2` (expanding barriers by 20% to support higher TP rates).
-**Scale-Out Strategy:** For assets with scale-out enabled (EURAUD, NZDJPY, CADJPY, AUDJPY, USDCAD, GBPJPY, USDCHF, GBPUSD, EURCAD, DJI), profit-taking is split into 4 equal tiers (25% at 0.25x / 0.50x / 0.75x / 1.00x of original TP multiplier). The stop-loss is moved to breakeven after Tier 1 is filled (`activate_breakeven_after: 0`).
+**Confidence-based SL adjustment (optional):** When `confidence_sl_adjust > 0.0`, SL width tightens as meta-label confidence increases (p=0.9 → sl × (1.0 - adjust), p=0.1 → sl × (1.0 + adjust/2)). Default 0.0 (disabled).
+**Scale-Out Strategy:** For assets with scale-out enabled (EURAUD, NZDJPY, CADJPY, AUDJPY, USDCAD, GBPJPY, USDCHF, GBPUSD, EURCAD, DJI), profit-taking is split into 4 equal tiers (25% at 0.25x / 0.50x / 0.75x / 1.00x of original TP multiplier). The stop-loss is moved to breakeven after Tier 1 is filled (`activate_breakeven_after: 0`). Optionally, trailing stop activation can be triggered after a configurable tier (`trailing_after_tier`, default disabled) — see `ScaleOutEngine` in `paper_trading/scale_out.py`.
+
+**Dashboard features:** Per-asset scale-out tier progress visualization (filled vs pending tiers shown as color-coded blocks in AssetCard). SL/TP hit rate gauge bars (GREEN/YELLOW/RED thresholds) in the Trade Outcomes table.
 
 ### Halt Parameters (global defaults, overridable per asset)
 
@@ -107,6 +110,8 @@ curl http://127.0.0.1:5000/ping
 - Portfolio drawdown value is not approaching -15% circuit breaker threshold
 - Market status badge shows **OPEN** (green) during trading hours, **CLSD** (yellow) on weekends
 - **LAST** timestamp in the header shows when signals were last refreshed
+- **Scale-out tiers** on open positions: check filled vs pending tier blocks in AssetCard
+- **SL/TP gauge bars** in Trade Outcomes: GREEN TP rate (≥25%), GREEN SL rate (≤50%), GREEN flip rate (≤15%)
 
 ### Log Check
 
