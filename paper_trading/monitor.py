@@ -11,7 +11,6 @@ import warnings
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from paper_trading.engine import LOG_PATH, PaperTradingEngine  # noqa: E402
-from paper_trading.market_hours import is_market_closed  # noqa: E402
 from paper_trading.serve import serve  # noqa: E402
 from quantforge import setup_logging  # noqa: E402
 
@@ -73,9 +72,6 @@ def main():
         interrupted = _shutdown.wait(REFRESH_INTERVAL)
         if interrupted:
             break
-        if is_market_closed():
-            logger.info("Market closed (weekend) — skipping refresh.")
-            continue
         logger.info("Refreshing signals...")
         try:
             engine.run_once()

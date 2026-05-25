@@ -68,13 +68,32 @@ def safe_download(ticker: str, **kwargs) -> pd.DataFrame:
     return pd.DataFrame()
 
 
+def fetch_realtime_price(ticker: str) -> float | None:
+    """Get the absolute latest price for a ticker using fast_info or 1m download."""
+    try:
+        t = yf.Ticker(ticker)
+        lp = t.fast_info.get("lastPrice")
+        if lp is not None and not pd.isna(lp) and lp > 0:
+            return float(lp)
+    except Exception:
+        pass
+
+    try:
+        df = yf.download(ticker, period="1d", interval="1m", progress=False)
+        if not df.empty:
+            df = flatten(df)
+            return float(df["close"].ffill().iloc[-1])
+    except Exception:
+        pass
+    return None
+
+
 def fetch_live(ticker: str, min_days: int = 250) -> pd.DataFrame:
-    end = datetime.now(tz=ET)
-    start = (end - pd.Timedelta(days=min_days)).strftime("%Y-%m-%d")
+    start_dt = datetime.now(tz=ET) - pd.Timedelta(days=min_days)
+    start = start_dt.strftime("%Y-%m-%d")
     df = safe_download(
         ticker,
         start=start,
-        end=end.strftime("%Y-%m-%d"),
         auto_adjust=True,
         progress=False,
     )
@@ -86,12 +105,10 @@ def fetch_live(ticker: str, min_days: int = 250) -> pd.DataFrame:
 
 
 def fetch_history(ticker: str, years: int = 10) -> pd.DataFrame:
-    end = datetime.now(tz=ET)
-    start = f"{end.year - years}-01-01"
+    start = f"{datetime.now(tz=ET).year - years}-01-01"
     df = safe_download(
         ticker,
         start=start,
-        end=end.strftime("%Y-%m-%d"),
         auto_adjust=True,
         progress=False,
     )

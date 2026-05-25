@@ -465,6 +465,15 @@ class AssetEngine:
         _record_exit_outcome(self.name, reason)
 
     def refresh_price(self):
+        # 1. Try absolute real-time price first
+        from paper_trading.data_fetcher import fetch_realtime_price
+
+        lp = fetch_realtime_price(self.ticker)
+        if lp is not None:
+            self.current_price = lp
+            return
+
+        # 2. Fallback to 5d download
         try:
             df = safe_download(self.ticker, period="5d", auto_adjust=True, progress=False)
             if not df.empty:
@@ -896,7 +905,9 @@ class AssetEngine:
 
             # ── Trailing stop check ──────────────────────────────
             if self.config.get("dynamic_sltp", {}).get("enabled", False) and self._entry_vol is not None:
-                data = getattr(self, "price_data", None) or (df if (df := getattr(self, "_price_df", None)) else None)
+                data = getattr(self, "price_data", None)
+                if data is None:
+                    data = getattr(self, "_price_df", None)
                 if data is not None and self.pos_mgr.position is not None:
                     trailing = self._sltp_engine.compute_trailing_stop(
                         side=self.pos_mgr.position.side,
@@ -1055,6 +1066,17 @@ class AssetEngine:
                 }
             )
 
+    @property
+    def mtm_value(self) -> float:
+        """Mark-to-market value of the asset including unrealized P&L."""
+        cv = self.current_value if not pd.isna(self.current_value) else self.initial_capital
+        if not self.pos_mgr.has_position() or self.current_price is None or pd.isna(self.current_price):
+            return cv
+
+        pnl_pct = self.pos_mgr.position_pnl(self.current_price) / 100
+        # MTM = settled value + (settled value * pnl_pct * position_size * exposure_multiplier)
+        return cv * (1 + pnl_pct * self.pos_mgr.position_size * self.pos_mgr.exposure_multiplier)
+
     def get_metrics(self):
         self._ensure_position_synced()
         cv = self.current_value if not pd.isna(self.current_value) else self.initial_capital
@@ -1101,14 +1123,8 @@ class AssetEngine:
                 "tp_mult": self.position.get("tp_mult") if self.position else None,
             }
 
-        pnl_pct = (
-            self._position_pnl(self.current_price) / 100
-            if self.pos_mgr.has_position() and self.current_price is not None and not pd.isna(self.current_price)
-            else 0
-        )
-        pos_size_config = get_config().position_size
-        mtm_value = cv + cv * pnl_pct * pos_size_config
-        mtm_return = (mtm_value - self.initial_capital) / self.initial_capital * 100 if self.initial_capital > 0 else 0
+        mtm_val = self.mtm_value
+        mtm_return = (mtm_val - self.initial_capital) / self.initial_capital * 100 if self.initial_capital > 0 else 0
 
         mean_pl = np.mean([p["prob_long"] for p in self.prob_history]) if self.prob_history else 0
         mean_pl = 0 if pd.isna(mean_pl) else mean_pl
@@ -1163,9 +1179,11 @@ class AssetEngine:
         _psi = self._last_psi_drift
         return {
             "asset": self.name,
-            "current_value": round(self.current_value, 2),
-            "mtm_value": round(mtm_value, 2),
-            "total_return": round(total_return * 100, 2),
+            "current_value": round(mtm_val, 2),
+            "settled_value": round(self.current_value, 2),
+            "mtm_value": round(mtm_val, 2),
+            "total_return": round(mtm_return, 2),
+            "settled_return": round(total_return * 100, 2),
             "mtm_return": round(mtm_return, 2),
             "drawdown": round(dd * 100, 2),
             "profit_factor": round(pf, 2),

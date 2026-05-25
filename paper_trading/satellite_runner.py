@@ -78,4 +78,14 @@ def fetch_btc_price(assets: dict) -> pd.DataFrame | None:
     btc_engine = assets.get("BTC")
     if btc_engine is not None and btc_engine.price_data is not None:
         return btc_engine.price_data
-    return fetch_live("BTC-USD", min_days=100)
+
+    # Independently fetch
+    df = fetch_live("BTC-USD", min_days=100)
+
+    # Patch with real-time price
+    from paper_trading.data_fetcher import fetch_realtime_price
+
+    lp = fetch_realtime_price("BTC-USD")
+    if lp is not None:
+        df.loc[df.index[-1], "close"] = lp
+    return df

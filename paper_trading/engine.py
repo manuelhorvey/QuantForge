@@ -227,6 +227,35 @@ class PaperTradingEngine:
         for name, pos_data in saved_positions.items():
             if name in self.assets:
                 self._restore_saved_position(self.assets[name], pos_data)
+            elif name == "satellite" and self.satellite is not None:
+                self._restore_satellite_position(self.satellite, pos_data)
+
+    def _restore_satellite_position(self, sat, pos_data: dict) -> None:
+        pos_dict = pos_data.get("position")
+        if pos_dict:
+            sat.position_active = True
+            sat.position_side = pos_dict["side"]
+            sat.entry_price = pos_dict["entry"]
+            sat.stop_price = pos_dict["sl"]
+            sat.target_price = pos_dict["tp"]
+            sat.position_entry_date = pos_dict["entry_date"]
+            sat.position_vol = pos_dict["vol"]
+
+        cv = pos_data.get("current_value")
+        if cv is not None:
+            sat.current_value = cv
+        pv = pos_data.get("peak_value")
+        if pv is not None:
+            sat.peak_value = pv
+        ic = pos_data.get("initial_capital")
+        if ic is not None:
+            sat.initial_capital = ic
+        ec = pos_data.get("entry_capital")
+        if ec is not None:
+            sat._entry_capital = ec
+        dr = pos_data.get("daily_returns")
+        if dr is not None:
+            sat._daily_returns = list(dr)
 
     def initialize(self):
         from features.registry import ASSET_LABEL_PARAMS
@@ -268,7 +297,7 @@ class PaperTradingEngine:
                 logger.error("%s: price/pnl refresh failed: %s", name, e)
 
         # Phase 2: Portfolio-level drawdown check
-        mtm = sum(a.current_value if not pd.isna(a.current_value) else a.initial_capital for a in self.assets.values())
+        mtm = sum(a.mtm_value for a in self.assets.values())
         if self.satellite is not None:
             mtm += self.satellite.current_value
         if self.portfolio_peak_value is None or mtm > self.portfolio_peak_value:
@@ -357,6 +386,7 @@ class PaperTradingEngine:
             )
 
             current_price = float(btc_price_data["close"].ffill().iloc[-1])
+            sat.current_price = current_price
             returns_all = ctx.get("returns_all")
             current_return = float(returns_all[-1]) if returns_all is not None and len(returns_all) >= 1 else 0.0
 
@@ -486,9 +516,7 @@ class PaperTradingEngine:
             return
 
         # Compute governance-adjusted vols per asset
-        total_value = sum(
-            a.current_value if not pd.isna(a.current_value) else a.initial_capital for a in self.assets.values()
-        )
+        total_value = sum(a.mtm_value for a in self.assets.values())
 
         adjusted = returns.copy()
         for col in adjusted.columns:
@@ -570,9 +598,7 @@ class PaperTradingEngine:
                 "narrative_stale": asset._narrative_stale,
                 "regime_geometry": asset.regime_geometry,
             }
-        total_value = sum(
-            a.current_value if not pd.isna(a.current_value) else a.initial_capital for a in self.assets.values()
-        )
+        total_value = sum(a.mtm_value for a in self.assets.values())
         rp_weights = {}
         rp_allocations = {}
         if self._rebalance_weights:
@@ -599,30 +625,34 @@ class PaperTradingEngine:
             if any_halted
             else (ExecutionState.PAUSED if (overall_validity / n) < 0.5 else ExecutionState.ACTIVE)
         )
-        realized_total = sum(
-            a.current_value if not pd.isna(a.current_value) else a.initial_capital for a in self.assets.values()
-        )
-        tc = sum(a.initial_capital for a in self.assets.values())
+        # tc is the theoretical full portfolio capital (Core + Satellite)
+        tc = CONFIG.get("capital", sum(a.initial_capital for a in self.assets.values()))
+
+        # mtm_total = sum of all assets MTM + satellite MTM
+        mtm_total = sum(a.mtm_value for a in self.assets.values())
+        sat_unrealized = 0.0
+        if self.satellite is not None:
+            mtm_total += self.satellite.current_value
+            if self.satellite.position_active and self.satellite.entry_price:
+                # Unrealized for satellite = current_value - entry_capital
+                entry_cap = getattr(self.satellite, "_entry_capital", self.satellite.max_capital)
+                sat_unrealized = self.satellite.current_value - entry_cap
+
         satellite_value = self.satellite.current_value if self.satellite is not None else 0.0
-        sv = self.satellite.current_value if self.satellite is not None else 0.0
-        satellite_pct = sv / max(CONFIG["capital"], 1) * 100
-        realized_total += satellite_value
+        satellite_pct = satellite_value / max(tc, 1) * 100
 
-        unrealized_dollars = 0
-        open_positions = 0
-        closed_trades = 0
-        for a in self.assets.values():
-            closed_trades += len(a.trade_log)
-            if a.pos_mgr.has_position() and a.current_price is not None and not pd.isna(a.current_price):
-                open_positions += 1
-                pnl_pct = a._position_pnl(a.current_price)
-                if not pd.isna(pnl_pct):
-                    cv = a.current_value if not pd.isna(a.current_value) else a.initial_capital
-                    unrealized_dollars += cv * (pnl_pct / 100) * CONFIG["position_size"]
+        unrealized_dollars = (
+            sum(
+                (a.mtm_value - (a.current_value if not pd.isna(a.current_value) else a.initial_capital))
+                for a in self.assets.values()
+            )
+            + sat_unrealized
+        )
 
-        mtm_total = realized_total + unrealized_dollars
+        realized_total = mtm_total - unrealized_dollars
+        realized_return = (realized_total - tc) / tc * 100 if tc > 0 else 0.0
+
         mtm_return = (mtm_total - tc) / tc * 100 if tc > 0 else 0
-        realized_return = (realized_total - satellite_value - tc) / tc * 100 if tc > 0 else 0
         delta = datetime.now(tz=ET) - self.start_date
 
         # Track portfolio peak for drawdown
@@ -647,8 +677,8 @@ class PaperTradingEngine:
             "capital": CONFIG["capital"],
             "allocations": {n: a.allocation for n, a in self.assets.items()},
             "deployment_cleared": True,
-            "open_positions": open_positions,
-            "closed_trades": closed_trades,
+            "open_positions": sum(a.pos_mgr.has_position() for a in self.assets.values()),
+            "closed_trades": sum(len(a.trade_log) for a in self.assets.values()),
             "execution_state": exec_state.value,
             "average_validity_exposure": round(overall_validity / n, 4),
             "satellite_allocation_pct": round(satellite_pct, 2),
@@ -666,6 +696,7 @@ class PaperTradingEngine:
             "gate_open": s.gate_open,
             "gate_reasons": s.gate_reasons,
             "current_value": s.current_value,
+            "current_price": s.current_price,
             "total_return_pct": s.total_return_pct,
             "sharpe_contribution": s.sharpe_contribution,
             "position_active": s.position_active,
@@ -717,6 +748,23 @@ class PaperTradingEngine:
                     "trade_log": asset.pos_mgr.trade_log,
                     "prob_history": asset.prob_history,
                 }
+        if self.satellite is not None and self.satellite.position_active:
+            sat = self.satellite
+            snapshot.open_positions["satellite"] = {
+                "position": {
+                    "side": sat.position_side,
+                    "entry": sat.entry_price,
+                    "sl": sat.stop_price,
+                    "tp": sat.target_price,
+                    "entry_date": getattr(sat, "position_entry_date", str(datetime.now(tz=ET).date())),
+                    "vol": getattr(sat, "position_vol", 0.02),
+                },
+                "current_value": sat.current_value,
+                "peak_value": sat.peak_value,
+                "initial_capital": sat.initial_capital,
+                "entry_capital": getattr(sat, "_entry_capital", sat.max_capital),
+                "daily_returns": getattr(sat, "_daily_returns", []),
+            }
         self._append_equity_history(state)
         self.state_store.save_snapshot(snapshot)
         self._capture_simulation_snapshot(state)
@@ -758,13 +806,20 @@ class PaperTradingEngine:
         p = state.get("portfolio", {})
         total_value = p.get("total_value", 0)
         total_return = p.get("total_return", 0)
-        gross = sum(a.get("metrics", {}).get("current_value", 0) or 0 for a in state.get("assets", {}).values())
+
+        # Gross exposure should use MTM values
+        gross = sum(
+            a.get("metrics", {}).get("mtm_value", a.get("metrics", {}).get("current_value", 0))
+            for a in state.get("assets", {}).values()
+        )
+
         net_side = sum(
             (a.get("metrics", {}).get("position") or {}).get("side") == "long" for a in state.get("assets", {}).values()
         )
         net = (net_side / len(state.get("assets", {}))) * 2 - 1 if state.get("assets") else 0
-        dd_vals = [a.get("metrics", {}).get("drawdown", 0) or 0 for a in state.get("assets", {}).values()]
-        drawdown = min(dd_vals) if dd_vals else 0
+
+        # Portfolio drawdown from summary
+        drawdown = p.get("drawdown", 0.0)
 
         record = {
             "timestamp": datetime.now(tz=ET).isoformat(),
@@ -774,7 +829,8 @@ class PaperTradingEngine:
             "gross_exposure": round(gross / total_value, 4) if total_value else 0,
             "net_exposure": round(net, 4),
             "assets": {
-                name: (a.get("metrics", {}).get("current_value") or 0) for name, a in state.get("assets", {}).items()
+                name: (a.get("metrics", {}).get("mtm_value") or a.get("metrics", {}).get("current_value") or 0)
+                for name, a in state.get("assets", {}).items()
             },
         }
         self.state_store.append_equity_history(record)

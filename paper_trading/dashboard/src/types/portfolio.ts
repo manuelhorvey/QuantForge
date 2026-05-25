@@ -153,6 +153,7 @@ export interface SatelliteState {
   gate_open: boolean
   gate_reasons: string[]
   current_value: number
+  current_price: number | null
   total_return_pct: number
   sharpe_contribution: number | null
   position_active: boolean

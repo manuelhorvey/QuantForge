@@ -14,8 +14,10 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass, field
+from datetime import datetime
 
 import numpy as np
+import pytz
 
 logger = logging.getLogger("quantforge.satellite")
 
@@ -75,6 +77,7 @@ class SatelliteSnapshot:
     delta_sharpe_63d: float
     position_active: bool
     drawdown_pct: float
+    current_price: float | None = None
     entry_price: float | None = None
     stop_price: float | None = None
     target_price: float | None = None
@@ -106,6 +109,7 @@ class HighVolSatellite:
         self.current_value = 0.0
         self.peak_value = 0.0
         self.initial_capital = 0.0
+        self.current_price: float | None = None
 
         # Position
         self.position_active = False
@@ -255,6 +259,8 @@ class HighVolSatellite:
         self.current_value = self.max_capital
         self._entry_capital = self.current_value
         self.entry_price = entry_price
+        self.position_entry_date = str(datetime.now(pytz.timezone("US/Eastern")).date())
+        self.position_vol = v
         self.stop_price = entry_price * (1.0 - v * self.config.sl_mult)
         self.target_price = entry_price * (1.0 + v * self.config.tp_mult)
         self._last_exit_reason = None
@@ -406,7 +412,7 @@ class HighVolSatellite:
         gate = self._last_gate
         total_return = (self.current_value / self.initial_capital - 1.0) * 100 if self.initial_capital > 0 else 0.0
         return SatelliteSnapshot(
-            allocation_pct=round(self.current_value / max(1.0, self.total_aum) * 100, 2),
+            allocation_pct=round(self.current_value / max(1.0, self.total_aum), 4),
             gate_open=gate.allowed if gate else False,
             gate_reasons=gate.reasons_blocked if gate else ["gate never evaluated"],
             current_value=round(self.current_value, 2),
@@ -415,6 +421,7 @@ class HighVolSatellite:
             delta_sharpe_63d=0.0,  # computed externally with core context
             position_active=self.position_active,
             drawdown_pct=round(self.drawdown_pct * 100, 2),
+            current_price=self.current_price,
             entry_price=self.entry_price,
             stop_price=self.stop_price,
             target_price=self.target_price,

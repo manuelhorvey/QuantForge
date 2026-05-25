@@ -24,7 +24,7 @@ export default function SatelliteCard() {
 
   return (
     <div className="panel rounded-lg p-3 panel-hover">
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">
           <Satellite className="w-3.5 h-3.5 text-gov-amber" strokeWidth={1.5} />
           <span className="text-2xs text-tertiary font-medium tracking-wide">BTC SATELLITE</span>
@@ -33,6 +33,14 @@ export default function SatelliteCard() {
           {sat.gate_open ? 'GATE OPEN' : 'GATE CLOSED'}
         </span>
       </div>
+
+      {sat.current_price && (
+        <div className="flex justify-center mb-2.5">
+          <span className="text-[13px] font-mono text-primary font-bold">
+            ${sat.current_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] mb-2">
         <div className="flex items-baseline justify-between">
