@@ -55,7 +55,7 @@ class PositionManager:
         pnl = self.current_value * ret * self.position_size * self.exposure_multiplier * fraction
 
         try:
-            bars = max(1, (pd.Timestamp(exit_date) - pd.Timestamp(self.position.entry_date)).days)
+            bars = max(0, (pd.Timestamp(exit_date) - pd.Timestamp(self.position.entry_date)).days)
         except Exception:
             bars = 1
 
