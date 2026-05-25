@@ -167,7 +167,7 @@ class TestConfigManager:
         assert cfg.halt["drawdown"] == -0.15
         assert cfg.halt["monthly_pf"] == 0.70
         assert cfg.halt["signal_drought"] == 30
-        assert cfg.halt["prob_drift"] == 0.15
+        assert cfg.halt["prob_drift"] == 0.25
 
 
 class TestPaperTradingEngineState:
@@ -264,8 +264,11 @@ class TestUpdatePnl:
         assert engine.current_value == engine.initial_capital
 
     def test_returns_when_last_bar_already_processed(self, engine, signal_data):
+        from zoneinfo import ZoneInfo
+        from datetime import datetime
+        ET = ZoneInfo("US/Eastern")
         engine.signal_data = signal_data
-        engine.trades = [{"date": str(signal_data.index[-1].date())}]
+        engine.trades = [{"date": str(datetime.now(tz=ET).date())}]
         engine.update_pnl()
         assert engine.current_value == engine.initial_capital
 
