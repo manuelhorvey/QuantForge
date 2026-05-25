@@ -159,7 +159,8 @@ def serve(port=DEFAULT_PORT, shutdown_event=None):
             self.send_header("Cache-Control", "no-cache")
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
-            self.wfile.write(body)
+            if getattr(self, "_send_body", True):
+                self.wfile.write(body)
 
         def _send_text(self, data: str, status: int = 200) -> None:
             self.send_response(status)
@@ -167,7 +168,8 @@ def serve(port=DEFAULT_PORT, shutdown_event=None):
             self.send_header("Cache-Control", "no-cache")
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
-            self.wfile.write(data.encode("utf-8"))
+            if getattr(self, "_send_body", True):
+                self.wfile.write(data.encode("utf-8"))
 
         @staticmethod
         def _parse_query(query_string: str) -> dict[str, str]:
@@ -178,6 +180,10 @@ def serve(port=DEFAULT_PORT, shutdown_event=None):
                         k, v = part.split("=", 1)
                         params[k] = v
             return params
+
+        def do_HEAD(self):
+            self._send_body = False
+            self.do_GET()
 
         def do_GET(self):
             qs = self.path.split("?", 1)
