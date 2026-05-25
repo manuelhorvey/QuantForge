@@ -7,8 +7,6 @@ import pandas as pd
 import pytz
 from dotenv import load_dotenv
 
-load_dotenv()
-
 from features.fxstreet_fetcher import (
     confirm_pending_narrative,
     get_narrative_status,
@@ -43,6 +41,8 @@ from paper_trading.state_store import _SKIP_JOURNAL, EngineSnapshot, StateStore,
 from shared.execution_config import build_execution_configs
 from shared.registry import StrategyRegistry
 from shared.sizing import compute_equal_risk_weights
+
+load_dotenv()
 
 
 class ExecutionState(Enum):
