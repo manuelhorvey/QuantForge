@@ -92,6 +92,11 @@ class StateStore:
         df = pd.DataFrame([trade])
         if os.path.exists(self.trade_journal_path):
             existing = pd.read_parquet(self.trade_journal_path)
+            for col in ("entry_date", "exit_date"):
+                if col in existing.columns:
+                    existing[col] = existing[col].astype(str)
+                if col in df.columns:
+                    df[col] = df[col].astype(str)
             df = pd.concat([existing, df], ignore_index=True)
         df.to_parquet(self.trade_journal_path)
 
