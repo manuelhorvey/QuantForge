@@ -4,7 +4,7 @@
 ![Status](https://img.shields.io/badge/status-research%20system%20%7C%20paper%20trading-green)
 ![WalkForward](https://img.shields.io/badge/walk--forward-32%20assets%20validated-success)
 ![Portfolio](https://img.shields.io/badge/portfolio-14%20assets%20%7C%20BTC%20satellite-blue)
-![Coverage](https://img.shields.io/badge/coverage-41%25-yellow)
+[![codecov](https://codecov.io/gh/manuelhorvey/QuantForge/graph/badge.svg)](https://codecov.io/gh/manuelhorvey/QuantForge)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 ---
