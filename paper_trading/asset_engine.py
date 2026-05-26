@@ -708,7 +708,7 @@ class AssetEngine:
             score += psi_p
 
         score = max(0.0, min(1.0, score))
-        result = self.validity_sm.transition(score, pd.Timestamp.now())
+        result = self.validity_sm.transition(score, pd.Timestamp.now(tz=ET))
         result["feature_stability"] = {
             "jaccard_top_10": self._last_stability.jaccard_top_10 if self._last_stability else None,
             "spearman_rank_corr": self._last_stability.spearman_rank_corr if self._last_stability else None,

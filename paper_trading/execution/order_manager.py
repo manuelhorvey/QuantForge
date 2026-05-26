@@ -1,6 +1,10 @@
 from datetime import datetime
 
+import pytz
+
 from paper_trading.execution.broker_interface import BrokerInterface, Order
+
+ET = pytz.timezone("US/Eastern")
 
 
 class OrderManager:
@@ -18,7 +22,7 @@ class OrderManager:
             side=side,
             quantity=quantity,
             order_type="market",
-            timestamp=datetime.now(),
+            timestamp=datetime.now(tz=ET),
         )
         if fill_price is None:
             order_id = self.broker.place_order(order)
@@ -36,7 +40,7 @@ class OrderManager:
             quantity=quantity,
             order_type="limit",
             limit_price=limit_price,
-            timestamp=datetime.now(),
+            timestamp=datetime.now(tz=ET),
         )
         order_id = self.broker.place_order(order)
         order.order_id = order_id

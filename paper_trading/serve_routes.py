@@ -1,7 +1,9 @@
-import datetime
 import json
 import os
 from dataclasses import asdict
+from datetime import datetime
+
+import pytz
 
 from features.fxstreet_fetcher import confirm_pending_narrative, get_narrative_status
 from paper_trading.config_manager import get_config
@@ -19,6 +21,8 @@ from paper_trading.serve_common import (
     get_vol_baselines,
 )
 from paper_trading.weekly_review import compute_weekly_review
+
+ET = pytz.timezone("US/Eastern")
 
 
 def handle_state(path: str, query: dict) -> str:
@@ -373,7 +377,7 @@ def handle_narrative_confirm(body: bytes) -> tuple[str, int]:
 
 
 def handle_weekly_review_acknowledge(body: bytes) -> tuple[str, int]:
-    now = datetime.datetime.now().isoformat()
+    now = datetime.now(tz=ET).isoformat()
     entry = {"acknowledged_at": now}
     rlp = _STORE.review_log_path
     existing = []

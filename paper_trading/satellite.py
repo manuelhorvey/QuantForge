@@ -19,6 +19,8 @@ from datetime import datetime
 import numpy as np
 import pytz
 
+ET = pytz.timezone("US/Eastern")
+
 logger = logging.getLogger("quantforge.satellite")
 
 
@@ -259,7 +261,7 @@ class HighVolSatellite:
         self.current_value = self.max_capital
         self._entry_capital = self.current_value
         self.entry_price = entry_price
-        self.position_entry_date = str(datetime.now(pytz.timezone("US/Eastern")).date())
+        self.position_entry_date = str(datetime.now(tz=ET).date())
         self.position_vol = v
         self.stop_price = entry_price * (1.0 - v * self.config.sl_mult)
         self.target_price = entry_price * (1.0 + v * self.config.tp_mult)

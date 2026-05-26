@@ -1,19 +1,22 @@
-import datetime
 import json
 import logging
 from dataclasses import asdict
+from datetime import date, datetime, timedelta
 
 import pandas as pd
+import pytz
 
 from paper_trading.state_store import StateStore
+
+ET = pytz.timezone("US/Eastern")
 
 logger = logging.getLogger("quantforge.weekly_review")
 
 WINDOW_DAYS = 7
 
 
-def _week_label(d: datetime.date) -> str:
-    start = d - datetime.timedelta(days=WINDOW_DAYS)
+def _week_label(d: date) -> str:
+    start = d - timedelta(days=WINDOW_DAYS)
     return f"{start.isoformat()} – {d.isoformat()}"
 
 
@@ -116,10 +119,10 @@ def _per_asset_metrics(df: pd.DataFrame) -> list[dict]:
     return rows
 
 
-def _boundary_dates() -> tuple[datetime.date, datetime.date, datetime.date]:
-    today = datetime.date.today()
-    week_start = today - datetime.timedelta(days=WINDOW_DAYS)
-    prior_week_start = week_start - datetime.timedelta(days=WINDOW_DAYS)
+def _boundary_dates() -> tuple[date, date, date]:
+    today = date.today()
+    week_start = today - timedelta(days=WINDOW_DAYS)
+    prior_week_start = week_start - timedelta(days=WINDOW_DAYS)
     return prior_week_start, week_start, today
 
 
@@ -181,7 +184,7 @@ def _regime_correlation(df: pd.DataFrame, state: dict) -> list[dict]:
 
 
 def compute_weekly_review(store: StateStore) -> dict:
-    today = datetime.date.today()
+    today = date.today()
     prior_week_start, week_start, _ = _boundary_dates()
     week_start_str = week_start.isoformat()
     prior_week_start_str = prior_week_start.isoformat()
@@ -221,7 +224,7 @@ def compute_weekly_review(store: StateStore) -> dict:
 
     result = {
         "week_label": _week_label(today),
-        "generated_at": datetime.datetime.now().isoformat(),
+        "generated_at": datetime.now(tz=ET).isoformat(),
         "summary": summary,
         "by_asset": _per_asset_metrics(this_week_df),
         "top_winners": _top_trades(this_week_df, "return", 3, ascending=False),

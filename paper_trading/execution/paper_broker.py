@@ -2,6 +2,7 @@ import logging
 from datetime import datetime
 
 import numpy as np
+import pytz
 import yfinance as yf
 
 from paper_trading.execution.broker_interface import AccountSummary, BrokerInterface, Order, Position
@@ -13,6 +14,8 @@ from shared.execution_config import (
 )
 
 logger = logging.getLogger("quantforge.paper_broker")
+
+ET = pytz.timezone("US/Eastern")
 
 
 class PaperBroker(BrokerInterface):
@@ -97,7 +100,7 @@ class PaperBroker(BrokerInterface):
         self._next_order_id += 1
         order.order_id = order_id
         order.status = "filled"
-        order.timestamp = datetime.now()
+        order.timestamp = datetime.now(tz=ET)
         self._orders[order_id] = order
         return order_id
 

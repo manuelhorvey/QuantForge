@@ -9,8 +9,11 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
+import pytz
 
 logger = logging.getLogger("quantforge.state_store")
+
+ET = pytz.timezone("US/Eastern")
 
 SCHEMA_VERSION = "1.0.0"
 
@@ -219,7 +222,7 @@ class StateStore:
                     "profit_factor": round(profit_total / loss_total, 4) if loss_total > 0 else None,
                 },
                 "by_asset": by_asset,
-                "updated_at": datetime.now().isoformat(),
+                "updated_at": datetime.now(tz=ET).isoformat(),
             }
 
             with open(self.trade_outcomes_path, "w") as f:
