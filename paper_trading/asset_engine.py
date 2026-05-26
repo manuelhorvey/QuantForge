@@ -260,6 +260,23 @@ class AssetEngine:
     def _build_features(self, df, ref, macro):
         return build_features(df, macro, ref, self.contract)
 
+    def _effective_capital(self) -> float:
+        if self.initial_capital <= 0:
+            return self.capital_base
+        growth = self.current_value / self.initial_capital
+        return self.capital_base * growth
+
+    def _composite_size_scalar(self, extra_scalar: float = 1.0) -> float:
+        return (
+            self.pos_mgr.position_size
+            * self.pos_mgr.exposure_multiplier
+            * extra_scalar
+            * max(self._narrative_size_scalar * self._liquidity_size_scalar, self._MIN_SIZE_SCALAR)
+        )
+
+    def _compute_notional(self, extra_scalar: float = 1.0) -> float:
+        return self._effective_capital() * self._composite_size_scalar(extra_scalar)
+
     def _sizing_config(self, close: pd.Series, position_size_scalar: float = 1.0) -> dict:
         cfg = dict(self.config)
         if self.execution_bridge is None:
@@ -267,17 +284,7 @@ class AssetEngine:
         price = float(close.iloc[-1]) if len(close) else 0.0
         if price <= 0:
             return cfg
-        effective_capital = self.capital_base
-        if self.initial_capital > 0:
-            growth = self.current_value / self.initial_capital
-            effective_capital = self.capital_base * growth
-        notional = (
-            effective_capital
-            * self.pos_mgr.position_size
-            * self.pos_mgr.exposure_multiplier
-            * position_size_scalar
-            * max(self._narrative_size_scalar * self._liquidity_size_scalar, self._MIN_SIZE_SCALAR)
-        )
+        notional = self._compute_notional(position_size_scalar)
         cfg["impact_bps"] = self.execution_bridge.estimate_impact_bps(self.ticker, notional)
         return cfg
 
@@ -366,16 +373,7 @@ class AssetEngine:
         fill_price = entry_price
         if self.execution_bridge is not None:
             broker_side = "buy" if side == "long" else "sell"
-            effective_capital = self.capital_base
-            if self.initial_capital > 0:
-                growth = self.current_value / self.initial_capital
-                effective_capital = self.capital_base * growth
-            notional = (
-                effective_capital
-                * self.pos_mgr.position_size
-                * self.pos_mgr.exposure_multiplier
-                * max(self._narrative_size_scalar * self._liquidity_size_scalar, self._MIN_SIZE_SCALAR)
-            )
+            notional = self._compute_notional()
             qty = max(notional / entry_price, 1e-6)
             fill_price, _, _ = self.execution_bridge.fill_price(self.ticker, broker_side, qty, entry_price)
 
