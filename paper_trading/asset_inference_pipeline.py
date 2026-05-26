@@ -56,7 +56,9 @@ class AssetInferencePipeline:
         asset.price_data = df
         asset._refresh_liquidity(df)
         df["close"] = df["close"].ffill()
-        ref = fetch_ref("SPY")
+        ref = None
+        if getattr(asset.contract, "vs_spy_windows", ()):
+            ref = fetch_ref("SPY")
         macro = asset._feature_pipeline.macro_derived(
             pd.read_parquet(os.path.join(BASE, "data/processed/macro_factors.parquet"))
         )

@@ -545,7 +545,7 @@ class PaperTradingEngine:
                 continue
             asset = self.assets[col]
             combined_size = max(
-                asset._narrative_size_scalar * asset._liquidity_size_scalar,
+                asset.governance._narrative_size_scalar * asset.governance._liquidity_size_scalar,
                 AssetEngine._MIN_SIZE_SCALAR,
             )
             vol_scale = 1.0 / combined_size if combined_size > 0 else 1.0
@@ -610,13 +610,13 @@ class PaperTradingEngine:
                 "meta_decision": meta_inf.get("meta_decision"),
                 "feature_stability_jaccard": feat_stab.get("jaccard_top_10"),
                 "feature_stability_spearman": feat_stab.get("spearman_rank_corr"),
-                "liquidity_regime": asset._liquidity_regime,
-                "liquidity_sl_mult": asset._liquidity_sl_mult,
-                "liquidity_size_scalar": asset._liquidity_size_scalar,
-                "narrative_sl_mult": asset._narrative_sl_mult,
-                "narrative_size_scalar": asset._narrative_size_scalar,
-                "narrative_regime": asset._narrative_active.overall_regime if asset._narrative_active else None,
-                "narrative_stale": asset._narrative_stale,
+                "liquidity_regime": asset.governance._liquidity_regime,
+                "liquidity_sl_mult": asset.governance._liquidity_sl_mult,
+                "liquidity_size_scalar": asset.governance._liquidity_size_scalar,
+                "narrative_sl_mult": asset.governance._narrative_sl_mult,
+                "narrative_size_scalar": asset.governance._narrative_size_scalar,
+                "narrative_regime": asset.governance._narrative_active.overall_regime if asset.governance._narrative_active else None,
+                "narrative_stale": asset.governance._narrative_stale,
                 "regime_geometry": asset.regime_geometry,
                 "stop_out_last_side": getattr(asset, "_last_stop_out_side", None),
                 "stop_out_last_date": (str(d) if (d := getattr(asset, "_last_stop_out_date", None)) else None),
