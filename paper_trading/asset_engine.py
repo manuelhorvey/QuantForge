@@ -176,41 +176,32 @@ class AssetEngine:
         self._churn_ratio_threshold = self.config.get("churn_ratio_threshold", 0.50)
         self._initial_settlement_done: bool = False
 
+    def _apply_narrative_scalars(self, narr) -> None:
+        stale = is_narrative_stale(narr.week_start)
+        cfg = self.config.get("narrative_config", {})
+        scalars = _narrative_scalars(
+            narr,
+            geopol_sl_widen_pct=cfg.get("geopol_sl_widen_pct", 10.0),
+            risk_off_size_reduce_pct=cfg.get("risk_off_size_reduce_pct", 20.0),
+            min_confidence=cfg.get("min_confidence", 0.6),
+            stale=stale,
+        )
+        self._narrative_active = narr
+        self._narrative_stale = stale
+        self._narrative_sl_mult = scalars["sl_mult"]
+        self._narrative_size_scalar = scalars["size_scalar"]
+
     def _load_narrative_state(self) -> None:
         try:
             narr = get_active_narrative()
             if narr is not None:
-                stale = is_narrative_stale(narr.week_start)
-                cfg = self.config.get("narrative_config", {})
-                scalars = _narrative_scalars(
-                    narr,
-                    geopol_sl_widen_pct=cfg.get("geopol_sl_widen_pct", 10.0),
-                    risk_off_size_reduce_pct=cfg.get("risk_off_size_reduce_pct", 20.0),
-                    min_confidence=cfg.get("min_confidence", 0.6),
-                    stale=stale,
-                )
-                self._narrative_active = narr
-                self._narrative_stale = stale
-                self._narrative_sl_mult = scalars["sl_mult"]
-                self._narrative_size_scalar = scalars["size_scalar"]
+                self._apply_narrative_scalars(narr)
         except Exception as e:
             logger.debug("%s: no active narrative: %s", self.name, e)
 
     def set_narrative_state(self, narr) -> None:
         try:
-            stale = is_narrative_stale(narr.week_start)
-            cfg = self.config.get("narrative_config", {})
-            scalars = _narrative_scalars(
-                narr,
-                geopol_sl_widen_pct=cfg.get("geopol_sl_widen_pct", 10.0),
-                risk_off_size_reduce_pct=cfg.get("risk_off_size_reduce_pct", 20.0),
-                min_confidence=cfg.get("min_confidence", 0.6),
-                stale=stale,
-            )
-            self._narrative_active = narr
-            self._narrative_stale = stale
-            self._narrative_sl_mult = scalars["sl_mult"]
-            self._narrative_size_scalar = scalars["size_scalar"]
+            self._apply_narrative_scalars(narr)
         except Exception as e:
             logger.error("%s: failed to set narrative state: %s", self.name, e)
 
