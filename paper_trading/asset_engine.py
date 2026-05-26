@@ -862,6 +862,9 @@ class AssetEngine:
                 "close_price": decision.close_price,
             }
         )
+        MAX_PROB_HISTORY = 1000
+        if len(self.prob_history) > MAX_PROB_HISTORY:
+            self.prob_history = self.prob_history[-MAX_PROB_HISTORY:]
         self._log_confidence_buckets()
 
     def _decision_to_dict(self, decision: TradeDecision):
