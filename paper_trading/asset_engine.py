@@ -10,16 +10,6 @@ import xgboost as xgb
 
 from features.builder import build_features, compute_macro_derived, model_path
 from features.contract import validate_no_cross_asset_leakage
-from features.fxstreet_fetcher import get_active_narrative, is_narrative_stale
-from features.liquidity_regime import (
-    classify_liquidity_regime,
-    compute_liquidity_features,
-)
-from features.liquidity_regime import (
-    liquidity_governance_scalars as _liquidity_scalars,
-)
-from features.macro_narrative import narrative_governance_scalars as _narrative_scalars
-from features.regime_features import generate_regime_features
 from features.registry import FEATURE_REGISTRY
 from labels.meta_labels import MetaLabelModel
 from monitoring.importance_tracker import ImportanceStore, StabilityResult
@@ -29,27 +19,21 @@ from monitoring.validity_state_machine import (
 )
 from paper_trading import diagnostics as diag
 from paper_trading import wrappers as _w
+from paper_trading.asset_governance import AssetGovernance
+from paper_trading.asset_inference_pipeline import AssetInferencePipeline
 from paper_trading.config_manager import get_config
-from paper_trading.data_fetcher import fetch_history, fetch_live, fetch_ref, flatten, safe_download
+from paper_trading.data_fetcher import fetch_history, fetch_ref, flatten, safe_download
 from paper_trading.decision import PositionIntent, TradeDecision
-from paper_trading.drift_scoring import get_shadow_intelligence as _get_drift
 from paper_trading.dynamic_sltp import build_dynamic_sltp_from_config
 from paper_trading.position_manager import PositionManager
 from paper_trading.regime_classifier import RegimeClassifier
-from paper_trading.risk_governance import evaluate as _risk_evaluate
 from paper_trading.risk_governance import record_trade_outcome as _record_exit_outcome
 from paper_trading.scale_out import build_scale_out_from_config
-from paper_trading.shadow_actions import compute_shadow_actions as _compute_shadow
-from paper_trading.shadow_feedback import record_shadow_feedback as _record_feedback
-from paper_trading.shadow_learning import compile_shadow_learning as _compile_learning
 from paper_trading.shadow_memory import store_event as _shadow_store
 from paper_trading.state_store import _SKIP_JOURNAL, StateStore
 from paper_trading.tracer import (
     shadow_compare_pnl,
-    shadow_compare_signal,
-    shadow_compare_sizing,
     shadow_compare_sltp,
-    trace_decision,
     trace_diagnostic_report,
 )
 from shared.registry import StrategyRegistry
@@ -157,17 +141,9 @@ class AssetEngine:
         self._current_window_train_end = ""
         self._last_stability: StabilityResult | None = None
         self._last_psi_drift: PSISnapshot | None = None
-        self._narrative_active = None
-        self._narrative_stale = False
-        self._narrative_sl_mult = 1.0
-        self._narrative_size_scalar = 1.0
-        self._load_narrative_state()
-        self._liquidity_regime = "NORMAL"
-        self._liquidity_sl_mult = 1.0
-        self._liquidity_size_scalar = 1.0
-        self._liquidity_halted = False
-        self._liquidity_features: dict | None = None
-        self._load_liquidity_state()
+        self.governance = AssetGovernance(self.name, self.config, self.halt_config)
+        self.governance.load_narrative_state()
+        self.governance.load_liquidity_state(getattr(self, "price_data", None))
         self._last_stop_out_side: str | None = None
         self._last_stop_out_date: pd.Timestamp | None = None
         self._last_stop_out_price: float | None = None
@@ -175,87 +151,13 @@ class AssetEngine:
         self._regime_adjusted_entry: bool = False
         self._churn_ratio_threshold = self.config.get("churn_ratio_threshold", 0.50)
         self._initial_settlement_done: bool = False
-
-    def _apply_narrative_scalars(self, narr) -> None:
-        stale = is_narrative_stale(narr.week_start)
-        cfg = self.config.get("narrative_config", {})
-        scalars = _narrative_scalars(
-            narr,
-            geopol_sl_widen_pct=cfg.get("geopol_sl_widen_pct", 10.0),
-            risk_off_size_reduce_pct=cfg.get("risk_off_size_reduce_pct", 20.0),
-            min_confidence=cfg.get("min_confidence", 0.6),
-            stale=stale,
-        )
-        self._narrative_active = narr
-        self._narrative_stale = stale
-        self._narrative_sl_mult = scalars["sl_mult"]
-        self._narrative_size_scalar = scalars["size_scalar"]
-
-    def _load_narrative_state(self) -> None:
-        try:
-            narr = get_active_narrative()
-            if narr is not None:
-                self._apply_narrative_scalars(narr)
-        except Exception as e:
-            logger.debug("%s: no active narrative: %s", self.name, e)
+        self._inference = AssetInferencePipeline(self)
 
     def set_narrative_state(self, narr) -> None:
-        try:
-            self._apply_narrative_scalars(narr)
-        except Exception as e:
-            logger.error("%s: failed to set narrative state: %s", self.name, e)
-
-    def _load_liquidity_state(self) -> None:
-        if not self.config.get("liquidity_config", {}).get("enabled", True):
-            return
-        try:
-            if self.price_data is not None and len(self.price_data) > 22:
-                self._refresh_liquidity(self.price_data)
-        except Exception as e:
-            logger.debug("%s: no liquidity state on init: %s", self.name, e)
+        self.governance.set_narrative_state(narr)
 
     def _refresh_liquidity(self, df) -> None:
-        cfg = self.config.get("liquidity_config", {})
-        if not cfg.get("enabled", True):
-            self._liquidity_regime = "NORMAL"
-            self._liquidity_sl_mult = 1.0
-            self._liquidity_size_scalar = 1.0
-            self._liquidity_halted = False
-            self._liquidity_features = None
-            return
-        window = cfg.get("regime_window", 21)
-        features = compute_liquidity_features(df, window=window)
-        self._liquidity_features = features
-        regime = classify_liquidity_regime(
-            features,
-            vol_thin_threshold=cfg.get("volume_z_thin_threshold", -1.5),
-            vol_stressed_threshold=cfg.get("volume_z_stressed_threshold", -2.5),
-            amihud_high_threshold=cfg.get("amihud_high_threshold", 1.5),
-            amihud_stressed_threshold=cfg.get("amihud_stressed_threshold", 3.0),
-        )
-        self._liquidity_regime = regime
-        scalars = _liquidity_scalars(
-            regime,
-            features=features,
-            thin_sl_widen_pct=cfg.get("thin_sl_widen_pct", 15.0),
-            thin_size_reduce_pct=cfg.get("thin_size_reduce_pct", 15.0),
-            stressed_sl_widen_pct=cfg.get("stressed_sl_widen_pct", 30.0),
-            stressed_size_reduce_pct=cfg.get("stressed_size_reduce_pct", 30.0),
-        )
-        self._liquidity_sl_mult = scalars["sl_mult"]
-        self._liquidity_size_scalar = scalars["size_scalar"]
-        self._liquidity_halted = scalars["halted"]
-        if regime != "NORMAL":
-            logger.info(
-                "%s: liquidity regime=%s vol_z=%.2f amihud_z=%.2f sl=%.2fx size=%.2fx%s",
-                self.name,
-                regime,
-                features.get("volume_z", 0),
-                features.get("amihud_z", 0),
-                self._liquidity_sl_mult,
-                self._liquidity_size_scalar,
-                " HALTED" if self._liquidity_halted else "",
-            )
+        self.governance.refresh_liquidity(df)
 
     def _build_features(self, df, ref, macro):
         return build_features(df, macro, ref, self.contract)
@@ -271,7 +173,7 @@ class AssetEngine:
             self.pos_mgr.position_size
             * self.pos_mgr.exposure_multiplier
             * extra_scalar
-            * max(self._narrative_size_scalar * self._liquidity_size_scalar, self._MIN_SIZE_SCALAR)
+            * max(self.governance._narrative_size_scalar * self.governance._liquidity_size_scalar, self._MIN_SIZE_SCALAR)
         )
 
     def _compute_notional(self, extra_scalar: float = 1.0) -> float:
@@ -287,25 +189,6 @@ class AssetEngine:
         notional = self._compute_notional(position_size_scalar)
         cfg["impact_bps"] = self.execution_bridge.estimate_impact_bps(self.ticker, notional)
         return cfg
-
-    def _record_inference_proxies(self, proba: np.ndarray, X: pd.DataFrame, signal: str) -> None:
-        """Store macro vs blend directions for adaptive weight feedback on trade close."""
-        self._last_macro_dir = None
-        self._last_blend_dir = None
-        self._entry_signal_dir = 1 if signal == "BUY" else (-1 if signal == "SELL" else 0)
-
-        macro_head = getattr(self.model, "macro_head", None) if self.model else None
-        if macro_head is None or X.empty:
-            return
-        try:
-            macro_cols = [c for c in macro_head.features if c in X.columns]
-            if len(macro_cols) < 3:
-                return
-            macro_probs = macro_head.predict_proba(X.iloc[[-1]][macro_cols])[0]
-            self._last_macro_dir = int(np.argmax(macro_probs)) - 1
-            self._last_blend_dir = int(np.argmax(proba[-1])) - 1
-        except Exception:
-            pass
 
     def _macro_blend_trade_returns(self, trade_ret: float) -> tuple[float, float]:
         """Attribute trade PnL to macro-only vs blended heads by directional agreement."""
@@ -354,7 +237,7 @@ class AssetEngine:
         # Regime-conditional geometry selection (multipliers on base sl_mult/tp_mult)
         state = self.validity_sm.current_state.value if self.validity_sm else "YELLOW"
         geom = self.regime_geometry.get(state, {"sl_mult": 1.0, "tp_mult": 1.0})
-        sl_mult = self.sl_mult * geom.get("sl_mult", 1.0) * self._narrative_sl_mult * self._liquidity_sl_mult
+        sl_mult = self.sl_mult * geom.get("sl_mult", 1.0) * self.governance._narrative_sl_mult * self.governance._liquidity_sl_mult
         tp_mult = self.tp_mult * geom.get("tp_mult", 1.0)
 
         if self.regime_geometry and geom.get("sl_mult", 1.0) != 1.0:
@@ -620,193 +503,7 @@ class AssetEngine:
             logger.warning("%s: failed to log feature importances: %s", self.name, e)
 
     def generate_signal(self, threshold=0.45):
-        return self._generate_and_apply(threshold)
-
-    def _generate_and_apply(self, threshold=0.45):
-        self._ensure_position_synced()
-        if not self._trained:
-            self.train()
-
-        df = fetch_live(self.ticker)
-
-        # Sync with latest price (same as dashboard) to ensure responsive SL/TP
-        self.refresh_price()
-        if self.current_price is not None:
-            # Update the last row's close with the real-time price
-            df.loc[df.index[-1], "close"] = self.current_price
-
-        self.price_data = df
-        self._refresh_liquidity(df)
-        df["close"] = df["close"].ffill()
-        ref = fetch_ref("SPY")
-        macro = self._feature_pipeline.macro_derived(
-            pd.read_parquet(os.path.join(BASE, "data/processed/macro_factors.parquet"))
-        )
-        features_df = self._feature_pipeline.build(df, macro, ref, self.contract)
-        validate_no_cross_asset_leakage(features_df, self.contract, known_slugs=FEATURE_REGISTRY.keys())
-
-        X = features_df[self.features]
-        if len(X) == 0:
-            raise ValueError(f"No valid feature rows after building features for {self.name}")
-
-        # PSI drift: rolling 21d distribution vs training baseline
-        try:
-            latest_df, _ = self._importance_store.get_latest_two_snapshots(self.name)
-            if latest_df is not None and not latest_df.empty:
-                top10 = latest_df[latest_df["rank"] <= 10]
-                top_features = [(r["feature"], r["importance_score"]) for r in top10.to_dict("records")]
-                X_current = X.tail(21)
-                self._last_psi_drift = self._psi_monitor.compute_drift(self.name, X_current, top_features)
-        except Exception as e:
-            logger.debug("%s: PSI drift skipped: %s", self.name, e)
-
-        proba = self._model_iface.predict(self.model, X)
-        if proba.shape[1] < 3:
-            raise ValueError(f"Model returned {proba.shape[1]} classes, expected 3")
-
-        # Meta-label inference
-        self._last_meta_proba = None
-        if self._meta_label_model is not None and self._meta_label_model._trained:
-            try:
-                self._last_meta_proba = self._meta_label_model.predict_proba(X, proba)
-            except Exception as e:
-                logger.debug("%s: meta-label inference failed: %s", self.name, e)
-
-        sizing_cfg = self._sizing_config(df["close"])
-        if self.config.get("regime_sizing"):
-            regime_features_df = generate_regime_features(df)
-            regime_results = self.regime_classifier.classify(regime_features_df)
-            current_regime = regime_results["regime"].iloc[-1]
-            self._current_regime = current_regime
-            pos_size = self._sizing_strategy.compute(df["close"], sizing_cfg, regime=current_regime)
-        else:
-            self._current_regime = "neutral"
-            pos_size = self._sizing_strategy.compute(df["close"], sizing_cfg)
-
-        result = self._signal_strategy.compute(proba, X.index, threshold, df["close"], pos_size)
-
-        self._record_inference_proxies(proba, X, result.signal_type)
-        self.signal_data = result.signal_data
-
-        latest = self.signal_data.iloc[-1]
-        self.last_signal_date = latest.name
-
-        decision = TradeDecision(
-            asset=self.name,
-            signal=result.signal_type,
-            label=result.label,
-            confidence=result.confidence_pct,
-            prob_long=round(float(latest["prob_long"]), 4),
-            prob_short=round(float(latest["prob_short"]), 4),
-            prob_neutral=round(float(latest["prob_neutral"]), 4),
-            close_price=round(float(latest["close"]), 4),
-            timestamp=str(datetime.now(tz=ET).date()),
-            position_size=float(pos_size),
-        )
-
-        self._apply_decision(decision, df)
-
-        trace_decision(
-            asset=self.name,
-            features={k: round(float(v), 6) for k, v in X.iloc[-1].items()},
-            proba=[float(proba[-1, 0]), float(proba[-1, 1]), float(proba[-1, 2])],
-            threshold=threshold,
-            signal=decision.signal,
-            confidence=decision.confidence,
-            pos_size=float(pos_size),
-            close_price=float(latest["close"]),
-            current_side=self.pos_mgr.current_side(),
-            halt_flags=self.check_halt_conditions(),
-        )
-
-        _shadow_signal_df = _w.compute_signals(proba, X.index, threshold)
-        _shadow_latest = _shadow_signal_df.iloc[-1]
-        _shadow_stype, _shadow_conf, _shadow_conf_pct = _w.signal_type_and_confidence(
-            int(_shadow_latest["signal"]),
-            float(_shadow_latest["prob_long"]),
-            float(_shadow_latest["prob_short"]),
-        )
-        shadow_compare_signal(
-            asset=self.name,
-            proba_produced=[float(proba[-1, 0]), float(proba[-1, 1]), float(proba[-1, 2])],
-            wrapper_signal=_shadow_stype,
-            wrapper_confidence=_shadow_conf_pct,
-            original_signal=decision.signal,
-            original_confidence=decision.confidence,
-        )
-
-        _shadow_size = _w.compute_vol_scalar(df["close"]) if self.config.get("vol_scalar") else 1.0
-        shadow_compare_sizing(
-            asset=self.name,
-            wrapper_size=_shadow_size,
-            original_size=float(pos_size),
-        )
-
-        try:
-            _proba_list = [float(proba[-1, 0]), float(proba[-1, 1]), float(proba[-1, 2])]
-            _sig_div = diag.analyze_signal_divergence(
-                _proba_list,
-                threshold,
-                decision.signal,
-                decision.confidence,
-                _shadow_stype,
-                _shadow_conf_pct,
-            )
-            _mod_div = diag.analyze_model_distribution(self.name, _proba_list)
-            _feat_drivers = diag.analyze_feature_impact(
-                self.model,
-                X.iloc[[-1]],
-                self.features,
-                proba[-1:],
-            )
-            _regime = diag.analyze_regime_context(df["close"])
-            _report = diag.build_shadow_report(
-                asset=self.name,
-                timestamp=str(datetime.now(tz=ET).date()),
-                signal_match=_sig_div["match"],
-                signal_divergence=_sig_div,
-                model_divergence=_mod_div,
-                feature_drivers=_feat_drivers,
-                regime_context=_regime,
-            )
-            trace_diagnostic_report(_report)
-            _shadow_store(self.name, _report)
-            self._risk_signal = _risk_evaluate(self.name)
-            self._shadow_drift_intel = _get_drift(self.name)
-            self._shadow_action = _compute_shadow(
-                asset=self.name,
-                state=None,
-                drift_report=self._shadow_drift_intel,
-                risk_signal=self._risk_signal,
-            )
-            _record_feedback(
-                asset=self.name,
-                signal_data={"signal": decision.signal, "confidence": decision.confidence},
-                drift=self._shadow_drift_intel,
-                risk=self._risk_signal,
-                action=self._shadow_action,
-            )
-            self._shadow_learning = _compile_learning(
-                asset=self.name,
-                feedback_logs=None,
-                drift_history=self._shadow_drift_intel,
-                risk_history=self._risk_signal,
-            )
-        except Exception:
-            pass
-
-        self._reg.validate_strategies(
-            self.name,
-            {
-                "_model": self._model_iface,
-                "_signal": self._signal_strategy,
-                "_sizing": self._sizing_strategy,
-                "_pnl": self._pnl_strategy,
-                "_feature_pipeline": self._feature_pipeline,
-            },
-        )
-
-        return self._decision_to_dict(decision)
+        return self._inference.generate_signal(threshold)
 
     def _apply_decision(self, decision: TradeDecision, df):
         today = decision.timestamp
@@ -1386,31 +1083,16 @@ class AssetEngine:
             drift_ok = False
 
         narrative_ok = True
-        if (
-            self._narrative_active is not None
-            and not self._narrative_stale
-            and (self._narrative_sl_mult > 1.05 or self._narrative_size_scalar < 0.95)
-        ):
-            narr = self._narrative_active
-            reasons.append(
-                f"Narrative governance active: geopol={narr.geopol_risk_score:.2f} "
-                f"regime={narr.overall_regime} sl={self._narrative_sl_mult:.2f}x "
-                f"size={self._narrative_size_scalar:.2f}x"
-            )
+        narr_warnings = self.governance.narrative_warnings()
+        if narr_warnings:
+            reasons.extend(narr_warnings)
 
         liquidity_ok = True
-        if self._liquidity_halted:
-            reasons.append(
-                f"Liquidity STRESSED: regime={self._liquidity_regime} "
-                f"vol_z={self._liquidity_features.get('volume_z', 0):.2f} "
-                f"amihud_z={self._liquidity_features.get('amihud_z', 0):.2f}"
-            )
-            liquidity_ok = False
-        elif self._liquidity_regime != "NORMAL":
-            reasons.append(
-                f"Liquidity governance active: regime={self._liquidity_regime} "
-                f"sl={self._liquidity_sl_mult:.2f}x size={self._liquidity_size_scalar:.2f}x"
-            )
+        liq_warnings = self.governance.liquidity_warnings()
+        if liq_warnings:
+            reasons.extend(liq_warnings)
+            if self.governance._liquidity_halted:
+                liquidity_ok = False
 
         psi_ok = True
         if self._last_psi_drift is not None and not self._last_psi_drift.psi_ok:
