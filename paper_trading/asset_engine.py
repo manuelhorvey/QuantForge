@@ -328,7 +328,7 @@ class AssetEngine:
                 trade_ret = float(trade.get("return", 0.0))
                 macro_ret, blend_ret = self._macro_blend_trade_returns(trade_ret)
                 macro_head.update_weight(macro_ret, blend_ret)
-        except Exception:
+        except (AttributeError, ValueError, TypeError):
             pass
 
         self.position = None
@@ -378,8 +378,8 @@ class AssetEngine:
                 df = flatten(df)
                 close = float(df["close"].ffill().iloc[-1])
                 self.current_price = None if pd.isna(close) else close
-        except Exception:
-            pass
+        except (OSError, ValueError, KeyError):
+            logger.debug("%s: fallback price download failed", self.name)
 
     def train(self, force=False):
         self._training.train(force=force)

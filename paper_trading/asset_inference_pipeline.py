@@ -211,7 +211,7 @@ class AssetInferencePipeline:
                 risk_history=asset._risk_signal,
             )
         except Exception:
-            pass
+            logger.debug("%s: shadow learning feedback skipped", asset.name)
 
         asset._reg.validate_strategies(
             asset.name,
@@ -244,4 +244,4 @@ class AssetInferencePipeline:
             asset._last_macro_dir = int(np.argmax(macro_probs)) - 1
             asset._last_blend_dir = int(np.argmax(proba[-1])) - 1
         except Exception:
-            pass
+            logger.debug("%s: macro proxy inference failed", asset.name)

@@ -160,8 +160,8 @@ class AssetPnlController:
                         logger.info("%s: TIME STOP after %d days (max=%d)", asset.name, elapsed, max_hold)
                         asset._close_position(asset.current_price, last_bar, "time_stop")
                         return
-                except Exception:
-                    pass
+                except (AttributeError, TypeError, ValueError):
+                    logger.debug("%s: could not parse entry_dt=%r for time stop", asset.name, entry_dt)
 
         # 2. Daily P&L Settlement - Only run if signal_data is available (historical context)
         if asset.signal_data is None or len(asset.signal_data) < 2:
@@ -219,8 +219,8 @@ class AssetPnlController:
             )
             trace_diagnostic_report(_report)
             _shadow_store(asset.name, _report)
-        except Exception:
-            pass
+        except (TypeError, ValueError, KeyError):
+            logger.debug("%s: shadow report failed", asset.name)
         asset.pos_mgr.apply_pnl(pnl)
         asset.current_value = asset.pos_mgr.current_value
         asset.peak_value = asset.pos_mgr.peak_value
