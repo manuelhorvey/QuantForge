@@ -202,7 +202,7 @@ def get_narrative_status() -> dict:
     active = get_active_narrative()
     pending = get_pending_narrative()
     error = get_fetch_error()
-    stale = is_narrative_stale(active.week_start) if active else False
+    stale = active is None or is_narrative_stale(active.week_start)
     week_start_candidates = [p.week_start for p in [pending, active] if p]
     return {
         "week_start": max(week_start_candidates) if week_start_candidates else datetime.now().strftime("%Y-%m-%d"),

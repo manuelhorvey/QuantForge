@@ -203,10 +203,11 @@ def test_call_llm_handles_invalid_json(mock_post):
 
 @patch("features.fxstreet_fetcher.fetch_fxstreet_article")
 @patch("features.fxstreet_fetcher.save_narrative_json")
-def test_pipeline_no_article_returns_false(mock_save, mock_fetch):
+def test_pipeline_no_article_returns_false(mock_save, mock_fetch, tmp_path):
     mock_fetch.return_value = None
-    result = run_weekly_narrative_pipeline()
-    assert result is False
+    with patch("features.fxstreet_fetcher.NARRATIVE_ERROR", str(tmp_path / "narrative_error.json")):
+        result = run_weekly_narrative_pipeline()
+        assert result is False
 
 
 @patch("features.fxstreet_fetcher.fetch_fxstreet_article")
@@ -223,11 +224,12 @@ def test_pipeline_with_api_key(mock_save, mock_llm, mock_fetch, sample_llm_json,
 
 @patch("features.fxstreet_fetcher.fetch_fxstreet_article")
 @patch("features.fxstreet_fetcher.call_llm")
-def test_pipeline_llm_failure(mock_llm, mock_fetch):
+def test_pipeline_llm_failure(mock_llm, mock_fetch, tmp_path):
     mock_fetch.return_value = "Some article text"
     mock_llm.return_value = None
-    result = run_weekly_narrative_pipeline(api_key="fake-key")
-    assert result is False
+    with patch("features.fxstreet_fetcher.NARRATIVE_ERROR", str(tmp_path / "narrative_error.json")):
+        result = run_weekly_narrative_pipeline(api_key="fake-key")
+        assert result is False
 
 
 @patch("features.fxstreet_fetcher.fetch_fxstreet_article")
@@ -407,7 +409,7 @@ def test_narrative_status_no_files(tmp_path):
         status = get_narrative_status()
         assert status["active"] is None
         assert status["pending"] is None
-        assert status["stale"] is False
+        assert status["stale"] is True
         assert status["fetch_error"] is None
         assert status["has_pending"] is False
         assert status["needs_confirmation"] is False
