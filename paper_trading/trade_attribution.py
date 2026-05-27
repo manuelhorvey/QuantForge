@@ -103,6 +103,7 @@ class ExitAttribution:
     counterfactual_fixed_tp_r: float | None = None
     counterfactual_convex_tp_r: float | None = None
     exit_archetype: str = ""
+    meta_bucket: str = ""  # "0.50-0.60", "0.60-0.70", ..., "0.90-1.00", "none"
 
     def to_dict(self) -> dict:
         return {f.name: getattr(self, f.name) for f in fields(self)}
@@ -462,6 +463,23 @@ class AttributionCollector:
             bars_held_attr = 0
         bars_held_attr = max(bars_held_attr, 1)
 
+        # Compute meta-confidence bucket for stratification
+        meta_proba = pred.meta_proba
+        if meta_proba is None:
+            meta_bucket = "none"
+        elif meta_proba < 0.50:
+            meta_bucket = "0.00-0.50"
+        elif meta_proba < 0.60:
+            meta_bucket = "0.50-0.60"
+        elif meta_proba < 0.70:
+            meta_bucket = "0.60-0.70"
+        elif meta_proba < 0.80:
+            meta_bucket = "0.70-0.80"
+        elif meta_proba < 0.90:
+            meta_bucket = "0.80-0.90"
+        else:
+            meta_bucket = "0.90-1.00"
+
         exit_attr = ExitAttribution(
             exit_reason=exit_reason,
             realized_r=realized_r,
@@ -476,6 +494,7 @@ class AttributionCollector:
             counterfactual_fixed_tp_r=counterfactual_fixed_tp_r,
             counterfactual_convex_tp_r=counterfactual_convex_tp_r,
             exit_archetype=exit_archetype or pred.archetype_at_entry,
+            meta_bucket=meta_bucket,
         )
 
         # Build execution counterfactual

@@ -494,6 +494,7 @@ class AssetEngine:
             return
         trade["asset"] = self.name
         trade["conf_at_entry"] = self.position.get("confidence") if self.position else None
+        trade["archetype_at_entry"] = self._entry_archetype if hasattr(self, "_entry_archetype") else "UNKNOWN"
 
         # Phase 6: Finalize attribution (observe, never mutate)
         trade_id = self._current_trade_id
@@ -969,6 +970,32 @@ class AssetEngine:
                 "avg_r": round(np.mean([t.get("realized_r", 0) for t in self.trade_log]), 4),
             }
 
+        # Stratified metrics by archetype (from attribution data)
+        archetype_stats = {}
+        if self.trade_log:
+            for t in self.trade_log:
+                arch = t.get("archetype_at_entry", "UNKNOWN")
+                if arch not in archetype_stats:
+                    archetype_stats[arch] = {"n": 0, "wins": 0, "total_r": 0.0, "sl": 0, "tp": 0}
+                archetype_stats[arch]["n"] += 1
+                if t.get("pnl", 0) > 0:
+                    archetype_stats[arch]["wins"] += 1
+                archetype_stats[arch]["total_r"] += t.get("realized_r", 0)
+                if t.get("reason") == "sl":
+                    archetype_stats[arch]["sl"] += 1
+                elif t.get("reason") == "tp":
+                    archetype_stats[arch]["tp"] += 1
+        archetype_stats = {
+            k: {
+                "n": v["n"],
+                "win_rate": round(v["wins"] / v["n"], 4) if v["n"] > 0 else 0,
+                "avg_r": round(v["total_r"] / v["n"], 4) if v["n"] > 0 else 0,
+                "sl_rate": round(v["sl"] / v["n"], 4) if v["n"] > 0 else 0,
+                "tp_rate": round(v["tp"] / v["n"], 4) if v["n"] > 0 else 0,
+            }
+            for k, v in sorted(archetype_stats.items())
+        }
+
         # Current regime-based geometry (multipliers applied to base)
         state = self.validity_sm.current_state.value if self.validity_sm else "YELLOW"
         geom = self.regime_geometry.get(state, {"sl_mult": 1.0, "tp_mult": 1.0})
@@ -1034,6 +1061,7 @@ class AssetEngine:
                 "window_id": self._last_stability.window_id if self._last_stability else None,
             },
             "exit_reasons": exit_reasons,
+            "archetype_stats": archetype_stats,
             "meta_inference": meta_inference,
             "scale_out_active": scale_out_active,
             "remaining_fraction": round(remaining_frac, 4),
