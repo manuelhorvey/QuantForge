@@ -252,12 +252,17 @@ class DynamicSLTPEngine:
         vol: float | None = None,
         bars_since_entry: int = 0,
     ) -> PostEntryAdjustment:
-        """Narrow SL or adjust TP after entry based on new information.
+        """Post-entry SL/TP adjustment based on market conditions.
 
-        Rules:
-        - If current vol is significantly lower than entry vol, tighten SL.
-        - If price stalled near TP without hitting it, nudge TP closer.
-        - Never widen SL (unless ``max_sl_widen_pct > 0``).
+        Asymmetry (corrected — see Tier A2):
+        - Vol SPIKE (>1.3x entry vol): tighten SL to protect against
+          increased noise and adverse moves.
+        - Vol COLLAPSE (<0.7x entry vol): no action — the trade is
+          safer with less noise; do not tighten into stable conditions.
+        - Price stalled near TP (60-95% progress): nudge TP closer
+          to capture profits.
+
+        Never widens SL unless ``max_sl_widen_pct > 0``.
         """
         if bars_since_entry < self.post_adjust_interval_bars:
             return PostEntryAdjustment()
@@ -265,13 +270,15 @@ class DynamicSLTPEngine:
         current_vol = estimate_ewm_vol(df["close"], span=100)
         if vol is not None and current_vol > 0:
             vol_ratio = current_vol / vol
-            if vol_ratio < 0.7:
-                new_sl = self._propose_tighter_sl(side, entry_price, current_sl, vol_ratio)
+            if vol_ratio > 1.3:
+                # Vol spike — tighten SL to protect
+                new_sl = self._propose_tighter_sl(side, entry_price, current_sl, 1.0 / vol_ratio)
                 if new_sl is not None:
                     return PostEntryAdjustment(
                         new_sl=new_sl,
-                        reason=f"vol_dropped_{vol_ratio:.2f}x",
+                        reason=f"vol_spike_{vol_ratio:.2f}x_tighten_sl",
                     )
+            # Vol collapse (<0.7x): no action — trade is safer
 
         price = float(df["close"].iloc[-1])
         if side == "long":
