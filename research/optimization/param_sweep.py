@@ -470,7 +470,7 @@ def run_sweep(
 
             scale_out_engine = None
             if so_tiers is not None:
-                scale_out_engine = ScaleOutEngine(tiers=so_tiers, activate_breakeven_after=0)
+                scale_out_engine = ScaleOutEngine(activate_breakeven_after=0, tier_specs=so_tiers)
 
             replay_cfg = ReplayConfig(
                 sl_mult=effective_sl,

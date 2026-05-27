@@ -50,6 +50,7 @@ class ScaleOutEngine:
     ):
         self.activate_breakeven_after = activate_breakeven_after
         self.trailing_after_tier = trailing_after_tier
+        self.tier_specs = tier_specs
         if tier_specs is not None:
             total = sum(f for f, _ in tier_specs)
             if abs(total - 1.0) > 1e-6:
