@@ -18,6 +18,15 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from shared.volatility import (
+    VOLATILITY_PRIMITIVE_VERSION,
+    VolatilityPrimitive,
+    compute_latest_atr,
+    compute_latest_atr_pct,
+    estimate_ewm_vol,
+    estimate_gap_risk,
+)
+
 logger = logging.getLogger("quantforge.dynamic_sltp")
 
 
@@ -95,6 +104,7 @@ class DynamicSLTPEngine:
         use_gap_protection: bool = True,
         calibration_scale: float = 1.0,
         confidence_sl_adjust: float = 0.0,
+        vol_primitive: VolatilityPrimitive | None = None,
     ):
         self.method = method
         self.atr_period = atr_period
@@ -108,6 +118,9 @@ class DynamicSLTPEngine:
         self.use_gap_protection = use_gap_protection
         self.calibration_scale = calibration_scale
         self.confidence_sl_adjust = confidence_sl_adjust
+        self.vol_primitive = vol_primitive or VolatilityPrimitive(
+            period=atr_period,
+        )
         self._best_price_seen: float | None = None
 
     def reset_best_price(self, entry_price: float) -> None:
@@ -174,8 +187,8 @@ class DynamicSLTPEngine:
         Call once per asset at init to set the scale factor.
         """
         with np.errstate(all="ignore"):
-            ewm_vol = self._estimate_vol(df)
-        atr_pct = self._compute_atr(df, self.atr_period) / (float(df["close"].iloc[-1]) + 1e-9)
+            ewm_vol = estimate_ewm_vol(df["close"], span=100)
+        atr_pct = compute_latest_atr_pct(df, self.atr_period)
         if ewm_vol > 0 and atr_pct > 0:
             ratio = ewm_vol / atr_pct
             self.atr_mult_sl = ratio * self.calibration_scale
@@ -217,7 +230,7 @@ class DynamicSLTPEngine:
             move = (entry_price - best) / (initial_sl - entry_price + 1e-9)
 
         if move >= self.trailing_activation_mult:
-            atr = self._compute_atr(df, self.atr_period)
+            atr = compute_latest_atr(df, self.atr_period)
             dist = atr * self.trailing_distance_mult
             new_sl = best - dist if side == "long" else best + dist
             if new_sl is not None and self._is_tighter(new_sl, current_sl, side):
@@ -249,7 +262,7 @@ class DynamicSLTPEngine:
         if bars_since_entry < self.post_adjust_interval_bars:
             return PostEntryAdjustment()
 
-        current_vol = self._estimate_vol(df)
+        current_vol = estimate_ewm_vol(df["close"], span=100)
         if vol is not None and current_vol > 0:
             vol_ratio = current_vol / vol
             if vol_ratio < 0.7:
@@ -303,7 +316,7 @@ class DynamicSLTPEngine:
     ) -> SLTPResult:
         # Use ATR as a responsive vol estimator.  Convert ATR(price) → %
         # so it's comparable to EWM vol, then apply config multipliers.
-        atr_price = self._compute_atr(df, self.atr_period)
+        atr_price = compute_latest_atr(df, self.atr_period)
         atr_pct = atr_price / (entry_price + 1e-9)
 
         # Effective vol for barrier placement: blend ATR % with config multipliers
@@ -318,7 +331,7 @@ class DynamicSLTPEngine:
 
         # Gap protection: add expected gap to SL distance
         if self.use_gap_protection:
-            gap = self._estimate_gap_risk(df)
+            gap = estimate_gap_risk(df)
             sl_dist += gap
 
         if side == "long":
@@ -385,32 +398,6 @@ class DynamicSLTPEngine:
 
     # ── Helpers ───────────────────────────────────────────────────
 
-    def _compute_atr(self, df: pd.DataFrame, period: int = 14) -> float:
-        high = df.get("high", df["close"])
-        low = df.get("low", df["close"])
-        close = df["close"]
-
-        prev_close = close.shift(1)
-        tr = pd.concat(
-            [high - low, (high - prev_close).abs(), (low - prev_close).abs()],
-            axis=1,
-        ).max(axis=1)
-        atr = tr.rolling(period, min_periods=1).mean().iloc[-1]
-        return float(atr) if not pd.isna(atr) and atr > 0 else 0.01
-
-    def _estimate_vol(self, df: pd.DataFrame) -> float:
-        returns = np.log(df["close"] / df["close"].shift(1))
-        vol = returns.ewm(span=100).std().iloc[-1]
-        return float(vol) if not pd.isna(vol) and vol > 0 else 0.01
-
-    def _estimate_gap_risk(self, df: pd.DataFrame) -> float:
-        """Estimate expected overnight/weekend gap in price units."""
-        if len(df) < 5:
-            return 0.0
-        gaps = abs(df["close"].pct_change().shift(-1))
-        gap = gaps.rolling(20).mean().iloc[-1] * float(df["close"].iloc[-1])
-        return float(gap) if not pd.isna(gap) else 0.0
-
     def _propose_tighter_sl(
         self,
         side: str,
@@ -450,9 +437,12 @@ class DynamicSLTPEngine:
 def build_dynamic_sltp_from_config(asset_config: dict, df: pd.DataFrame | None = None) -> DynamicSLTPEngine:
     """Construct engine from YAML config dict, optionally calibrating with price data."""
     sltp_cfg = asset_config.get("dynamic_sltp", {})
+    atr_period = sltp_cfg.get("atr_period", 14)
+    vol_primitive = VolatilityPrimitive.detect(df, period=atr_period) if df is not None else VolatilityPrimitive(period=atr_period)
+
     engine = DynamicSLTPEngine(
         method=sltp_cfg.get("method", "atr"),
-        atr_period=sltp_cfg.get("atr_period", 14),
+        atr_period=atr_period,
         atr_mult_sl=sltp_cfg.get("atr_mult_sl", 2.0),
         atr_mult_tp=sltp_cfg.get("atr_mult_tp", 3.0),
         min_rr_ratio=sltp_cfg.get("min_rr_ratio", 1.5),
@@ -463,6 +453,14 @@ def build_dynamic_sltp_from_config(asset_config: dict, df: pd.DataFrame | None =
         use_gap_protection=sltp_cfg.get("use_gap_protection", True),
         calibration_scale=sltp_cfg.get("calibration_scale", 1.0),
         confidence_sl_adjust=sltp_cfg.get("confidence_sl_adjust", 0.0),
+        vol_primitive=vol_primitive,
+    )
+    logger.info(
+        "DynamicSLTP built: vol_primitive=%s (v%s, period=%d, mode=%s)",
+        engine.vol_primitive.method,
+        engine.vol_primitive.version,
+        engine.vol_primitive.period,
+        engine.vol_primitive.mode,
     )
     if df is not None and sltp_cfg.get("auto_calibrate", True):
         engine.calibrate(df)
