@@ -38,47 +38,45 @@ class ScaleOutPlan:
 
 
 class ScaleOutEngine:
-    """Manages partial profit taking with breakeven stop.
-
-    Parameters
-    ----------
-    tiers : list[tuple[float, float]]
-        List of (fraction, price_multiplier) pairs.  Each tier closes
-        ``fraction`` of the remaining position when price reaches
-        ``entry ± price_multiplier * (TP - entry)``.
-    activate_breakeven_after : int
-        Index of tier after which the remaining stop is moved to
-        breakeven (default 0 = after first tier).
+    """Execution state machine for partial profit taking.
+    Dumb executor: does not decide tiers, only follows the provided plan.
     """
 
     def __init__(
         self,
-        tiers: list[tuple[float, float]] | None = None,
         activate_breakeven_after: int = 0,
         trailing_after_tier: int | None = None,
+        tier_specs: list[tuple[float, float]] | None = None,
     ):
-        if tiers is None:
-            tiers = [(1 / 3, 0.50), (1 / 3, 1.00), (1 / 3, 1.50)]
-        self.tier_specs = tiers
         self.activate_breakeven_after = activate_breakeven_after
         self.trailing_after_tier = trailing_after_tier
-
-        total = sum(f for f, _ in tiers)
-        if abs(total - 1.0) > 1e-6:
-            raise ValueError(f"Scale-out tiers must sum to 1.0, got {total:.4f}")
+        if tier_specs is not None:
+            total = sum(f for f, _ in tier_specs)
+            if abs(total - 1.0) > 1e-6:
+                raise ValueError(
+                    f"ScaleOutEngine tier fractions must sum to 1.0, got {total:.4f}"
+                )
 
     def build_plan(
         self,
         side: str,
         entry_price: float,
         take_profit: float,
+        tier_specs: list[tuple[float, float]] | None = None,
     ) -> ScaleOutPlan:
-        """Create a scale-out plan from entry and TP price."""
+        """Create a scale-out plan from entry, TP price, and optional tier specs.
+        tier_specs: list of (fraction_of_remaining, multiplier_of_tp_distance)
+        """
+        if tier_specs is None:
+            # Default fallback (Balanced)
+            tier_specs = [(1/3, 0.50), (1/3, 1.00), (1/3, 1.50)]
+
         tp_total = abs(take_profit - entry_price)
         tiers = []
-        for fraction, pct in self.tier_specs:
-            price = entry_price + tp_total * pct if side == "long" else entry_price - tp_total * pct
+        for fraction, mult in tier_specs:
+            price = entry_price + tp_total * mult if side == "long" else entry_price - tp_total * mult
             tiers.append(ScaleOutTier(fraction=fraction, price=price))
+        
         return ScaleOutPlan(tiers=tiers, entry_price=entry_price, remaining_fraction=1.0)
 
     def check_tiers(
@@ -162,17 +160,11 @@ def build_scale_out_from_config(asset_config: dict) -> ScaleOutEngine | None:
     so_cfg = asset_config.get("scale_out")
     if not so_cfg or not so_cfg.get("enabled", False):
         return None
-    tiers = so_cfg.get("tiers", [(1 / 3, 0.50), (1 / 3, 1.00), (1 / 3, 1.50)])
+    
     activate_after = so_cfg.get("activate_breakeven_after", 0)
     trailing_after = so_cfg.get("trailing_after_tier")
-    parsed = []
-    for t in tiers:
-        if isinstance(t, dict):
-            parsed.append((t["fraction"], t["multiplier"]))
-        else:
-            parsed.append(t)
+    
     return ScaleOutEngine(
-        tiers=parsed,
         activate_breakeven_after=activate_after,
         trailing_after_tier=trailing_after,
     )

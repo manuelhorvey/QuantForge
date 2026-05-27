@@ -8,54 +8,49 @@ meta_labeling:
   confidence_threshold: 0.40
   threshold_reduced: 0.40
 portfolio_drawdown_limit: -0.15
-narrative_config:
-  enabled: true
-  fxstreet_url: "https://www.fxstreet.com/analysis"
-  geopol_sl_widen_pct: 10
-  risk_off_size_reduce_pct: 20
-  min_confidence: 0.6
-  auto_confirm_deadline_hour: 12
 defaults:
   churn_ratio_threshold: 0.35
-
-liquidity_config:
-  enabled: true
-  regime_window: 21
-  refresh_on_open: true
-  volume_z_thin_threshold: -1.5
-  volume_z_stressed_threshold: -2.5
-  amihud_high_threshold: 1.5
-  amihud_stressed_threshold: 3.0
-  thin_sl_widen_pct: 15
-  thin_size_reduce_pct: 15
-  stressed_sl_widen_pct: 30
-  stressed_size_reduce_pct: 30
-  stressed_halt: true
-vol_baselines:
-  EURAUD: 0.0042
-  GC: 0.012
-  BTC: 0.45
-  USDCAD: 0.0038
-  AUDJPY: 0.0051
-  EURCAD: 0.0035
-  CHFJPY: 0.0048
-execution_defaults:
-  base_spread_bps: 0.5
-  spread_vol_slope: 2.0
-  spread_max_bps: 50.0
-  impact_model: square_root
-  impact_coeff: 0.1
-  avg_daily_volume: 1000000000
-regime_geometry:
-  GREEN:
-    sl_mult: 1.0
-    tp_mult: 1.0
-  YELLOW:
-    sl_mult: 0.9
-    tp_mult: 0.8
-  RED:
-    sl_mult: 0.8
-    tp_mult: 0.5
+  cooldown_half_life_hours: 4.0
+  cooldown_max_penalty_pct: 20.0
+  entry_defer_max_bars: 5
+  entry_optimization:
+    mom_max_pressure: 0.90
+    mom_min_pressure: 0.10
+    mr_extreme_high: 0.85
+    mr_extreme_low: 0.15
+    breakout_max_compression: 0.05
+execution:
+  governance:
+    regime_geometry:
+      GREEN:
+        sl_mult: 1.0
+        tp_mult: 1.0
+      YELLOW:
+        sl_mult: 0.9
+        tp_mult: 0.8
+      RED:
+        sl_mult: 0.8
+        tp_mult: 0.5
+    liquidity_config:
+      enabled: true
+      regime_window: 21
+      refresh_on_open: true
+      volume_z_thin_threshold: -1.5
+      volume_z_stressed_threshold: -2.5
+      amihud_high_threshold: 1.5
+      amihud_stressed_threshold: 3.0
+      thin_sl_widen_pct: 15
+      thin_size_reduce_pct: 15
+      stressed_sl_widen_pct: 30
+      stressed_size_reduce_pct: 30
+      stressed_halt: true
+    narrative_config:
+      enabled: true
+      fxstreet_url: "https://www.fxstreet.com/analysis"
+      geopol_sl_widen_pct: 10
+      risk_off_size_reduce_pct: 20
+      min_confidence: 0.6
+      auto_confirm_deadline_hour: 12
 satellite:
   BTC:
     max_allocation_pct: 0.05

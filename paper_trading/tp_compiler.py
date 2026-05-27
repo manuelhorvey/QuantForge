@@ -1,0 +1,112 @@
+import logging
+from typing import Literal
+from paper_trading.decision import TPGeometry, MarketStructureState, ValidityState
+
+logger = logging.getLogger("quantforge.paper_trading.tp_compiler")
+
+# 1. Archetype → Convexity Mapping (Finalized Spec)
+ARCHETYPE_CONVEXITY = {
+    "BREAKOUT": 1.7,           # 1.3 - 2.0
+    "TREND_PULLBACK": 1.3,     # 1.1 - 1.5
+    "MEAN_REVERSION": 0.95,     # 0.8 - 1.1
+    "VOL_EXPANSION": 1.5,      # 1.2 - 1.8
+    "MOMENTUM_IGNITION": 2.0,  # 1.4 - 2.2
+    "UNKNOWN": 1.0
+}
+
+# 2. Regime Layer Modifiers (Finalized Spec)
+REGIME_MULTIPLIERS = {
+    ValidityState.GREEN: 1.0,
+    ValidityState.YELLOW: 0.9,
+    ValidityState.RED: 0.8,
+    "calm": 1.0,
+    "range": 0.9,
+    "trend": 1.2,
+    "volatile": 1.1,
+    "crisis": 0.6
+}
+
+def compute_take_profit(
+    entry_price: float,
+    sl_distance: float,
+    regime: str | ValidityState,
+    archetype: str,
+    structure: MarketStructureState
+) -> TPGeometry:
+    """
+    Pure functional compiler for reward geometry.
+    Locked at entry, zero path dependency.
+    """
+    # 1. Resolve Convexity
+    convexity = ARCHETYPE_CONVEXITY.get(archetype.upper(), 1.0)
+    
+    # 2. Resolve Regime Multiplier
+    # Allow passing either ValidityState or raw string from diagnostics
+    reg_key = regime.value if isinstance(regime, ValidityState) else str(regime).lower()
+    reg_mult = REGIME_MULTIPLIERS.get(reg_key, 1.0)
+    
+    # 3. Final TP Distance Calculation
+    # tp_distance = f(sl_distance) * multiplier
+    tp_distance = sl_distance * convexity * reg_mult
+    
+    # 4. Generate Scale-Out Tiers
+    tiers = _generate_scale_out_profile(archetype, convexity)
+    
+    return TPGeometry(
+        tp_distance=round(tp_distance, 6),
+        scale_out_tiers=tiers,
+        convexity_score=convexity,
+        metadata={
+            "archetype": archetype,
+            "regime": reg_key,
+            "reg_mult": reg_mult,
+            "base_sl_dist": sl_distance
+        }
+    )
+
+def _generate_scale_out_profile(archetype: str, convexity: float) -> list[tuple[float, float]]:
+    """
+    Deterministic execution schedule based on convexity.
+    Returns list of (fraction_of_remaining, r_multiplier_of_tp_distance).
+    """
+    archetype = archetype.upper()
+    
+    # High Convexity (Backloaded): Let the tail run
+    if convexity >= 1.5 or archetype in ["MOMENTUM_IGNITION", "BREAKOUT"]:
+        return [
+            (0.20, 0.50),  # Take 20% at 0.5R (breakeven trigger)
+            (0.30, 1.00),  # Take 30% at 1.0R
+            (0.50, 1.50)   # Take 50% at 1.5R (tail expansion)
+        ]
+    
+    # Low Convexity (Frontloaded): Capture quick reverts
+    if convexity < 1.1 or archetype == "MEAN_REVERSION":
+        return [
+            (0.50, 0.50),  # Take 50% early
+            (0.30, 0.80),  # Take 30% at 0.8R
+            (0.20, 1.00)   # Take 20% at 1.0R
+        ]
+    
+    # Balanced (Trend Pullback)
+    return [
+        (1/3, 0.50),
+        (1/3, 1.00),
+        (1/3, 1.50)
+    ]
+
+if __name__ == "__main__":
+    # Test
+    from paper_trading.decision import MarketStructureState
+    struct = MarketStructureState(0, 0, 0, 0, 1.0, 0.5)
+    
+    print("Momentum Ignition (High Convexity):")
+    geo = compute_take_profit(100.0, 2.0, ValidityState.GREEN, "MOMENTUM_IGNITION", struct)
+    print(geo)
+    
+    print("\nMean Reversion (Low Convexity):")
+    geo_mr = compute_take_profit(100.0, 2.0, ValidityState.GREEN, "MEAN_REVERSION", struct)
+    print(geo_mr)
+    
+    print("\nCrisis Regime (Safety Envelope):")
+    geo_crisis = compute_take_profit(100.0, 2.0, "crisis", "TREND_PULLBACK", struct)
+    print(geo_crisis)

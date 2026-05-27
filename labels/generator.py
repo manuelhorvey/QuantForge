@@ -1,0 +1,91 @@
+import os
+import pandas as pd
+import logging
+from features.registry import FEATURE_REGISTRY
+from labels.triple_barrier import apply_triple_barrier
+
+logger = logging.getLogger("quantforge.labels.generator")
+
+class LabelGenerator:
+    """
+    Phase 0 Functional Implementer.
+    Generates deterministic label datasets with version-locked metadata.
+    """
+
+    def __init__(self, data_dir: str = "data"):
+        self.data_dir = data_dir
+        self.raw_dir = os.path.join(data_dir, "raw")
+        self.processed_dir = os.path.join(data_dir, "processed")
+        os.makedirs(self.processed_dir, exist_ok=True)
+
+    def generate_all(self, force: bool = False):
+        """Generate labels for all assets in registry."""
+        results = {}
+        for ticker, contract in FEATURE_REGISTRY.items():
+            try:
+                results[ticker] = self.generate_asset_labels(contract, force=force)
+            except Exception as e:
+                logger.error(f"Failed to generate labels for {ticker}: {e}")
+        return results
+
+    def generate_asset_labels(self, contract, force: bool = False):
+        """
+        Generates dual labels (Shadow + New) for a single asset.
+        """
+        v_hash = contract.label_version
+        filename = f"{contract.name}_labels_{v_hash}.parquet"
+        out_path = os.path.join(self.processed_dir, filename)
+
+        if os.path.exists(out_path) and not force:
+            logger.info(f"Skipping {contract.name}: version {v_hash} already exists.")
+            return out_path
+
+        # Load raw daily data
+        raw_path = os.path.join(self.raw_dir, f"{contract.name}_1d.parquet")
+        if not os.path.exists(raw_path):
+            # Try alternate naming: Ticker
+            raw_path = os.path.join(self.raw_dir, f"{contract.ticker}_1d.parquet")
+        
+        if not os.path.exists(raw_path):
+            # Try alternate naming: Ticker without suffix
+            raw_path = os.path.join(self.raw_dir, f"{contract.ticker.replace('=X', '').replace('=F', '')}_1d.parquet")
+        
+        if not os.path.exists(raw_path):
+            raise FileNotFoundError(f"Raw data not found for {contract.name} at {raw_path}")
+
+        df = pd.read_parquet(raw_path)
+        
+        # New Labels (from current contract params)
+        logger.info(f"Computing NEW labels for {contract.name} (v:{v_hash})...")
+        new_labeled = apply_triple_barrier(
+            df, 
+            pt_sl=contract.label_params.get("pt_sl", [2, 2]),
+            vertical_barrier=contract.label_params.get("vertical_barrier", 20)
+        )
+        
+        # Shadow Labels (Legacy/Reference)
+        # For now, we use a fixed [2, 2, 20] baseline as 'shadow' if not specified
+        logger.info(f"Computing SHADOW labels for {contract.name}...")
+        shadow_labeled = apply_triple_barrier(
+            df,
+            pt_sl=[2, 2],
+            vertical_barrier=20
+        )
+
+        final_df = df.copy()
+        final_df["label_new"] = (new_labeled["label"] + 1).astype(int)
+        final_df["label_shadow"] = (shadow_labeled["label"] + 1).astype(int)
+        
+        # Metadata
+        final_df.attrs["label_version"] = v_hash
+        final_df.attrs["contract_params"] = str(contract.label_params)
+
+        final_df.to_parquet(out_path)
+        logger.info(f"Saved {contract.name} labels to {out_path}")
+        
+        return out_path
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    gen = LabelGenerator()
+    gen.generate_all()

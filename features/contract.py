@@ -38,6 +38,19 @@ class FeatureContract:
         parts.extend(self.custom_features)
         return tuple(parts)
 
+    @property
+    def label_version(self) -> str:
+        """Deterministic hash of the labeling kernel and feature space."""
+        import hashlib
+
+        components = [
+            str(self.label_type),
+            str(self.label_params),
+            str(self.features),
+            "v1.0",  # Hardcoded feature pipeline version
+        ]
+        return hashlib.sha256("".join(components).encode()).hexdigest()[:12]
+
     def validate_dataframe(self, df: pd.DataFrame) -> None:
         expected = list(self.features)
         actual = list(df.columns[: len(expected)])

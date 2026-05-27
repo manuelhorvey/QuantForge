@@ -20,6 +20,7 @@ class PaperSignalAdapter:
         timestamp: str,
         threshold: float = 0.45,
         position_size: float = 1.0,
+        archetype: str = "UNKNOWN",
     ) -> TradeDecision:
         signal = "BUY" if prob_long > threshold else ("SELL" if prob_short > threshold else "FLAT")
         label = 2 if signal == "BUY" else (0 if signal == "SELL" else 1)
@@ -36,6 +37,7 @@ class PaperSignalAdapter:
             close_price=round(float(close_price), 4),
             timestamp=timestamp,
             position_size=float(position_size),
+            archetype=archetype,
         )
 
     @staticmethod
@@ -46,6 +48,7 @@ class PaperSignalAdapter:
         timestamps: pd.DatetimeIndex,
         threshold: float = 0.45,
         position_size: float = 1.0,
+        archetype: str = "UNKNOWN",
     ) -> TradeDecision:
         if proba.shape[1] < 3:
             raise ValueError(f"Model returned {proba.shape[1]} classes, expected 3")
@@ -63,4 +66,5 @@ class PaperSignalAdapter:
             timestamp=str(timestamps[idx].date()) if hasattr(timestamps[idx], 'date') else str(timestamps[idx]),
             threshold=threshold,
             position_size=position_size,
+            archetype=archetype,
         )

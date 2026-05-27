@@ -306,14 +306,10 @@ class DynamicSLTPEngine:
         atr_price = self._compute_atr(df, self.atr_period)
         atr_pct = atr_price / (entry_price + 1e-9)
 
-        # Regime overlay: widen SL in volatile regimes, narrow in calm
-        reg_sl = self._regime_sl_mult(regime)
-        reg_tp = self._regime_tp_mult(regime)
-
         # Effective vol for barrier placement: blend ATR % with config multipliers
         vol_used = atr_pct * self.atr_mult_sl  # atr_mult_sl calibrates ATR → vol scale
-        sl_dist = entry_price * vol_used * sl_mult * reg_sl
-        tp_dist = entry_price * vol_used * tp_mult * reg_tp
+        sl_dist = entry_price * vol_used * sl_mult
+        tp_dist = entry_price * vol_used * tp_mult
 
         # Enforce minimum RR ratio
         rr = tp_dist / (sl_dist + 1e-9)
@@ -347,15 +343,12 @@ class DynamicSLTPEngine:
         tp_mult: float,
         regime: str,
     ) -> SLTPResult:
-        reg_sl = self._regime_sl_mult(regime) * sl_mult
-        reg_tp = self._regime_tp_mult(regime) * tp_mult
-
         if side == "long":
-            sl = entry_price * (1 - vol * reg_sl)
-            tp = entry_price * (1 + vol * reg_tp)
+            sl = entry_price * (1 - vol * sl_mult)
+            tp = entry_price * (1 + vol * tp_mult)
         else:
-            sl = entry_price * (1 + vol * reg_sl)
-            tp = entry_price * (1 - vol * reg_tp)
+            sl = entry_price * (1 + vol * sl_mult)
+            tp = entry_price * (1 - vol * tp_mult)
 
         return SLTPResult(stop_loss=sl, take_profit=tp, method_used="vol_ewm")
 
@@ -417,28 +410,6 @@ class DynamicSLTPEngine:
         gaps = abs(df["close"].pct_change().shift(-1))
         gap = gaps.rolling(20).mean().iloc[-1] * float(df["close"].iloc[-1])
         return float(gap) if not pd.isna(gap) else 0.0
-
-    def _regime_sl_mult(self, regime: str) -> float:
-        multipliers = {
-            "calm": 0.8,
-            "range": 0.8,
-            "trend": 1.0,
-            "neutral": 1.0,
-            "volatile": 1.3,
-            "crisis": 1.5,
-        }
-        return multipliers.get(regime.lower(), 1.0)
-
-    def _regime_tp_mult(self, regime: str) -> float:
-        multipliers = {
-            "calm": 1.2,
-            "range": 1.2,
-            "trend": 1.0,
-            "neutral": 1.0,
-            "volatile": 0.8,
-            "crisis": 0.6,
-        }
-        return multipliers.get(regime.lower(), 1.0)
 
     def _propose_tighter_sl(
         self,

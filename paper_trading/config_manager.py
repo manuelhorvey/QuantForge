@@ -40,14 +40,19 @@ class EngineConfig:
     narrative_config: dict = field(default_factory=dict)
     liquidity_config: dict = field(default_factory=dict)
     defaults: dict = field(default_factory=dict)
+    execution: dict = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict) -> "EngineConfig":
         halt = dict(data.get("halt", _default_halt()))
         # Ensure halt has all expected keys
-        defaults = _default_halt()
-        for k, v in defaults.items():
+        defaults_halt = _default_halt()
+        for k, v in defaults_halt.items():
             halt.setdefault(k, v)
+            
+        execution = data.get("execution", {})
+        governance = execution.get("governance", {})
+        
         return cls(
             capital=data.get("capital", 100_000),
             position_size=data.get("position_size", 0.95),
@@ -59,12 +64,14 @@ class EngineConfig:
             satellite=data.get("satellite", {}),
             assets=data.get("assets", {}),
             vol_baselines=data.get("vol_baselines", {}),
-            regime_geometry=data.get("regime_geometry", {}),
+            # Prioritize namespaced governance, fallback to top-level
+            regime_geometry=governance.get("regime_geometry", data.get("regime_geometry", {})),
             execution_defaults=data.get("execution_defaults", {}),
             portfolio_drawdown_limit=data.get("portfolio_drawdown_limit", -0.15),
-            narrative_config=data.get("narrative_config", {}),
-            liquidity_config=data.get("liquidity_config", {}),
+            narrative_config=governance.get("narrative_config", data.get("narrative_config", {})),
+            liquidity_config=governance.get("liquidity_config", data.get("liquidity_config", {})),
             defaults=data.get("defaults", {}),
+            execution=execution,
         )
 
     def to_dict(self) -> dict:

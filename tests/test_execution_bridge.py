@@ -36,8 +36,8 @@ def test_submit_market_order_uses_single_precomputed_fill():
     fill, order_id = bridge.submit_market_order("EURUSD=X", "buy", 10, 100.0)
 
     assert order_id
-    assert fill == 101.0
-    assert broker.get_positions()[0].avg_entry_price == 101.0
+    assert fill == 101.005
+    assert broker.get_positions()[0].avg_entry_price == 101.005
 
 
 def test_execution_bridge_can_open_short():
@@ -48,7 +48,7 @@ def test_execution_bridge_can_open_short():
     fill, order_id = bridge.submit_market_order("TEST", "sell", 5, 100.0)
 
     assert order_id
-    assert fill == 100.0
+    assert fill == 99.995
     position = broker.get_positions()[0]
     assert position.quantity == -5
-    assert position.avg_entry_price == 100.0
+    assert position.avg_entry_price == 99.995

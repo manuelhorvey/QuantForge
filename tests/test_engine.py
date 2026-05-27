@@ -179,13 +179,15 @@ class TestPaperTradingEngineState:
             sl_mult=1.0,
             tp_mult=2.0,
             regime_geometry={},
-            _liquidity_regime="NORMAL",
-            _liquidity_sl_mult=1.0,
-            _liquidity_size_scalar=1.0,
-            _narrative_sl_mult=1.0,
-            _narrative_size_scalar=1.0,
-            _narrative_active=None,
-            _narrative_stale=False,
+            governance=SimpleNamespace(
+                _liquidity_regime="NORMAL",
+                _liquidity_sl_mult=1.0,
+                _liquidity_size_scalar=1.0,
+                _narrative_sl_mult=1.0,
+                _narrative_size_scalar=1.0,
+                _narrative_active=None,
+                _narrative_stale=False,
+            ),
             pos_mgr=SimpleNamespace(
                 has_position=lambda: False,
                 exposure_multiplier=1.0,
@@ -407,13 +409,13 @@ class TestStopOutCooldown:
             journal_path=_SKIP_JOURNAL,
         )
 
-    def test_recently_stopped_out_blocks_same_direction(self, engine):
+    def test_cooldown_penalty_active_after_stop_out(self, engine):
         engine._record_stop_out("short", 100.0)
-        assert engine._recently_stopped_out("short") is True
+        assert engine._cooldown_penalty("short") > 0
 
-    def test_recently_stopped_out_allows_opposite_direction(self, engine):
+    def test_cooldown_penalty_allows_opposite_direction(self, engine):
         engine._record_stop_out("short", 100.0)
-        assert engine._recently_stopped_out("long") is False
+        assert engine._cooldown_penalty("long") == 0
 
     def test_cooldown_active_after_sl_hit_in_update_pnl(self, engine):
         import pandas as pd
@@ -433,7 +435,7 @@ class TestStopOutCooldown:
         engine.current_price = 99.0
         engine.update_pnl()
         assert engine.position is None
-        assert engine._recently_stopped_out("long") is True
+        assert engine._cooldown_penalty("long") > 0
         assert engine._last_stop_out_side == "long"
 
     def test_churn_case_skips_cooldown(self, engine):

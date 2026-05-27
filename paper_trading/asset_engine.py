@@ -19,9 +19,11 @@ from paper_trading.asset_pnl_controller import AssetPnlController
 from paper_trading.asset_training_pipeline import AssetTrainingPipeline
 from paper_trading.config_manager import get_config
 from paper_trading.data_fetcher import flatten, safe_download
-from paper_trading.decision import PositionIntent, PositionSide, SignalType, TradeDecision
+from paper_trading.decision import EntryAction, PositionIntent, PositionSide, SignalType, TradeDecision
+from paper_trading.deferred_entry import DeferredEntryStatus
 from paper_trading.dynamic_sltp import build_dynamic_sltp_from_config
 from paper_trading.position_manager import PositionManager
+from paper_trading.trade_attribution import AttributionCollector
 from paper_trading.regime_classifier import RegimeClassifier
 from paper_trading.risk_governance import record_trade_outcome as _record_exit_outcome
 from paper_trading.scale_out import build_scale_out_from_config
@@ -137,6 +139,8 @@ class AssetEngine:
         self._last_stop_out_side: str | None = None
         self._last_stop_out_date: pd.Timestamp | None = None
         self._last_stop_out_price: float | None = None
+        self._cooldown_score: float = 0.0
+        self._last_cooldown_update: pd.Timestamp | None = None
         self._entry_price: float | None = None
         self._regime_adjusted_entry: bool = False
         self._churn_ratio_threshold = self.config.get("churn_ratio_threshold", 0.50)
@@ -144,6 +148,17 @@ class AssetEngine:
         self._training = AssetTrainingPipeline(self)
         self._pnl = AssetPnlController(self)
         self._inference = AssetInferencePipeline(self)
+        from features.archetypes import ArchetypeClassifier
+        self._archetype_classifier = ArchetypeClassifier()
+        from features.market_structure import MarketStructureDetector
+        from paper_trading.entry_optimizer import EntryOptimizer
+        from paper_trading.execution_policy import ExecutionPolicyLayer
+        self._structure_detector = MarketStructureDetector()
+        self._entry_optimizer = EntryOptimizer()
+        self._execution_policy = ExecutionPolicyLayer()
+        self._pending_entries: dict[str, object] = {} # direction -> DeferredEntry
+        self._attribution = AttributionCollector()
+        self._current_trade_id: str | None = None
 
     def set_narrative_state(self, narr) -> None:
         self.governance.set_narrative_state(narr)
@@ -219,7 +234,7 @@ class AssetEngine:
         vol = returns.ewm(span=100).std()
         return vol.iloc[-1] if not pd.isna(vol.iloc[-1]) else 0.01
 
-    def _open_position(self, side, entry_price, entry_date, df=None):
+    def _open_position(self, side, entry_price, entry_date, df=None, tp_geo=None):
         data = df if df is not None else self.price_data
         vol = self._tb_vol(data)
         if pd.isna(vol) or pd.isna(entry_price) or entry_price == 0:
@@ -229,28 +244,18 @@ class AssetEngine:
         # Regime-conditional geometry selection (multipliers on base sl_mult/tp_mult)
         state = self.validity_sm.current_state.value if self.validity_sm else "YELLOW"
         geom = self.regime_geometry.get(state, {"sl_mult": 1.0, "tp_mult": 1.0})
+        
         sl_mult = self.sl_mult * geom.get("sl_mult", 1.0) * self.governance._narrative_sl_mult * self.governance._liquidity_sl_mult
         tp_mult = self.tp_mult * geom.get("tp_mult", 1.0)
 
-        if self.regime_geometry and geom.get("sl_mult", 1.0) != 1.0:
-            logger.info(
-                "%s: regime-adjusted geometry for %s: sl=%.2f (base %.2f × %.2f), tp=%.2f (base %.2f × %.2f)",
-                self.name,
-                state,
-                sl_mult,
-                self.sl_mult,
-                geom.get("sl_mult", 1.0),
-                tp_mult,
-                self.tp_mult,
-                geom.get("tp_mult", 1.0),
-            )
-
         fill_price = entry_price
+        entry_slippage_bps = 0.0
         if self.execution_bridge is not None:
             broker_side = "buy" if side == "long" else "sell"
             notional = self._compute_notional()
             qty = max(notional / entry_price, 1e-6)
-            fill_price, _, _ = self.execution_bridge.fill_price(self.ticker, broker_side, qty, entry_price)
+            fill_price, entry_slippage_bps, _ = self.execution_bridge.fill_price(self.ticker, broker_side, qty, entry_price)
+        self._last_entry_slippage = entry_slippage_bps
 
         # Use DynamicSLTPEngine if configured, else fall back to original EWM vol method
         if self.config.get("dynamic_sltp", {}).get("enabled", False):
@@ -276,6 +281,25 @@ class AssetEngine:
         else:
             intent = PositionIntent.from_price_and_vol(side, fill_price, entry_date, vol, sl_mult, tp_mult)
 
+        # Phase 2: Reward Geometry Compilation (Frozen at entry)
+        if tp_geo is None:
+            # Fallback if not provided by policy layer
+            from paper_trading.tp_compiler import compute_take_profit
+            sl_dist = abs(intent.stop_loss - fill_price)
+            tp_geo = compute_take_profit(
+                fill_price,
+                sl_dist,
+                state,
+                getattr(self, "_entry_archetype", "UNKNOWN"),
+                self._structure_detector.detect(data)
+            )
+        
+        # Override TP price based on compiler's reward shape
+        if side == PositionSide.LONG:
+            intent.take_profit = fill_price + tp_geo.tp_distance
+        else:
+            intent.take_profit = fill_price - tp_geo.tp_distance
+
         self.pos_mgr.open(intent)
         self.position = {
             "side": intent.side,
@@ -286,41 +310,113 @@ class AssetEngine:
             "vol": intent.vol,
             "sl_mult": sl_mult,
             "tp_mult": tp_mult,
+            "tp_geo": tp_geo,
         }
         self._entry_vol = vol
         self._bars_at_entry = 0
-        self._initial_sl = (
-            float(sltp_result.stop_loss) if self.config.get("dynamic_sltp", {}).get("enabled", False) else None
-        )
-        self._initial_tp = (
-            float(sltp_result.take_profit) if self.config.get("dynamic_sltp", {}).get("enabled", False) else None
-        )
-        if self._initial_sl is not None:
+        self._initial_sl = float(intent.stop_loss)
+        self._initial_tp = float(intent.take_profit)
+        
+        if self.config.get("dynamic_sltp", {}).get("enabled", False) and self._initial_sl is not None:
             self._sltp_engine.reset_best_price(fill_price)
+            
         self._entry_price = intent.entry_price
         self._regime_adjusted_entry = geom.get("sl_mult", 1.0) < 1.0
+
+        # Phase 6: Attribution (observe, never mutate)
+        trade_id = f"{entry_date}_{side}_{self.name}"
+        self._current_trade_id = trade_id
+        dt_now = str(datetime.now(tz=ET).date())
+        entry_action_type = "immediate" if self._pending_entries.get(side) is None else "deferred"
+        deferred_bars = 0
+        if entry_action_type == "deferred" and side in self._pending_entries:
+            deferred_bars = self._pending_entries[side]._bars_pending if hasattr(self._pending_entries.get(side), '_bars_pending') else 0
+
+        self._attribution.record_prediction(
+            trade_id=trade_id,
+            signal=side,
+            label=getattr(self, "_last_label", 0),
+            confidence=getattr(self, "_last_confidence", 0.0),
+            prob_long=getattr(self, "_last_prob_long", 0.0),
+            prob_short=getattr(self, "_last_prob_short", 0.0),
+            prob_neutral=getattr(self, "_last_prob_neutral", 0.0),
+            meta_proba=getattr(self, "_last_meta_proba", None),
+            regime_at_entry=getattr(self, "_current_regime", "neutral"),
+            archetype_at_entry=getattr(self, "_entry_archetype", "UNKNOWN"),
+        )
+        self._attribution.record_execution(
+            trade_id=trade_id,
+            entry_type=entry_action_type,
+            deferred_bars=deferred_bars,
+            entry_price=float(fill_price),
+            mid_price_at_signal=float(entry_price),
+            entry_slippage_bps=entry_slippage_bps,
+        )
+        self._attribution.record_friction(
+            trade_id=trade_id,
+            entry_slippage_bps=entry_slippage_bps,
+            exit_slippage_bps=0.0,
+        )
+        self._attribution.record_decision_quality(
+            trade_id=trade_id,
+            entry_pressure_pct=getattr(self, "_entry_pressure", None),
+        )
+
         self._scale_out_plan = None
-        if self._scale_out_engine is not None and intent.take_profit is not None:
+        if self._scale_out_engine is not None:
             self._scale_out_plan = self._scale_out_engine.build_plan(
                 side,
                 float(intent.entry_price),
                 float(intent.take_profit),
+                tier_specs=tp_geo.scale_out_tiers
             )
 
     def _close_position(self, exit_price, exit_date, reason):
         fill_price = exit_price
+        exit_slippage_bps = 0.0
         if self.execution_bridge is not None and self.pos_mgr.has_position():
             side = self.pos_mgr.position.side
             broker_side = "sell" if side == "long" else "buy"
             notional = self.current_value * self.pos_mgr.position_size * self.pos_mgr.exposure_multiplier
             qty = max(notional / exit_price, 1e-6)
-            fill_price, _, _ = self.execution_bridge.fill_price(self.ticker, broker_side, qty, exit_price)
+            fill_price, exit_slippage_bps, _ = self.execution_bridge.fill_price(self.ticker, broker_side, qty, exit_price)
 
         trade = self.pos_mgr.close(fill_price, exit_date, reason)
         if trade is None:
             return
         trade["asset"] = self.name
         trade["conf_at_entry"] = self.position.get("confidence") if self.position else None
+
+        # Phase 6: Finalize attribution (observe, never mutate)
+        trade_id = self._current_trade_id
+        if trade_id:
+            entry_price = trade.get("entry", 0.0)
+            realized_r = trade.get("realized_r", 0.0)
+            realized_return = trade.get("return", 0.0)
+            realized_pnl = trade.get("pnl", 0.0)
+            theoretical_r = realized_r  # best estimate from realized
+            self._attribution.record_friction(
+                trade_id=trade_id,
+                entry_slippage_bps=getattr(self, "_last_entry_slippage", 0.0),
+                exit_slippage_bps=exit_slippage_bps,
+            )
+            self._attribution.finalize(
+                trade_id=trade_id,
+                asset=self.name,
+                entry_date=str(trade.get("entry_date", "")),
+                exit_date=str(trade.get("exit_date", "")),
+                side=str(trade.get("side", "long")),
+                exit_price=fill_price,
+                exit_reason=reason,
+                realized_r=realized_r,
+                realized_return=realized_return,
+                realized_pnl=realized_pnl,
+                theoretical_r=theoretical_r,
+                policy_hash=getattr(self, "_last_policy_hash", ""),
+                archetype_version="1.0",
+                exit_archetype=getattr(self, "_exit_archetype", ""),
+            )
+            trade["attribution_trade_id"] = trade_id
 
         try:
             macro_head = getattr(self.model, "macro_head", None) if self.model else None
@@ -353,14 +449,29 @@ class AssetEngine:
 
         self._last_stop_out_side = side
         self._last_stop_out_date = pd.Timestamp.now(tz="UTC").normalize()
+        self._cooldown_score = 1.0
+        self._last_cooldown_update = pd.Timestamp.now(tz="UTC")
 
-    def _recently_stopped_out(self, side: str) -> bool:
+    def _cooldown_penalty(self, side: str) -> float:
+        """Calculate decaying entry threshold penalty after a stop-out."""
         if self._last_stop_out_side != side:
-            return False
-        if self._last_stop_out_date is None:
-            return False
-        today = pd.Timestamp.now(tz="UTC").normalize()
-        return self._last_stop_out_date >= today
+            return 0.0
+        if not hasattr(self, "_cooldown_score") or self._cooldown_score <= 0:
+            return 0.0
+
+        now = pd.Timestamp.now(tz="UTC")
+        elapsed_hours = (now - self._last_cooldown_update).total_seconds() / 3600
+
+        # Decay: half-life of 4 hours
+        half_life = self.config.get("cooldown_half_life_hours", 4.0)
+        decay = 0.5 ** (elapsed_hours / half_life)
+        self._cooldown_score *= decay
+        self._last_cooldown_update = now
+
+        if self._cooldown_score < 0.05:
+            self._cooldown_score = 0.0
+
+        return self._cooldown_score
 
     def refresh_price(self):
         # 1. Try absolute real-time price first
@@ -390,6 +501,27 @@ class AssetEngine:
     def _apply_decision(self, decision: TradeDecision, df):
         today = decision.timestamp
         current_side = self.pos_mgr.current_side()
+
+        # Phase 6: Store prediction metadata for attribution at close
+        self._last_label = decision.label
+        self._last_confidence = decision.confidence
+        self._last_prob_long = decision.prob_long
+        self._last_prob_short = decision.prob_short
+        self._last_prob_neutral = decision.prob_neutral
+        self._entry_archetype = decision.archetype
+        self._entry_pressure = None  # set by EntryOptimizer if available
+
+        # Phase 6: Track MAE/MFE extremes while position is open
+        if self.pos_mgr.has_position() and self._current_trade_id:
+            try:
+                high_val = float(df["high"].iloc[-1])
+                low_val = float(df["low"].iloc[-1])
+                if hasattr(self, "_bars_at_entry"):
+                    self._attribution.update_trade_extremes(
+                        self._current_trade_id, high_val, low_val, self._bars_at_entry
+                    )
+            except (KeyError, IndexError, ValueError, TypeError):
+                pass
         new_side = (
             PositionSide.LONG if decision.signal == SignalType.BUY
             else PositionSide.SHORT if decision.signal == SignalType.SELL
@@ -422,16 +554,87 @@ class AssetEngine:
             if self.pos_mgr.has_position():
                 self._close_position(decision.close_price, today, "signal_flip")
             if new_side:
-                if self._recently_stopped_out(new_side):
-                    logger.debug(
-                        "%s: skipping %s entry — stopped out same direction today",
-                        self.name,
-                        new_side,
+                penalty = self._cooldown_penalty(new_side)
+                if penalty > 0:
+                    max_penalty = self.config.get("cooldown_max_penalty_pct", 20.0)
+                    threshold_penalty = penalty * max_penalty
+                    if decision.confidence < (min_conf + threshold_penalty):
+                        logger.info(
+                            "%s: cooldown blocking %s entry (conf %.1f%% < threshold %.1f%% + penalty %.1f%%)",
+                            self.name,
+                            new_side,
+                            decision.confidence,
+                            min_conf,
+                            threshold_penalty,
+                        )
+                        new_side = None
+
+                if new_side:
+                    # 1. Gather Phase 1-3 Artifacts
+                    structure = self._structure_detector.detect(df)
+                    entry_action = self._entry_optimizer.evaluate(
+                        decision.signal,
+                        decision.archetype,
+                        structure,
+                        self.config.get("entry_optimization", {})
                     )
-                else:
-                    self._open_position(new_side, decision.close_price, today, df)
-                    if self.position is not None:
-                        self.position["confidence"] = decision.confidence
+                    
+                    tp_geo = None
+                    deferred_entry = None
+                    
+                    if entry_action == EntryAction.ENTER:
+                        # Pre-calculate SL distance for TP compiler
+                        # We use a simplified vol-based estimate here; _open_position will do the final physics.
+                        vol = self._tb_vol(df["close"]) if hasattr(self, "_tb_vol") else 0.01
+                        # Use SL mult from config
+                        state = self.validity_sm.current_state.value if self.validity_sm else "YELLOW"
+                        geom = self.regime_geometry.get(state, {"sl_mult": 1.0, "tp_mult": 1.0})
+                        curr_sl_mult = self.sl_mult * geom.get("sl_mult", 1.0) * self.governance._narrative_sl_mult * self.governance._liquidity_sl_mult
+                        sl_dist = decision.close_price * vol * curr_sl_mult
+                        
+                        from paper_trading.tp_compiler import compute_take_profit
+                        tp_geo = compute_take_profit(decision.close_price, sl_dist, state, decision.archetype, structure)
+                    
+                    elif entry_action == EntryAction.DEFER:
+                        from paper_trading.deferred_entry import DeferredEntry
+                        deferred_entry = DeferredEntry.from_decision(
+                            decision, 
+                            max_bars=self.config.get("entry_defer_max_bars", 5)
+                        )
+
+                    # 2. Unified Policy Routing (Phase 4)
+                    policy_dec = self._execution_policy.handle(
+                        entry_action,
+                        decision,
+                        decision.archetype,
+                        structure,
+                        tp_geo=tp_geo,
+                        deferred=deferred_entry
+                    )
+                    self._last_policy_hash = str(hash((
+                        policy_dec.action, policy_dec.archetype, policy_dec.reason,
+                        str(policy_dec.entry_plan), str(policy_dec.exit_plan),
+                    )))[:12]
+                    
+                    # 3. Execute Policy Action
+                    if policy_dec.action == EntryAction.ENTER:
+                        logger.info(f"{self.name}: POLICY APPROVED ENTER ({policy_dec.reason})")
+                        # Pass exit_plan to _open_position
+                        self._open_position(new_side, decision.close_price, today, df, tp_geo=policy_dec.exit_plan)
+                        if self.position is not None:
+                            self.position["confidence"] = decision.confidence
+                            self.position["policy_reason"] = policy_dec.reason
+                    
+                    elif policy_dec.action == EntryAction.DEFER:
+                        if policy_dec.entry_plan:
+                            self._pending_entries[new_side.value] = policy_dec.entry_plan
+                            logger.info(f"{self.name}: POLICY APPROVED DEFER ({policy_dec.reason})")
+                    
+                    else:
+                        logger.info(f"{self.name}: POLICY APPROVED SKIP ({policy_dec.reason})")
+
+        # Bar-by-bar polling for deferred entries
+        self._poll_pending_entries(df)
 
         self.prob_history.append(
             {
@@ -448,6 +651,79 @@ class AssetEngine:
             self.prob_history = self.prob_history[-MAX_PROB_HISTORY:]
         self._log_confidence_buckets()
 
+    def _poll_pending_entries(self, df: pd.DataFrame) -> None:
+        """Evaluates pending entries against current market structure."""
+        if not self._pending_entries:
+            return
+
+        to_remove = []
+        structure = self._structure_detector.detect(df)
+        today = str(pd.Timestamp.now(tz=ET).date())
+
+        for direction, entry in self._pending_entries.items():
+            if not entry.is_active:
+                to_remove.append(direction)
+                continue
+
+            entry.update()
+            if entry.status == DeferredEntryStatus.EXPIRED:
+                to_remove.append(direction)
+                continue
+
+            # Re-evaluate timing with optimizer (Phase 1)
+            entry_action = self._entry_optimizer.evaluate(
+                entry.decision.signal,
+                entry.decision.archetype,
+                structure,
+                self.config.get("entry_optimization", {})
+            )
+            
+            tp_geo = None
+            if entry_action == EntryAction.ENTER:
+                # Pre-calculate SL distance for triggered entry
+                vol = self._tb_vol(df)
+                state = self.validity_sm.current_state.value if self.validity_sm else "YELLOW"
+                geom = self.regime_geometry.get(state, {"sl_mult": 1.0, "tp_mult": 1.0})
+                curr_sl_mult = self.sl_mult * geom.get("sl_mult", 1.0) * self.governance._narrative_sl_mult * self.governance._liquidity_sl_mult
+                sl_dist = float(df["close"].iloc[-1]) * vol * curr_sl_mult
+                
+                from paper_trading.tp_compiler import compute_take_profit
+                tp_geo = compute_take_profit(float(df["close"].iloc[-1]), sl_dist, state, entry.decision.archetype, structure)
+
+            # Unified Policy Routing (Phase 4)
+            policy_dec = self._execution_policy.handle(
+                entry_action,
+                entry.decision,
+                entry.decision.archetype,
+                structure,
+                tp_geo=tp_geo,
+                deferred=entry
+            )
+            self._last_policy_hash = str(hash((
+                policy_dec.action, policy_dec.archetype, policy_dec.reason,
+                str(policy_dec.entry_plan), str(policy_dec.exit_plan),
+            )))[:12]
+            self._entry_archetype = entry.decision.archetype
+
+            if policy_dec.action == EntryAction.ENTER:
+                logger.info(f"{self.name}: TRIGGERING deferred {direction} entry (Policy: {policy_dec.reason})")
+                entry.trigger(float(df["close"].iloc[-1]))
+                side = PositionSide(direction)
+                self._open_position(side, entry.decision.close_price, today, df, tp_geo=policy_dec.exit_plan)
+                if self.position is not None:
+                    self.position["confidence"] = entry.decision.confidence
+                    self.position["policy_reason"] = policy_dec.reason
+                entry.close()
+                to_remove.append(direction)
+                
+            elif policy_dec.action == EntryAction.SKIP:
+                logger.info(f"{self.name}: CANCELLING deferred {direction} entry (Policy: {policy_dec.reason})")
+                entry.cancel(reason=policy_dec.reason)
+                to_remove.append(direction)
+
+        for direction in to_remove:
+            del self._pending_entries[direction]
+
     def _decision_to_dict(self, decision: TradeDecision):
         pos = self.pos_mgr.position
         macro_weight = None
@@ -459,6 +735,7 @@ class AssetEngine:
             "asset": self.name,
             "signal": decision.signal,
             "confidence": decision.confidence,
+            "archetype": decision.archetype,
             "macro_weight": macro_weight,
             "close_price": decision.close_price,
             "date": decision.timestamp,

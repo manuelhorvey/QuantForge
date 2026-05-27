@@ -34,14 +34,15 @@ def test_btc_config_different_from_default():
 def test_compute_slippage_cost_zero_vol():
     cfg = ExecutionConfig()
     cost = compute_slippage_cost(np.array([0.0, 0.5, 1.0]), cfg)
-    assert cost[0] == pytest.approx(0.5 / 10000)
-    assert cost[2] == pytest.approx(0.5 / 10000)
+    expected_base = (0.5 + 0.5) / 10000  # base_spread_bps + latency_bps
+    assert cost[0] == pytest.approx(expected_base)
+    assert cost[2] == pytest.approx(expected_base)
 
 
 def test_compute_slippage_cost_high_vol():
     cfg = ExecutionConfig()
     cost = compute_slippage_cost(np.array([3.0]), cfg)
-    expected = 0.5 * (1.0 + 2.0 * 2.0) / 10000
+    expected = (0.5 * (1.0 + 2.0 * 2.0) + 0.5) / 10000  # base + latency
     assert cost[0] == pytest.approx(expected)
 
 

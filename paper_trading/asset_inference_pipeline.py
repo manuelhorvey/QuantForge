@@ -105,6 +105,16 @@ class AssetInferencePipeline:
 
         result = asset._signal_strategy.compute(proba, X.index, threshold, df["close"], pos_size)
 
+        # Phase 3: Archetype Classification (Structural Context)
+        archetype = "UNKNOWN"
+        if asset._archetype_classifier is not None:
+            try:
+                # Use current feature row for classification
+                archetype_enum = asset._archetype_classifier.classify(X.iloc[-1])
+                archetype = archetype_enum.value
+            except Exception as e:
+                logger.debug("%s: archetype classification failed: %s", asset.name, e)
+
         self._record_inference_proxies(proba, X, result.signal_type)
         asset.signal_data = result.signal_data
 
@@ -122,6 +132,7 @@ class AssetInferencePipeline:
             close_price=round(float(latest["close"]), 4),
             timestamp=str(datetime.now(tz=ET).date()),
             position_size=float(pos_size),
+            archetype=archetype,
         )
 
         asset._apply_decision(decision, df)

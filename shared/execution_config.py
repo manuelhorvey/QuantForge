@@ -30,6 +30,7 @@ class ExecutionConfig:
     # ── Execution delay ───────────────────────────────────────────
     delay_vol_threshold: float = 2.5  # vol z-score above this introduces delay
     delay_bars_max: int = 2  # max bars of execution delay
+    latency_bps: float = 0.5  # base execution latency (slippage) in bps
 
     # ── Volatility computation ────────────────────────────────────
     vol_window: int = 21  # rolling window for vol estimation
@@ -49,6 +50,7 @@ def btc_execution_config() -> ExecutionConfig:
         min_fill_prob=0.30,
         delay_vol_threshold=2.0,
         delay_bars_max=3,
+        latency_bps=2.0,
     )
 
 
@@ -59,6 +61,7 @@ def compute_slippage_cost(vol_zscore: np.ndarray, config: ExecutionConfig) -> np
     """Spread expansion as a function of volatility z-score."""
     excess = np.maximum(0.0, vol_zscore - 1.0)
     spread_bps = config.base_spread_bps * (1.0 + config.spread_vol_slope * excess)
+    spread_bps += config.latency_bps  # Apply constant latency penalty
     spread_bps = np.minimum(spread_bps, config.spread_max_bps)
     return spread_bps / 10000.0  # bps → decimal
 
@@ -90,6 +93,7 @@ def build_execution_configs(
             "impact_coeff": base.impact_coeff,
             "avg_daily_volume": base.avg_daily_volume,
             "vol_window": base.vol_window,
+            "latency_bps": base.latency_bps,
         }
         merged.update(overrides)
         cfg = execution_config_from_dict(merged)

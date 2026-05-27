@@ -222,6 +222,10 @@ def build_meta_features_from_trade(
 
     primary_confidence = matching_signal.get("confidence", 50) / 100.0
 
+    # Ensure price series is truncated to entry_date to prevent lookahead leak
+    close_at_entry = close.loc[:entry_date]
+    vol_z = compute_vol_zscore(close_at_entry)
+
     # Find validity state at entry time
     regime_state = "YELLOW"
     days_since_regime_change = 999
@@ -236,8 +240,6 @@ def build_meta_features_from_trade(
             ):
                 regime_state = v.get("state", "YELLOW")
                 days_since_regime_change = v.get("periods_in_state", 999)
-
-    vol_z = compute_vol_zscore(close)
 
     return {
         "primary_confidence": primary_confidence,

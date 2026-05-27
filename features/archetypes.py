@@ -1,0 +1,78 @@
+from enum import Enum
+import pandas as pd
+import numpy as np
+import logging
+
+logger = logging.getLogger("quantforge.features.archetypes")
+
+class SetupArchetype(Enum):
+    MOMENTUM_IGNITION = "MOMENTUM_IGNITION"
+    MEAN_REVERSION = "MEAN_REVERSION"
+    BREAKOUT_TEST = "BREAKOUT_TEST"
+    VOL_EXPANSION = "VOL_EXPANSION"
+    LIQUIDITY_SWEEP = "LIQUIDITY_SWEEP"
+    UNKNOWN = "UNKNOWN"
+
+class ArchetypeClassifier:
+    """
+    Phase 3: Archetype Classification.
+    Categorizes trade signals into structural market archetypes.
+    Used by Phase 1 (Entry) and Phase 2 (TP) for context-aware execution.
+    """
+
+    def __init__(self, adx_threshold: float = 25.0, rsi_extreme: float = 30.0):
+        self.adx_threshold = adx_threshold
+        self.rsi_extreme = rsi_extreme
+
+    def classify(self, row: pd.Series) -> SetupArchetype:
+        """
+        Classifies a single point in time (row of features).
+        Expects features: adx, rsi, bb_zscore, ema_spread.
+        """
+        try:
+            adx = row.get("adx", 0)
+            rsi = row.get("rsi", 50)
+            bb_z = row.get("bb_zscore", 0)
+            ema_s = row.get("ema_spread", 0)
+
+            # 1. Momentum Ignition
+            if adx > self.adx_threshold and abs(bb_z) > 1.5 and abs(ema_s) > 0.01:
+                return SetupArchetype.MOMENTUM_IGNITION
+
+            # 2. Mean Reversion
+            if adx < self.adx_threshold and (rsi > (100 - self.rsi_extreme) or rsi < self.rsi_extreme):
+                return SetupArchetype.MEAN_REVERSION
+
+            # 3. Breakout Test
+            if abs(bb_z) > 2.0 and adx > self.adx_threshold:
+                return SetupArchetype.BREAKOUT_TEST
+
+            # 4. Vol Expansion (Approximated by low ADX turning higher)
+            if adx < 20.0 and abs(bb_z) < 1.0:
+                 return SetupArchetype.VOL_EXPANSION
+
+            return SetupArchetype.UNKNOWN
+        except Exception as e:
+            logger.error(f"Archetype classification failed: {e}")
+            return SetupArchetype.UNKNOWN
+
+    def tag_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Applies classification to an entire feature DataFrame."""
+        df = df.copy()
+        df["archetype"] = df.apply(self.classify, axis=1)
+        df["archetype_name"] = df["archetype"].apply(lambda x: x.value)
+        return df
+
+if __name__ == "__main__":
+    # Quick test with dummy data
+    data = pd.DataFrame({
+        "adx": [30.0, 15.0, 40.0, 10.0],
+        "rsi": [50.0, 80.0, 50.0, 50.0],
+        "bb_zscore": [1.8, 2.2, 2.5, 0.5],
+        "ema_spread": [0.02, 0.001, 0.03, 0.0001]
+    })
+    
+    classifier = ArchetypeClassifier()
+    tagged = classifier.tag_dataframe(data)
+    print("Archetype Classification Test:")
+    print(tagged[["adx", "rsi", "bb_zscore", "archetype_name"]])

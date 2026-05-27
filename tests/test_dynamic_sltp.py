@@ -80,19 +80,6 @@ class TestComputeBarriers:
         if result.trailing_activation_price is not None:
             assert result.trailing_activation_price > 100.0
 
-    def test_regime_calm_wider_tp(self, df):
-        engine = DynamicSLTPEngine(min_rr_ratio=0.1)
-        calm = engine.compute_barriers(100.0, "long", df, sl_mult=1.0, tp_mult=1.0, regime="calm")
-        neutral = engine.compute_barriers(100.0, "long", df, sl_mult=1.0, tp_mult=1.0, regime="neutral")
-        assert (calm.take_profit - 100.0) > (neutral.take_profit - 100.0)
-
-    def test_regime_crisis_wider_sl(self, engine, df):
-        crisis = engine.compute_barriers(100.0, "long", df, sl_mult=1.0, tp_mult=1.0, regime="crisis")
-        neutral = engine.compute_barriers(100.0, "long", df, sl_mult=1.0, tp_mult=1.0, regime="neutral")
-        sl_dist_crisis = 100.0 - crisis.stop_loss
-        sl_dist_neutral = 100.0 - neutral.stop_loss
-        assert sl_dist_crisis > sl_dist_neutral
-
     def test_sl_never_below_zero_long(self, engine, df):
         wide = DynamicSLTPEngine(atr_mult_sl=50.0, atr_mult_tp=3.0)
         result = wide.compute_barriers(100.0, "long", df, sl_mult=1.0, tp_mult=1.0)
@@ -325,20 +312,6 @@ class TestHelpers:
         engine = DynamicSLTPEngine()
         gap = engine._estimate_gap_risk(sample_price_data)
         assert gap >= 0
-
-    def test_regime_sl_mult(self):
-        engine = DynamicSLTPEngine()
-        assert engine._regime_sl_mult("calm") == 0.8
-        assert engine._regime_sl_mult("neutral") == 1.0
-        assert engine._regime_sl_mult("crisis") == 1.5
-        assert engine._regime_sl_mult("unknown") == 1.0
-
-    def test_regime_tp_mult(self):
-        engine = DynamicSLTPEngine()
-        assert engine._regime_tp_mult("calm") == 1.2
-        assert engine._regime_tp_mult("neutral") == 1.0
-        assert engine._regime_tp_mult("crisis") == 0.6
-        assert engine._regime_tp_mult("unknown") == 1.0
 
     def test_is_tighter_long(self):
         engine = DynamicSLTPEngine()

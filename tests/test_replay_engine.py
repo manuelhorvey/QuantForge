@@ -23,8 +23,12 @@ class TestUpdatePnlDeterministic:
     @pytest.fixture
     def engine(self):
         pf = build_paper_portfolio(get_config().halt)
+        # Use first available asset from config portfolio
+        asset_name = list(pf.keys())[0]
+        spec = pf[asset_name]
+        contract = FEATURE_REGISTRY[spec["ticker"]]
         return AssetEngine(
-            "NZDJPY=X", "NZDJPY", FEATURE_REGISTRY["NZDJPY=X"], pf["NZDJPY"]["alloc"],
+            spec["ticker"], asset_name, contract, spec["alloc"],
             journal_path=_SKIP_JOURNAL,
         )
 
