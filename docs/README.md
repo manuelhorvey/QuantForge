@@ -14,7 +14,7 @@ Project documentation and reference materials for the QuantForge quantitative tr
 | [`HARDENING_ROADMAP.md`](HARDENING_ROADMAP.md) | Execution physics, extended history, lead-lag, adaptive macro, Phases 0–6 |
 | [`SURVIVAL_SIMULATION.md`](SURVIVAL_SIMULATION.md) | Adversarial survival testing, deleveraging feedback |
 
-### Execution Research Framework (Phases 0–6)
+### Execution Research Framework (Phases 0–6) ✅ Complete
 
 | Phase | Layer | Module |
 |-------|-------|--------|
@@ -22,9 +22,31 @@ Project documentation and reference materials for the QuantForge quantitative tr
 | 1 | Entry Quality Engine | `paper_trading/entry_optimizer.py`, `paper_trading/deferred_entry.py` |
 | 2 | TP/Exit Geometry | `paper_trading/tp_compiler.py`, `paper_trading/scale_out.py` |
 | 3 | Archetype Classification | `features/archetypes.py` |
-| 4 | Execution Policy Layer | `paper_trading/execution_policy.py` |
-| 5 | Fill Realism Layer | `paper_trading/execution_simulator.py`, `paper_trading/slippage_model.py`, `paper_trading/fill_model.py`, `paper_trading/latency_model.py` |
-| 6 | Trade Attribution | `paper_trading/trade_attribution.py` |
+| 4 | Execution Policy Layer | `paper_trading/execution_policy.py` — also: `_can_enter()` single entry gate in `asset_engine.py` |
+| 5 | Fill Realism Layer | `paper_trading/execution_simulator.py`, `slippage_model.py`, `fill_model.py`, `latency_model.py` |
+| 6 | Trade Attribution | `paper_trading/trade_attribution.py` — persists to parquet via `state_store.py` |
+
+### Derived Metrics Engine ✅
+
+| Module | File | Purpose |
+|--------|------|---------|
+| EIS | `shared/metrics/eis.py` | Execution Impact Score (slippage × fill × latency) |
+| FQI | `shared/metrics/fqi.py` | Fill Quality Index (ratio × gap × partial × latency) |
+| MAE/MFE | `shared/metrics/mae_mfe.py` | Time/ATR-normalized adverse/favorable excursion |
+| Shadow Divergence | `shared/metrics/shadow.py` | Live vs shadow R delta + exit-reason divergence |
+| Attribution Waterfall | `shared/metrics/attribution.py` | 4-domain PnL decomposition + domain quality scores |
+
+### Dashboard (6 Execution Layers)
+
+| Layer | Component | Purpose |
+|-------|-----------|---------|
+| 0 | `FilterBar` | Persistent archetype/regime/asset chips |
+| 1 | `ExecutionQualityStrip` | EIS/FQI per-asset KPI row |
+| 2 | `AttributionBreakdownCard` + `PnLWaterfall` | Domain scores + PnL decomposition |
+| 3 | `MaeMfeScatter` | MAE vs MFE colored by archetype |
+| 4 | `SlippageHistogram` + `FillQualityGauge` | Friction distribution + fill quality indicator |
+| 5 | `TradeExecutionTable` + `TradeDetailPanel` | Full attribution field drill-down |
+| 6 | `ShadowComparisonTable` + `ShadowDivergenceChart` | Shadow vs live exit reason/R analysis |
 
 ## ADRs
 

@@ -47,8 +47,17 @@ Operational procedures for the paper trading system. This document is for the pe
 
 **Dashboard features:** Per-asset scale-out tier progress visualization (filled vs pending tiers shown as color-coded blocks in AssetCard). SL/TP hit rate gauge bars (GREEN/YELLOW/RED thresholds) in the Trade Outcomes table. PSI Drift panel with per-feature distribution shift scores, trend arrows, and color-coded classification badges. **Satellite card** shows entry price, stop price, target price when position active; SL/TP show `—` when flat; last exit reason (SL_HIT/TP_HIT/GATE_CLOSED) is displayed after each exit.
 
-**Dashboard UI (post-polish):**
-- **Anchor nav** — sticky horizontal nav bar below header (Portfolio/Signals/Trades/Governance/Risk/Charts). Click to jump, highlights current section on scroll via `IntersectionObserver`.
+**Execution Dashboard (6 layers):** The Execution section (between Signals and Trades in the anchor nav) provides causal traceability across the full prediction → execution → exit → friction chain:
+- **Layer 0 — FilterBar**: Persistent archetype/regime/asset filter chips that scope all execution views.
+- **Layer 1 — ExecutionQualityStrip**: KPI row showing EIS (Execution Impact Score) and FQI (Fill Quality Index) per asset. EIS = slippage(40%) + fill quality(35%) + latency(25%). FQI = fill ratio × gap × partial × latency penalties.
+- **Layer 2 — Attribution Breakdown**: Domain scores grid (Prediction/Execution/Exit/Friction) + PnL Waterfall bar chart decomposing gross PnL into prediction contribution, execution cost, friction cost, and net.
+- **Layer 3 — MAE/MFE Scatter**: Scatter plot of max adverse/favorable excursion per trade, colored by archetype. Useful for detecting archetype-specific exit failure modes.
+- **Layer 4 — Execution Friction**: Slippage histogram (entry/exit distribution with mean line) + Fill Quality gauge (SVG arc showing composite FQI with fill ratio, gap, partial, and latency annotations).
+- **Layer 5 — Trade Execution Table**: Full attribution field table (archetype, R, entry/exit slippage, fill%, latency, MAE, MFE, exit reason) with row-click drill-down to `TradeDetailPanel` showing per-domain scores with progress bars.
+- **Layer 6 — Shadow Comparison**: Divergence rate bar chart by config label + comparison table showing shadow vs live exit reasons, R delta, and MATCH/DIVERGE status.
+
+**Dashboard UI:**
+- **Anchor nav** — sticky horizontal nav bar below header (Portfolio/Signals/Execution/Trades/Governance/Risk/Charts). Click to jump, highlights current section on scroll via `IntersectionObserver`.
 - **Sortable tables** — click any column header to sort ascending/descending. Sort state persists in `sessionStorage` per table (per-tab, cleared on tab close). Signals table defaults to confidence descending; Trades defaults to exit date descending.
 - **Trend indicators** — portfolio metric cards show up/down arrows with Return and Realized P&L. Card trend color matches direction.
 - **Governance row accents** — each governance row has a 3px left-border strip colored by premature-stop classification (GREEN/YELLOW/RED/INIT). RED rows have an animated pulse ring.
@@ -646,6 +655,20 @@ assets:
 
 **Volatility dashboard** (`/volatility.json`) compares live vol to `vol_baselines` in the same YAML file.
 
+**Execution quality dashboard** (`/execution/quality.json`) — per-asset EIS and FQI scores. Use to detect execution degradation before it hits PnL (EIS < 0.5 or FQI < 0.6 warrants investigation).
+
+**Attribution dashboard** (`/attribution/trades.json`, `/attribution/summary.json`, `/attribution/waterfall.json`) — 4-domain causal decomposition per trade:
+- Check `domain_scores` in the summary: prediction_score < 0.3 suggests signal quality issue; execution_score < 0.4 suggests entry timing degradation; friction_score < 0.5 suggests spread/impact/latency problems.
+- PnL waterfall shows where PnL was lost/gained across the 4 domains.
+- Filter by `archetype` or `asset` to isolate specific conditions.
+
+**Shadow divergence dashboard** (`/shadow/trades.json`, `/shadow/summary.json`) — live vs shadow counterfactual comparison:
+- `divergence_rate` > 0.3 suggests the shadow SL/TP parameters are consistently diverging from live execution outcomes.
+- High R delta (|ΔR| > 1.0) on diverged trades indicates a systematic exit logic gap.
+- Check `by_label` breakdown to see which alt-config is diverging most.
+
+**Analytics snapshot** (`/analytics/snapshot.json`) — aggregated summary of all metrics. Frequency-gated (recomputes every 5 requests). Useful for a single-call status overview.
+
 **Decision payload** may include `macro_weight` when adaptive macro is active.
 
 **Research / validation:** see `docs/HARDENING_ROADMAP.md` for extended history, lead-lag, and pytest targets.
@@ -660,20 +683,30 @@ Project Root/
 │   └── paper_trading.yaml        # Assets, halt, vol_baselines, execution_config
 ├── data/
 │   ├── live/
-│   │   └── state.json            # Current portfolio and asset state
+│   │   ├── state.json            # Current portfolio and asset state
+│   │   ├── trade_journal.parquet  # Trade journal with exit reasons
+│   │   ├── equity_history.parquet # Equity curve over time
+│   │   └── trade_outcomes.json   # Aggregated TP/SL/win rates
 │   ├── research/
 │   │   ├── lead_lag_matrix.parquet
 │   │   ├── lead_lag_edges.yaml
-│   │   └── survival_*.json       # Baseline vs extended survival exports
+│   │   ├── survival_*.json       # Baseline vs extended survival exports
+│   │   └── attribution/          # Per-asset attribution parquet files
 │   ├── raw/historical_extended/  # 2000+ OHLCV (after backfill)
 │   └── processed/
 │       ├── macro_factors.parquet # FRED macro data
 │       └── walkforward_summary.csv  # 30-asset walk-forward ranking
 ├── paper_trading/
 │   ├── engine.py                 # PaperTradingEngine + PaperBroker
+│   ├── asset_engine.py           # Per-asset lifecycle + _can_enter() entry gate
+│   ├── state_store.py            # Parquet persistence + analytics snapshot
+│   ├── serve_routes.py           # REST API route registry (30+ endpoints)
+│   ├── serve.py                  # HTTP server entry point
 │   ├── execution_bridge.py       # Slippage-aware fills for AssetEngine
 │   ├── market_hours.py           # Weekend detection: is_market_closed()
-│   ├── serve.py                  # HTTP server + dashboard
+│   ├── serve_common.py           # Shared serve utilities
+│   ├── trade_attribution.py      # 4-domain AttributionCollector
+│   ├── shadow_sltp.py            # ShadowSLTPEngine (counterfactual replay)
 │   └── models/
 │       ├── BTC_model.pkl
 │       ├── GC_model.pkl
@@ -707,5 +740,7 @@ Project Root/
 | GC=F showing flat/neutral bias | Real yields not updating on weekends | Normal — gold macro features are daily |
 | Dashboard shows CLSD / "weekend — no refresh" | Normal — market is closed | Engine resumes automatically Sun 17:00 ET |
 | "Market closed — skipping refresh" in logs | Normal — engine is paused for weekend | No action needed; data is stale but preserved |
+| "entry gate blocking" in logs | Normal — cooldown or same-day stop-out lock active after SL | Indicates `_can_enter()` is working; no action unless persists > 24h |
+| Clustered SL sequence (6+ same side, same day) | Deferred entry bypassing cooldown (pre-fix) | Should no longer occur after `_can_enter()` gate — file issue if seen |
 | State API `market_closed: true` | Engine correctly detected weekend | N/A — server-driven indicator |
 | Dashboard polling slower than usual | Intended — hooks reduce refetch rate 4-20x when markets closed | Saves bandwidth; restore normal rate on market open |

@@ -19,11 +19,12 @@ QuantForge is a **deterministic market interaction simulator with causally decom
 | **Models** | Probabilistic directional intent via XGBoost (BUY / HOLD / SELL) — signal generator, not decision authority |
 | **Archetype Classification** | 5 pure-feature market structure archetypes — primary execution conditioning variable across Phases 1-4 |
 | **Volatility Primitive** | Frozen ATR-based shared module — single vol source for labels, execution geometry, shadow replay, and attribution |
-| **Entry Quality** | DeferredEntry engine with idempotent entry_id, EntryOptimizer routing (ENTER / DEFER / SKIP) |
+| **Entry Quality** | DeferredEntry engine with idempotent entry_id, EntryOptimizer routing (ENTER / DEFER / SKIP); single `_can_enter()` gate enforces cooldown, same-bar stop-out lock, and pending-entry conflict across ALL entry paths |
 | **Execution Policy** | Immutable PolicyDecision dispatch — archetype-to-policy switchboard |
 | **Fill Realism** | Seeded deterministic slippage (asymmetric SL/TP), gap-through, partial fill, latency |
-| **Shadow Counterfactual Engine** | Isolated SL/TP replay on live tape — never shares mutable state with PositionManager |
-| **Trade Attribution** | 4-domain causal reconstruction (Prediction, Execution, Exit, Friction) with counterfactual decomposition + archetype stratification — observes everything, mutates nothing |
+| **Shadow Counterfactual Engine** | Isolated SL/TP replay on live tape — never shares mutable state with PositionManager; trades persisted to parquet for dashboard comparison |
+| **Trade Attribution** | 4-domain causal reconstruction (Prediction, Execution, Exit, Friction) with counterfactual decomposition + archetype stratification — observes everything, mutates nothing; persisted to parquet with incremental flush |
+| **Derived Metrics Engine** | Stateless deterministic modules in `shared/metrics/` — EIS (Execution Impact Score), FQI (Fill Quality Index), MAE/MFE normalization, shadow divergence, attribution waterfall + domain scores |
 | **Execution Path Analysis** | Distributional attribution diagnostics — per-archetype path stats, meta-confidence decile stratification |
 | **Governance** | 7-layer suppression under instability — see [docs/GOVERNANCE_LAYER.md](docs/GOVERNANCE_LAYER.md) |
 | **Simulation** | Adversarial survival testing with execution physics and deleveraging feedback |
@@ -43,6 +44,7 @@ QuantForge is a **deterministic market interaction simulator with causally decom
 - **Frozen volatility primitive** — single ATR implementation shared across labels, execution geometry, shadow replay, and attribution; eliminates train/serve skew at barrier geometry level
 - **Meta-confidence as size scalar only** — modulates exposure magnitude; never modifies TP geometry, trailing, or scale-out schedules
 - **Shadow engines are isolated** — never share mutable execution state with live engine; replay same tape independently
+- **Single Entry Authority** — all entry sources (model decisions, deferred entries, future extensions) route through `_can_enter()` with zero special-case bypasses; control-flow safety replaced by state-validated execution authority
 
 ---
 
@@ -273,17 +275,27 @@ Full detail: [docs/ARCHITECTURE_FOUNDATIONS.md](docs/ARCHITECTURE_FOUNDATIONS.md
 
 ## 9. HARDENING ROADMAP
 
-### Execution Research Framework (Phases 0–6)
+### Execution Research Framework (Phases 0–6) ✅ Complete
 
-| Phase | Capability |
-|-------|------------|
-| **0** | Frozen Kernel + Labels — retrained with runtime-consistent initial geometry; no adaptive logic leaks into labels |
-| **1** | Entry Quality Engine — EntryOptimizer, DeferredEntry with idempotent entry_id |
-| **2** | TP/Exit Geometry — regime×archetype TP compiler; backloaded scale-out tiers per archetype |
-| **3** | Archetype Classification — 5 pure-feature archetypes: BREAKOUT, TREND_PULLBACK, MEAN_REVERSION, VOLATILITY_EXPANSION, MOMENTUM_IGNITION |
-| **4** | Execution Policy Layer — archetype-to-policy dispatch via POLICY_MAP; PolicyDecision as immutable instruction packet |
-| **5** | Fill Realism Layer — SlippageModel, FillModel, LatencyModel, ExecutionSimulator; asymmetric SL/TP slippage; gap-through; partial fill; seeded deterministic randomness |
-| **6** | Causal Reconstruction Layer — 4-domain attribution (Prediction, Execution, Exit, Friction); counterfactual metrics (perfect entry, zero slippage, ideal exit); MAE/MFE time-normalized; archetype drift tracking; deterministic replay audit |
+| Phase | Capability | Status |
+|-------|------------|--------|
+| **0** | Frozen Kernel + Labels — retrained with runtime-consistent initial geometry | ✅ |
+| **1** | Entry Quality Engine — EntryOptimizer, DeferredEntry with idempotent entry_id | ✅ |
+| **2** | TP/Exit Geometry — regime×archetype TP compiler; backloaded scale-out tiers | ✅ |
+| **3** | Archetype Classification — 5 pure-feature archetypes | ✅ |
+| **4** | Execution Policy Layer — POLICY_MAP dispatch, PolicyDecision, `_can_enter()` single entry gate | ✅ |
+| **5** | Fill Realism Layer — asymmetric slippage, gap-through, partial fill, latency | ✅ |
+| **6** | Causal Reconstruction Layer — 4-domain attribution, counterfactuals, MAE/MFE, archetype drift | ✅ |
+
+### Derived Metrics Engine ✅
+
+| Module | Purpose | Status |
+|--------|---------|--------|
+| **EIS** | Execution Impact Score — slippage (40%), fill quality (35%), latency (25%) weighted composite | ✅ |
+| **FQI** | Fill Quality Index — fill ratio × gap × partial × latency penalties | ✅ |
+| **MAE/MFE** | Time-normalized adverse/favorable excursion, ATR-normalized cross-asset comparison | ✅ |
+| **Shadow Divergence** | R-distribution delta, exit-reason divergence rate between live and shadow execution | ✅ |
+| **Attribution Waterfall** | 4-domain PnL decomposition (prediction → execution → exit → friction) + per-archetype domain scores | ✅ |
 
 ### Execution Research Infrastructure Tiers (A0–B3)
 
@@ -345,6 +357,7 @@ Full detail: [docs/SURVIVAL_SIMULATION.md](docs/SURVIVAL_SIMULATION.md)
 - **Frozen volatility primitive**: single ATR implementation shared across labels, execution, shadow, and attribution — no duplicate vol logic
 - **Meta-confidence is size-only**: never modifies TP geometry, trailing, or scale-out schedules
 - **Shadow engine isolation**: never shares mutable state with PositionManager; independent replay on same tape
+- **Single Entry Authority**: `_can_enter()` is the sole gate for all entry sources (model decisions, deferred entries, future extensions); no special-case bypasses; produces `(bool, reason)` tuple for dashboard-level debugging
 - **No auto-widening on SL rate**: preserves replayability and contract determinism
 - **No Kelly sizing**: amplifies error on noisy estimates; excluded by design
 - **No post-entry re-interpretation of open trades**: preserves frozen execution contracts
@@ -354,7 +367,8 @@ Full detail: [docs/SURVIVAL_SIMULATION.md](docs/SURVIVAL_SIMULATION.md)
 ## 12. INFRASTRUCTURE
 
 - Stateless inference, stateful execution with crash-safe snapshots
-- Local HTTP observability dashboard (React + Vite + Tailwind + react-query) — sortable tables, sticky anchor nav, real-time session clock, governance state visualization with animated status indicators
+- Local HTTP observability dashboard (React + Vite + Tailwind + react-query) — 70+ components across 7 navigation sections (Portfolio, Signals, Execution, Trades, Governance, Risk, Charts); 6-layer execution dashboard with attribution, friction, and shadow analysis
+- Analytics snapshot cache — frequency-gated recomputation (every 5 cycles) for attribution summary, execution quality, shadow divergence; served via 8 dedicated read-only API endpoints
 - In-memory TTL cache with per-endpoint expiry (5-30s), gzip compression
 - Configurable refresh interval via `QUANTFORGE_REFRESH_INTERVAL`
 - JSONL decision tracing
@@ -367,7 +381,7 @@ Full detail: [docs/SURVIVAL_SIMULATION.md](docs/SURVIVAL_SIMULATION.md)
 - Data limited to Yahoo Finance + FRED
 - EURUSD excluded (pending COT integration)
 - 19 unscreened pairs not yet evaluated
-- Shadow engine in data-collection phase — no statistical output until attribution variance stabilizes across regimes
+- Shadow engine actively collecting data with parquet persistence and dashboard comparison — divergence analysis maturing as sample grows
 
 ---
 
@@ -393,8 +407,10 @@ The system now operates on a **frozen execution ledger** composed of immutable a
 | Policy Decision Packet | Phase 4 | Frozen instruction |
 | Dynamic SL/TP Barriers | Phase 4 | ATR-based, post_entry_adjust vol-filtered |
 | Fill Simulation Result | Phase 5 | Seeded deterministic |
-| Trade Attribution Record | Phase 6 | Observe-only append |
-| Shadow Counterfactual Replay | Research | Isolated, never mutates live state |
+| Trade Attribution Record | Phase 6 | Observe-only append; persisted to parquet |
+| Shadow Counterfactual Replay | Research | Isolated, never mutates live state; persisted to parquet |
+| Derived Metrics (EIS, FQI, MAE/MFE, shadow divergence) | Metrics | Stateless deterministic computation from persisted records |
+| Analytics Snapshot | Metrics | Frequency-gated aggregation of all derived metrics |
 | Execution Path Analysis | Research | Distributional, never feeds back |
 
 These artifacts form a **deterministic replay chain**: same inputs + same seed → identical execution history. This enables counterfactual evaluation — what-if analysis on any single artifact without recomputing upstream layers. The volatility primitive is the single source of truth for barrier geometry across all layers.
@@ -418,24 +434,26 @@ to:
 | Volatility source | EWM duplicate per layer | Single frozen ATR primitive (shared) |
 | Meta-confidence | Binary ENTER/BLOCK gate | Continuous size scalar [0–1] |
 | Execution truth | Position manager state | Frozen PolicyDecision → FillResult |
-| Analytics | Performance metrics | Causal decomposition + shadow replay + path analysis |
-| Attribution | PnL attribution | 4-domain + archetype stratification + meta-bucket deciles |
-| Shadow research | None | Isolated counterfactual SL/TP replay |
+| Analytics | Performance metrics | Causal decomposition + shadow replay + path analysis + derived metrics (EIS, FQI, MAE/MFE, domain scores) |
+| Attribution | PnL attribution | 4-domain + archetype stratification + meta-bucket deciles + persistence to parquet |
+| Shadow research | None | Isolated counterfactual SL/TP replay + persistence to parquet + divergence analysis |
 | Reproducibility | Stochastic | Seeded deterministic across all layers |
+| Entry authority | Scattered (dual-pipeline) | Single `_can_enter()` gate — all entry sources unified |
 
 ---
 
 ## 17. SYSTEM MATURITY STATE
 
-QuantForge is now in **execution research infrastructure complete** state. The architecture is structurally complete through Phase 6 + Tiers A0–B3. The next phase is data accumulation:
+QuantForge is in **execution research infrastructure complete** state. The architecture is structurally complete through Phase 6 + Tiers A0–B3 + Derived Metrics Engine + Single Entry Authority. The next phase is data accumulation:
 
 - **Let the system accumulate data across regimes** — resist adding new logic until attribution variance stabilizes
 - **Generate first execution-path diagnostics report** — ranked PnL degradation decomposition is the first genuinely valuable diagnostic output
 - **Statistical governance** — edge discovery from the full attribution surface once data is sufficient
 - **Regime sensitivity analysis** — expectancy surfaces conditioned on market regime
 - **Policy optimization** — tuning execution within existing contract boundaries (no kernel contamination)
+- **Dashboard iteration** — refine execution intelligence layers as attribution data accumulates
 
-The architecture is contract-frozen. All subsequent development operates within the existing causal isolation boundaries and respects the observe-only constraint on the signal kernel. The highest-value next action is data accumulation quality, not engineering.
+The architecture is contract-frozen. All subsequent development operates within the existing causal isolation boundaries and respects the observe-only constraint on the signal kernel. The highest-value next action is data accumulation quality, not engineering. The execution dashboard is now equipped to visualize all 4 causal domains + shadow divergence + derived metrics at the per-trade level.
 
 ---
 
