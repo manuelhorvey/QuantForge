@@ -10,7 +10,7 @@ from paper_trading.shadow.feedback import read_feedback
 
 _lock = threading.Lock()
 
-LEARNING_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "shadow_learning")
+LEARNING_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "shadow_learning")
 
 
 def compile_shadow_learning(

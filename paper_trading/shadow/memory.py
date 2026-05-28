@@ -8,7 +8,7 @@ import numpy as np
 
 _lock = threading.Lock()
 
-MEMORY_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "shadow_memory")
+MEMORY_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "shadow_memory")
 
 BASELINE_DIR = os.path.join(MEMORY_DIR, "baseline")
 

@@ -13,7 +13,7 @@ from paper_trading.ops.data_fetcher import fetch_history, fetch_ref
 
 logger = logging.getLogger("quantforge.training_pipeline")
 
-BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 class AssetTrainingPipeline:

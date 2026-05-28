@@ -24,7 +24,7 @@ from pathlib import Path
 
 logger = logging.getLogger("quantforge.experiment_context")
 
-BASE = Path(__file__).resolve().parent.parent
+BASE = Path(__file__).resolve().parent.parent.parent
 
 
 def _hash_file(path: str | Path) -> str:
@@ -47,19 +47,19 @@ SOURCE_REGISTRY: list[tuple[str, str]] = [
     ("label_generator", "labels/generator.py"),
     ("archetype_classifier", "features/archetypes.py"),
     ("feature_registry", "features/registry.py"),
-    ("entry_optimizer", "paper_trading/entry_optimizer.py"),
-    ("decision_models", "paper_trading/decision.py"),
-    ("execution_policy", "paper_trading/execution_policy.py"),
-    ("tp_compiler", "paper_trading/tp_compiler.py"),
-    ("scale_out", "paper_trading/scale_out.py"),
-    ("deferred_entry", "paper_trading/deferred_entry.py"),
-    ("execution_simulator", "paper_trading/execution_simulator.py"),
-    ("slippage_model", "paper_trading/slippage_model.py"),
-    ("fill_model", "paper_trading/fill_model.py"),
-    ("latency_model", "paper_trading/latency_model.py"),
-    ("trade_attribution", "paper_trading/trade_attribution.py"),
-    ("dynamic_sltp", "paper_trading/dynamic_sltp.py"),
-    ("execution_bridge", "paper_trading/execution_bridge.py"),
+    ("entry_optimizer", "paper_trading/entry/optimizer.py"),
+    ("decision_models", "paper_trading/entry/decision.py"),
+    ("execution_policy", "paper_trading/entry/policy.py"),
+    ("tp_compiler", "paper_trading/entry/tp_compiler.py"),
+    ("scale_out", "paper_trading/position/scale_out.py"),
+    ("deferred_entry", "paper_trading/entry/deferred_entry.py"),
+    ("execution_simulator", "paper_trading/execution/simulator.py"),
+    ("slippage_model", "paper_trading/execution/slippage.py"),
+    ("fill_model", "paper_trading/execution/fill.py"),
+    ("latency_model", "paper_trading/execution/latency.py"),
+    ("trade_attribution", "paper_trading/attribution/collector.py"),
+    ("dynamic_sltp", "paper_trading/position/dynamic_sltp.py"),
+    ("execution_bridge", "paper_trading/execution/bridge.py"),
     ("execution_config", "shared/execution_config.py"),
 ]
 

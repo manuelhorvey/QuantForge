@@ -5,7 +5,7 @@ import threading
 from datetime import datetime
 
 TRACE_LOG_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "live", "trace.jsonl"
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "live", "trace.jsonl"
 )
 
 _lock = threading.Lock()

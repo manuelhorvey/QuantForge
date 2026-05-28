@@ -14,7 +14,7 @@ logger = logging.getLogger("quantforge.data_fetcher")
 
 ET = pytz.timezone("US/Eastern")
 
-BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _STORE = StateStore(BASE)
 
 _MIN_REQUEST_INTERVAL = 1.0

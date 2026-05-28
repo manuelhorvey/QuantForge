@@ -5,7 +5,7 @@ from datetime import datetime
 
 _lock = threading.Lock()
 
-FEEDBACK_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "shadow_feedback")
+FEEDBACK_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "shadow_feedback")
 
 
 def record_shadow_feedback(

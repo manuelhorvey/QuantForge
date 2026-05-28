@@ -28,7 +28,7 @@ from paper_trading.ops.tracer import (
 
 logger = logging.getLogger("quantforge.inference_pipeline")
 
-BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ET = pytz.timezone("US/Eastern")
 
 
