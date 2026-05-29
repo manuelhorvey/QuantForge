@@ -24,6 +24,9 @@ def apply_triple_barrier(
 
     The volatility method and version are persisted in ``df.attrs``
     for label-metadata traceability.
+
+    Vectorized implementation uses ``sliding_window_view`` to eliminate
+    the O(N×V) Python loop, replacing it with O(N) numpy operations.
     """
     if vol_primitive is not None:
         target = compute_atr_pct(df, period=vol_primitive.period)
@@ -35,28 +38,57 @@ def apply_triple_barrier(
         vol_method = "explicit"
 
     df = df.loc[target.index].copy()
-    labels = pd.Series(index=df.index, data=0, dtype=int)
+    close = df["close"].values
+    vol = target.values
+    n = len(close)
+    vb = vertical_barrier
 
-    for i in range(len(df) - vertical_barrier):
-        current_price = float(df["close"].iloc[i])
-        vol = float(target.iloc[i])
+    # Initialize labels to 0 (no touch / outside lookahead window)
+    labels = np.zeros(n, dtype=int)
 
-        upper_barrier = current_price * (1.0 + vol * pt_sl[0])
-        lower_barrier = current_price * (1.0 - vol * pt_sl[1])
+    if n <= vb:
+        df["label"] = pd.Series(labels, index=df.index)
+        df.attrs["vol_method"] = vol_method
+        df.attrs["vol_primitive_version"] = VOLATILITY_PRIMITIVE_VERSION
+        return df
 
-        future_prices = df["close"].iloc[i + 1 : i + vertical_barrier + 1]
+    # Rolling window view: shape (n - vb, vb + 1)
+    windows = np.lib.stride_tricks.sliding_window_view(close, vb + 1)
 
-        hits_upper = future_prices[future_prices >= upper_barrier]
-        hits_lower = future_prices[future_prices <= lower_barrier]
+    # Current price and vol for each window start
+    curr = windows[:, 0]  # shape (n - vb,)
+    vol_slice = vol[: n - vb]
 
-        if not hits_upper.empty and (hits_lower.empty or hits_upper.index[0] < hits_lower.index[0]):
-            labels.iloc[i] = 1
-        elif not hits_lower.empty and (hits_upper.empty or hits_lower.index[0] < hits_upper.index[0]):
-            labels.iloc[i] = -1
-        else:
-            labels.iloc[i] = 0
+    # Barrier prices
+    upper = curr * (1.0 + vol_slice * pt_sl[0])
+    lower = curr * (1.0 - vol_slice * pt_sl[1])
 
-    df["label"] = labels
+    # Future prices (exclude current bar)
+    future = windows[:, 1:]  # shape (n - vb, vb)
+
+    # Find first hit for each barrier
+    # np.argmax returns first True, or 0 if none are True
+    hit_upper = np.argmax(future >= upper[:, None], axis=1)
+    hit_lower = np.argmax(future <= lower[:, None], axis=1)
+
+    # Detect no-hit cases: argmax returns 0 but the first future price
+    # may not actually hit the barrier
+    no_upper_hit = ~np.any(future >= upper[:, None], axis=1)
+    no_lower_hit = ~np.any(future <= lower[:, None], axis=1)
+    hit_upper[no_upper_hit] = vb  # sentinel past lookahead
+    hit_lower[no_lower_hit] = vb
+
+    # Label: +1 if upper hit first, -1 if lower hit first, 0 otherwise
+    labeled = np.full(n - vb, 0, dtype=int)
+    upper_first = hit_upper < hit_lower
+    lower_first = hit_lower < hit_upper
+    labeled[upper_first] = 1
+    labeled[lower_first] = -1
+
+    labels[: n - vb] = labeled
+    # Last vb rows remain 0 (no complete lookahead window)
+
+    df["label"] = pd.Series(labels, index=df.index)
     df.attrs["vol_method"] = vol_method
     df.attrs["vol_primitive_version"] = VOLATILITY_PRIMITIVE_VERSION
     return df

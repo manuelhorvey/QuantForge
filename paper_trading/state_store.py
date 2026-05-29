@@ -1,8 +1,8 @@
-import fcntl
 import json
 import logging
 import math
 import os
+import sqlite3
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -65,8 +65,6 @@ class StateStore:
         self.base_dir = base_dir
         self.live_dir = os.path.join(base_dir, "data", "live")
         self.state_path = os.path.join(self.live_dir, "state.json")
-        self.trade_journal_path = os.path.join(self.live_dir, "trade_journal.parquet")
-        self.confidence_bucket_path = os.path.join(self.live_dir, "confidence_buckets.parquet")
         self.equity_history_path = os.path.join(self.live_dir, "equity_history.json")
         self.review_log_path = os.path.join(self.live_dir, "review_log.json")
         self.trade_outcomes_path = os.path.join(self.live_dir, "trade_outcomes.json")
@@ -74,9 +72,160 @@ class StateStore:
         self._snapshot_cache = None
         self._snapshot_cache_ttl = snapshot_cache_ttl
         self._analytics_snapshot_counter = 0
-        self._analytics_snapshot_frequency = 5  # recompute every N calls
+        self._analytics_snapshot_frequency = 5
         os.makedirs(self.cache_dir, exist_ok=True)
         os.makedirs(self.live_dir, exist_ok=True)
+
+        # SQLite-backed append store (replaces read-all-write-all parquet/JSON)
+        self._db_path = os.path.join(self.live_dir, "state.db")
+        self._init_db()
+
+    # ── SQLite initialisation ──────────────────────────────────────
+
+    def _init_db(self) -> None:
+        """Create tables if they don't exist."""
+        with self._connect() as conn:
+            conn.executescript("""
+                PRAGMA journal_mode=WAL;
+                PRAGMA synchronous=NORMAL;
+
+                CREATE TABLE IF NOT EXISTS trades (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    asset TEXT NOT NULL,
+                    side TEXT,
+                    entry REAL,
+                    exit REAL,
+                    entry_date TEXT,
+                    exit_date TEXT,
+                    return REAL,
+                    pnl REAL,
+                    total_pnl REAL,
+                    reason TEXT,
+                    realized_r REAL,
+                    bars INTEGER,
+                    conf_at_entry REAL,
+                    archetype_at_entry TEXT,
+                    attribution_trade_id TEXT,
+                    mae REAL,
+                    mfe REAL,
+                    mae_per_bar REAL,
+                    mfe_per_bar REAL,
+                    entry_slippage_bps REAL,
+                    exit_slippage_bps REAL,
+                    fill_qty_ratio REAL,
+                    gap_fill INTEGER,
+                    partial_fill INTEGER,
+                    latency_bars INTEGER,
+                    pred_confidence REAL,
+                    pred_archetype TEXT,
+                    pred_regime TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                );
+
+                CREATE TABLE IF NOT EXISTS attribution (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    asset TEXT,
+                    trade_id TEXT,
+                    entry_date TEXT,
+                    exit_date TEXT,
+                    side TEXT,
+                    exit_price REAL,
+                    exit_reason TEXT,
+                    realized_r REAL,
+                    realized_return REAL,
+                    realized_pnl REAL,
+                    theoretical_r REAL,
+                    policy_hash TEXT,
+                    archetype_version TEXT,
+                    exit_archetype TEXT,
+                    pred_signal TEXT,
+                    pred_label INTEGER,
+                    pred_confidence REAL,
+                    pred_prob_long REAL,
+                    pred_prob_short REAL,
+                    pred_prob_neutral REAL,
+                    pred_meta_proba REAL,
+                    pred_regime_at_entry TEXT,
+                    pred_archetype_at_entry TEXT,
+                    exec_entry_type TEXT,
+                    exec_deferred_bars INTEGER,
+                    exec_entry_price REAL,
+                    exec_mid_price_at_signal REAL,
+                    exec_entry_slippage_bps REAL,
+                    friction_entry_slippage_bps REAL,
+                    friction_exit_slippage_bps REAL,
+                    exit_mae REAL,
+                    exit_mfe REAL,
+                    exit_mae_per_bar REAL,
+                    exit_mfe_per_bar REAL,
+                    exit_realized_r REAL,
+                    exit_bars_held INTEGER,
+                    exit_exit_archetype TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                );
+
+                CREATE TABLE IF NOT EXISTS shadow_trades (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    asset TEXT,
+                    alt_label TEXT,
+                    entry_date TEXT,
+                    exit_date TEXT,
+                    side TEXT,
+                    entry_price REAL,
+                    exit_price REAL,
+                    sl_price REAL,
+                    tp_price REAL,
+                    stop_loss REAL,
+                    take_profit REAL,
+                    reason TEXT,
+                    return REAL,
+                    pnl REAL,
+                    realized_r REAL,
+                    bars_held INTEGER,
+                    live_exit_reason TEXT,
+                    live_realized_r REAL,
+                    created_at TEXT DEFAULT (datetime('now'))
+                );
+
+                CREATE TABLE IF NOT EXISTS confidence_buckets (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    asset TEXT,
+                    date TEXT,
+                    count_0_10 INTEGER DEFAULT 0,
+                    count_10_20 INTEGER DEFAULT 0,
+                    count_20_30 INTEGER DEFAULT 0,
+                    count_30_40 INTEGER DEFAULT 0,
+                    count_40_50 INTEGER DEFAULT 0,
+                    count_50_60 INTEGER DEFAULT 0,
+                    count_60_70 INTEGER DEFAULT 0,
+                    count_70_80 INTEGER DEFAULT 0,
+                    count_80_90 INTEGER DEFAULT 0,
+                    count_90_100 INTEGER DEFAULT 0,
+                    mean_conf REAL,
+                    n_signals INTEGER,
+                    created_at TEXT DEFAULT (datetime('now'))
+                );
+
+                CREATE TABLE IF NOT EXISTS equity_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    portfolio_value REAL,
+                    portfolio_return REAL,
+                    drawdown REAL,
+                    gross_exposure REAL,
+                    net_exposure REAL,
+                    created_at TEXT DEFAULT (datetime('now'))
+                );
+            """)
+
+    def _connect(self) -> sqlite3.Connection:
+        """Open a new SQLite connection with row factory."""
+        conn = sqlite3.connect(self._db_path, timeout=5.0)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        return conn
+
+    # ── Snapshot (JSON, overwrite-only — no SQLite needed) ─────────
 
     def save_snapshot(self, snapshot: EngineSnapshot) -> None:
         self._snapshot_cache = (snapshot, time.monotonic())
@@ -84,9 +233,7 @@ class StateStore:
         tmp_path = self.state_path + ".tmp"
         data = sanitize(asdict(snapshot))
         with open(tmp_path, "w") as f:
-            fcntl.flock(f, fcntl.LOCK_EX)
             json.dump(data, f, indent=2, default=str)
-            fcntl.flock(f, fcntl.LOCK_UN)
         os.replace(tmp_path, self.state_path)
 
     def load_snapshot(self) -> EngineSnapshot | None:
@@ -107,42 +254,77 @@ class StateStore:
             logger.warning("Failed to load state snapshot: %s", e)
             return None
 
+    # ── Trades (SQLite) ────────────────────────────────────────────
+
     def append_trade(self, trade: dict) -> None:
-        df = pd.DataFrame([trade])
-        if os.path.exists(self.trade_journal_path):
-            existing = pd.read_parquet(self.trade_journal_path)
-            for col in ("entry_date", "exit_date"):
-                if col in existing.columns:
-                    existing[col] = existing[col].astype(str)
-                if col in df.columns:
-                    df[col] = df[col].astype(str)
-            df = pd.concat([existing, df], ignore_index=True)
-        df.to_parquet(self.trade_journal_path)
+        """Append a single trade record via SQLite INSERT.
+        O(1) — no read-all-then-write-all.
+        """
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO trades (
+                    asset, side, entry, exit, entry_date, exit_date,
+                    return, pnl, total_pnl, reason, realized_r, bars,
+                    conf_at_entry, archetype_at_entry, attribution_trade_id,
+                    mae, mfe, mae_per_bar, mfe_per_bar,
+                    entry_slippage_bps, exit_slippage_bps, fill_qty_ratio,
+                    gap_fill, partial_fill, latency_bars,
+                    pred_confidence, pred_archetype, pred_regime
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    trade.get("asset"),
+                    trade.get("side"),
+                    trade.get("entry"),
+                    trade.get("exit"),
+                    str(trade.get("entry_date", "")),
+                    str(trade.get("exit_date", "")),
+                    trade.get("return"),
+                    trade.get("pnl"),
+                    trade.get("total_pnl"),
+                    trade.get("reason"),
+                    trade.get("realized_r"),
+                    trade.get("bars"),
+                    trade.get("conf_at_entry"),
+                    trade.get("archetype_at_entry"),
+                    trade.get("attribution_trade_id"),
+                    trade.get("mae"),
+                    trade.get("mfe"),
+                    trade.get("mae_per_bar"),
+                    trade.get("mfe_per_bar"),
+                    trade.get("entry_slippage_bps"),
+                    trade.get("exit_slippage_bps"),
+                    trade.get("fill_qty_ratio"),
+                    trade.get("gap_fill"),
+                    trade.get("partial_fill"),
+                    trade.get("latency_bars"),
+                    trade.get("pred_confidence"),
+                    trade.get("pred_archetype"),
+                    trade.get("pred_regime"),
+                ),
+            )
 
     def read_trades(self, limit: int = 10) -> list:
         try:
-            if os.path.exists(self.trade_journal_path):
-                df = pd.read_parquet(self.trade_journal_path)
-                if len(df) > 0:
-                    df = df.sort_values("exit_date", ascending=False).head(limit)
-                    return json.loads(df.to_json(orient="records", default_handler=str))
+            with self._connect() as conn:
+                rows = conn.execute(
+                    "SELECT * FROM trades ORDER BY exit_date DESC LIMIT ?", (limit,)
+                ).fetchall()
+                return [dict(r) for r in rows]
         except Exception:
-            pass
-        return []
+            return []
 
     def read_trades_since(self, date: str) -> pd.DataFrame:
         columns = ["asset", "side", "entry", "exit", "return", "bars", "reason", "entry_date", "exit_date"]
-        if not os.path.exists(self.trade_journal_path):
-            return pd.DataFrame(columns=columns)
         try:
-            df = pd.read_parquet(self.trade_journal_path)
-            if df.empty:
-                return pd.DataFrame(columns=columns)
-            missing = [c for c in columns if c not in df.columns]
-            if missing:
-                for c in missing:
-                    df[c] = None
-            return df[df["exit_date"] >= date].copy()
+            with self._connect() as conn:
+                rows = conn.execute(
+                    "SELECT asset, side, entry, exit, return, bars, reason, entry_date, exit_date "
+                    "FROM trades WHERE exit_date >= ? ORDER BY exit_date DESC",
+                    (date,),
+                ).fetchall()
+                if not rows:
+                    return pd.DataFrame(columns=columns)
+                return pd.DataFrame([dict(r) for r in rows])
         except Exception:
             return pd.DataFrame(columns=columns)
 
@@ -156,54 +338,49 @@ class StateStore:
             return None
 
     def write_trade_outcomes_cache(self) -> None:
-        if not os.path.exists(self.trade_journal_path):
-            return
+        """Read all trades from SQLite, compute aggregates, cache to JSON."""
         try:
-            df = pd.read_parquet(self.trade_journal_path)
-            if df.empty:
-                return
+            with self._connect() as conn:
+                rows = conn.execute("SELECT * FROM trades").fetchall()
+                if not rows:
+                    return
+                df = pd.DataFrame([dict(r) for r in rows])
 
             reason_col = "reason" if "reason" in df.columns else "exit_reason"
             ret_col = "return" if "return" in df.columns else "pnl"
             r_col = "realized_r" if "realized_r" in df.columns else None
 
-            df[reason_col] = (
-                df[reason_col]
-                .astype(str)
-                .str.lower()
-                .replace(
-                    {
-                        "sl_hit": "sl",
-                        "tp_hit": "tp",
-                        "gate_closed": "signal_flip",
-                    }
+            if reason_col in df.columns:
+                df[reason_col] = (
+                    df[reason_col]
+                    .astype(str)
+                    .str.lower()
+                    .replace({"sl_hit": "sl", "tp_hit": "tp", "gate_closed": "signal_flip"})
                 )
-            )
-            df[ret_col] = pd.to_numeric(df[ret_col], errors="coerce").fillna(0.0)
+            if ret_col in df.columns:
+                df[ret_col] = pd.to_numeric(df[ret_col], errors="coerce").fillna(0.0)
 
             by_asset = []
             for asset_name, group in df.groupby("asset"):
                 n = len(group)
-                tp = (group[reason_col] == "tp").sum()
-                sl = (group[reason_col] == "sl").sum()
-                flip = (group[reason_col] == "signal_flip").sum()
-                wins = (group[ret_col] > 0).sum()
-                total_profit = group[ret_col].clip(lower=0).sum()
-                total_loss = (-group[ret_col].clip(upper=0)).sum()
+                tp = int((group[reason_col] == "tp").sum())
+                sl = int((group[reason_col] == "sl").sum())
+                flip = int((group[reason_col] == "signal_flip").sum())
+                wins = int((group[ret_col] > 0).sum())
+                total_profit = float(group[ret_col].clip(lower=0).sum())
+                total_loss = float((-group[ret_col].clip(upper=0)).sum())
                 avg_r = float(group[r_col].mean()) if r_col and r_col in group else 0.0
 
-                by_asset.append(
-                    {
-                        "asset": asset_name,
-                        "n_trades": int(n),
-                        "tp_rate": round(float(tp) / n, 4) if n > 0 else 0.0,
-                        "sl_rate": round(float(sl) / n, 4) if n > 0 else 0.0,
-                        "signal_flip_rate": round(float(flip) / n, 4) if n > 0 else 0.0,
-                        "avg_r": round(avg_r, 4),
-                        "win_rate": round(float(wins) / n, 4) if n > 0 else 0.0,
-                        "profit_factor": round(float(total_profit / total_loss), 4) if total_loss > 0 else None,
-                    }
-                )
+                by_asset.append({
+                    "asset": asset_name,
+                    "n_trades": n,
+                    "tp_rate": round(tp / n, 4) if n > 0 else 0.0,
+                    "sl_rate": round(sl / n, 4) if n > 0 else 0.0,
+                    "signal_flip_rate": round(flip / n, 4) if n > 0 else 0.0,
+                    "avg_r": round(avg_r, 4),
+                    "win_rate": round(wins / n, 4) if n > 0 else 0.0,
+                    "profit_factor": round(total_profit / total_loss, 4) if total_loss > 0 else None,
+                })
 
             n_total = len(df)
             tp_total = int((df[reason_col] == "tp").sum())
@@ -232,27 +409,66 @@ class StateStore:
         except Exception as e:
             logger.warning("Failed to write trade outcomes cache: %s", e)
 
-    def append_attribution(self, record_dict: dict) -> None:
-        """Persist a single TradeAttributionRecord flattened dict to attribution.parquet.
+    # ── Attribution (SQLite) ───────────────────────────────────────
 
-        Centralized store for dashboard consumption. Does NOT replace per-asset
-        experiment export — this is the durable queryable copy.
-        """
-        path = os.path.join(self.live_dir, "attribution.parquet")
-        df = pd.DataFrame([record_dict])
-        for col in ("entry_date", "exit_date", "created_at"):
-            if col in df.columns:
-                df[col] = df[col].astype(str)
-        if os.path.exists(path) and os.path.getsize(path) > 0:
-            try:
-                existing = pd.read_parquet(path)
-                for col in ("entry_date", "exit_date", "created_at"):
-                    if col in existing.columns:
-                        existing[col] = existing[col].astype(str)
-                df = pd.concat([existing, df], ignore_index=True)
-            except Exception:
-                pass
-        df.to_parquet(path, index=False)
+    def append_attribution(self, record_dict: dict) -> None:
+        """Append a single attribution record via SQLite INSERT."""
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO attribution (
+                    asset, trade_id, entry_date, exit_date,
+                    side, exit_price, exit_reason,
+                    realized_r, realized_return, realized_pnl, theoretical_r,
+                    policy_hash, archetype_version, exit_archetype,
+                    pred_signal, pred_label, pred_confidence,
+                    pred_prob_long, pred_prob_short, pred_prob_neutral, pred_meta_proba,
+                    pred_regime_at_entry, pred_archetype_at_entry,
+                    exec_entry_type, exec_deferred_bars,
+                    exec_entry_price, exec_mid_price_at_signal, exec_entry_slippage_bps,
+                    friction_entry_slippage_bps, friction_exit_slippage_bps,
+                    exit_mae, exit_mfe, exit_mae_per_bar, exit_mfe_per_bar,
+                    exit_realized_r, exit_bars_held, exit_exit_archetype
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    record_dict.get("asset"),
+                    record_dict.get("trade_id"),
+                    str(record_dict.get("entry_date", "")),
+                    str(record_dict.get("exit_date", "")),
+                    record_dict.get("side"),
+                    record_dict.get("exit_price"),
+                    record_dict.get("exit_reason"),
+                    record_dict.get("realized_r"),
+                    record_dict.get("realized_return"),
+                    record_dict.get("realized_pnl"),
+                    record_dict.get("theoretical_r"),
+                    record_dict.get("policy_hash"),
+                    record_dict.get("archetype_version"),
+                    record_dict.get("exit_archetype"),
+                    record_dict.get("pred_signal"),
+                    record_dict.get("pred_label"),
+                    record_dict.get("pred_confidence"),
+                    record_dict.get("pred_prob_long"),
+                    record_dict.get("pred_prob_short"),
+                    record_dict.get("pred_prob_neutral"),
+                    record_dict.get("pred_meta_proba"),
+                    record_dict.get("pred_regime_at_entry"),
+                    record_dict.get("pred_archetype_at_entry"),
+                    record_dict.get("exec_entry_type"),
+                    record_dict.get("exec_deferred_bars"),
+                    record_dict.get("exec_entry_price"),
+                    record_dict.get("exec_mid_price_at_signal"),
+                    record_dict.get("exec_entry_slippage_bps"),
+                    record_dict.get("friction_entry_slippage_bps"),
+                    record_dict.get("friction_exit_slippage_bps"),
+                    record_dict.get("exit_mae"),
+                    record_dict.get("exit_mfe"),
+                    record_dict.get("exit_mae_per_bar"),
+                    record_dict.get("exit_mfe_per_bar"),
+                    record_dict.get("exit_realized_r"),
+                    record_dict.get("exit_bars_held"),
+                    record_dict.get("exit_exit_archetype"),
+                ),
+            )
 
     def read_attribution(
         self,
@@ -262,69 +478,93 @@ class StateStore:
         regime: str | None = None,
         asset: str | None = None,
     ) -> list:
-        """Read attribution records with optional filters."""
-        path = os.path.join(self.live_dir, "attribution.parquet")
-        if not os.path.exists(path):
-            return []
         try:
-            df = pd.read_parquet(path)
-            if archetype:
-                df = df[df.get("pred_archetype_at_entry", "") == archetype]
-            if regime:
-                df = df[df.get("pred_regime_at_entry", "") == regime]
-            if asset:
-                df = df[df.get("asset", "") == asset]
-            df = df.sort_values("exit_date", ascending=False).iloc[offset : offset + limit]
-            return json.loads(df.to_json(orient="records", default_handler=str))
+            with self._connect() as conn:
+                where_parts = []
+                params = []
+                if archetype:
+                    where_parts.append("pred_archetype_at_entry = ?")
+                    params.append(archetype)
+                if regime:
+                    where_parts.append("pred_regime_at_entry = ?")
+                    params.append(regime)
+                if asset:
+                    where_parts.append("asset = ?")
+                    params.append(asset)
+                where_sql = " AND ".join(where_parts) if where_parts else "1=1"
+                params.extend([limit, offset])
+                rows = conn.execute(
+                    f"SELECT * FROM attribution WHERE {where_sql} "
+                    "ORDER BY exit_date DESC LIMIT ? OFFSET ?",
+                    tuple(params),
+                ).fetchall()
+                return [dict(r) for r in rows]
         except Exception as e:
             logger.warning("Failed to read attribution: %s", e)
             return []
 
+    # ── Shadow trades (SQLite) ─────────────────────────────────────
+
     def append_shadow_trade(self, record_dict: dict) -> None:
-        """Persist a single ShadowTradeRecord dict to shadow_trades.parquet."""
-        path = os.path.join(self.live_dir, "shadow_trades.parquet")
-        df = pd.DataFrame([record_dict])
-        for col in ("entry_date", "exit_date"):
-            if col in df.columns:
-                df[col] = df[col].astype(str)
-        if os.path.exists(path) and os.path.getsize(path) > 0:
-            try:
-                existing = pd.read_parquet(path)
-                for col in ("entry_date", "exit_date"):
-                    if col in existing.columns:
-                        existing[col] = existing[col].astype(str)
-                df = pd.concat([existing, df], ignore_index=True)
-            except Exception:
-                pass
-        df.to_parquet(path, index=False)
+        """Append a single shadow trade record via SQLite INSERT."""
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO shadow_trades (
+                    asset, alt_label, entry_date, exit_date,
+                    side, entry_price, exit_price,
+                    sl_price, tp_price, stop_loss, take_profit,
+                    reason, return, pnl, realized_r, bars_held,
+                    live_exit_reason, live_realized_r
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    record_dict.get("asset"),
+                    record_dict.get("alt_label"),
+                    str(record_dict.get("entry_date", "")),
+                    str(record_dict.get("exit_date", "")),
+                    record_dict.get("side"),
+                    record_dict.get("entry_price"),
+                    record_dict.get("exit_price"),
+                    record_dict.get("sl_price"),
+                    record_dict.get("tp_price"),
+                    record_dict.get("stop_loss"),
+                    record_dict.get("take_profit"),
+                    record_dict.get("reason"),
+                    record_dict.get("return"),
+                    record_dict.get("pnl"),
+                    record_dict.get("realized_r"),
+                    record_dict.get("bars_held"),
+                    record_dict.get("live_exit_reason"),
+                    record_dict.get("live_realized_r"),
+                ),
+            )
 
     def read_shadow_trades(self, limit: int = 100, offset: int = 0, alt_label: str | None = None) -> list:
-        """Read shadow trade records with optional filter."""
-        path = os.path.join(self.live_dir, "shadow_trades.parquet")
-        if not os.path.exists(path):
-            return []
         try:
-            df = pd.read_parquet(path)
-            if alt_label:
-                df = df[df.get("alt_label", "") == alt_label]
-            df = df.sort_values("exit_date", ascending=False).iloc[offset : offset + limit]
-            return json.loads(df.to_json(orient="records", default_handler=str))
-        except Exception as e:
-            logger.warning("Failed to read shadow trades: %s", e)
+            with self._connect() as conn:
+                if alt_label:
+                    rows = conn.execute(
+                        "SELECT * FROM shadow_trades WHERE alt_label = ? "
+                        "ORDER BY exit_date DESC LIMIT ? OFFSET ?",
+                        (alt_label, limit, offset),
+                    ).fetchall()
+                else:
+                    rows = conn.execute(
+                        "SELECT * FROM shadow_trades ORDER BY exit_date DESC LIMIT ? OFFSET ?",
+                        (limit, offset),
+                    ).fetchall()
+                return [dict(r) for r in rows]
+        except Exception:
             return []
+
+    # ── Analytics snapshot (JSON, periodic compute) ────────────────
 
     def write_analytics_snapshot(self) -> None:
-        """Precompute analytics aggregates and cache to analytics_snapshot.json.
-
-        Called periodically from the engine main loop (not from API routes).
-        Uses a frequency gate (_analytics_snapshot_frequency) to avoid
-        recomputing on every call. Routes should prefer this cache over
-        live parquet reads for expensive aggregations.
-        """
+        """Precompute analytics aggregates from SQLite and cache to JSON."""
         self._analytics_snapshot_counter += 1
         if self._analytics_snapshot_counter < self._analytics_snapshot_frequency:
             return
         self._analytics_snapshot_counter = 0
+
         attrs = self.read_attribution(limit=2000)
         shadows = self.read_shadow_trades(limit=2000)
         snapshot: dict = {}
@@ -337,7 +577,6 @@ class StateStore:
             regime_col = "pred_regime_at_entry"
             reason_col = "exit_exit_reason"
 
-            # Overall
             r_values = df.get("exit_realized_r", df.get("realized_r", 0))
             snapshot["overall"] = {
                 "n_trades": len(df),
@@ -347,7 +586,6 @@ class StateStore:
                 "sl_rate": float((df.get(reason_col, "") == "sl").mean()),
             }
 
-            # Per archetype
             by_arch = {}
             if arch_col in df.columns:
                 for arch, grp in df.groupby(arch_col):
@@ -364,16 +602,11 @@ class StateStore:
                     }
             snapshot["by_archetype"] = by_arch
 
-            # Per regime
             by_reg = {}
             if regime_col in df.columns:
                 for reg, grp in df.groupby(regime_col):
                     grp_r = grp.get("exit_realized_r", 0)
-                    by_reg[reg] = {
-                        "n": len(grp),
-                        "avg_r": float(grp_r.mean()),
-                        "win_rate": float((grp_r > 0).mean()),
-                    }
+                    by_reg[reg] = {"n": len(grp), "avg_r": float(grp_r.mean()), "win_rate": float((grp_r > 0).mean())}
             snapshot["by_regime"] = by_reg
 
         if shadows:
@@ -400,7 +633,6 @@ class StateStore:
             logger.warning("Failed to write analytics snapshot: %s", e)
 
     def read_analytics_snapshot(self) -> dict | None:
-        """Read the precomputed analytics snapshot if available."""
         path = os.path.join(self.live_dir, "analytics_snapshot.json")
         if not os.path.exists(path):
             return None
@@ -410,38 +642,68 @@ class StateStore:
         except Exception:
             return None
 
+    # ── Confidence buckets (SQLite) ────────────────────────────────
+
     def append_confidence_bucket(self, bucket: dict) -> None:
-        df = pd.DataFrame([bucket])
-        if os.path.exists(self.confidence_bucket_path) and os.path.getsize(self.confidence_bucket_path) > 0:
-            try:
-                existing = pd.read_parquet(self.confidence_bucket_path)
-                df = pd.concat([existing, df], ignore_index=True)
-            except Exception:
-                pass
-        df.to_parquet(self.confidence_bucket_path)
+        """Append a single confidence bucket via SQLite INSERT."""
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO confidence_buckets (
+                    asset, date,
+                    count_0_10, count_10_20, count_20_30, count_30_40,
+                    count_40_50, count_50_60, count_60_70, count_70_80,
+                    count_80_90, count_90_100,
+                    mean_conf, n_signals
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    bucket.get("asset"),
+                    bucket.get("date"),
+                    bucket.get("count_0_10", 0),
+                    bucket.get("count_10_20", 0),
+                    bucket.get("count_20_30", 0),
+                    bucket.get("count_30_40", 0),
+                    bucket.get("count_40_50", 0),
+                    bucket.get("count_50_60", 0),
+                    bucket.get("count_60_70", 0),
+                    bucket.get("count_70_80", 0),
+                    bucket.get("count_80_90", 0),
+                    bucket.get("count_90_100", 0),
+                    bucket.get("mean_conf", 0.0),
+                    bucket.get("n_signals", 0),
+                ),
+            )
+
+    # ── Equity history (SQLite) ────────────────────────────────────
 
     def append_equity_history(self, record: dict) -> None:
-        os.makedirs(os.path.dirname(self.equity_history_path), exist_ok=True)
-        history = []
-        if os.path.exists(self.equity_history_path):
-            try:
-                with open(self.equity_history_path) as f:
-                    history = json.load(f)
-            except (json.JSONDecodeError, ValueError):
-                history = []
-        history.append(record)
-        history = sanitize(history[-2000:])
-        with open(self.equity_history_path, "w") as f:
-            json.dump(history, f, indent=2, allow_nan=False)
+        """Append a single equity history record via SQLite INSERT."""
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO equity_history (
+                    timestamp, portfolio_value, portfolio_return, drawdown,
+                    gross_exposure, net_exposure
+                ) VALUES (?,?,?,?,?,?)""",
+                (
+                    record.get("timestamp"),
+                    record.get("portfolio_value"),
+                    record.get("portfolio_return"),
+                    record.get("drawdown"),
+                    record.get("gross_exposure"),
+                    record.get("net_exposure"),
+                ),
+            )
 
     def read_equity_history(self) -> list:
-        if not os.path.exists(self.equity_history_path):
-            return []
         try:
-            with open(self.equity_history_path) as f:
-                return json.load(f)
-        except (json.JSONDecodeError, ValueError):
+            with self._connect() as conn:
+                rows = conn.execute(
+                    "SELECT * FROM equity_history ORDER BY id ASC"
+                ).fetchall()
+                return [dict(r) for r in rows]
+        except Exception:
             return []
+
+    # ── Legacy path helpers (unchanged) ────────────────────────────
 
     def cache_path(self, ticker: str) -> str:
         safe_name = ticker.replace("=", "_").replace("-", "_")

@@ -1,24 +1,152 @@
 import logging
+import threading
+import time
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
 logger = logging.getLogger("quantforge.data_fetch")
 
+# Fetch 500 trading days (~2 years) instead of 10 years.
+# Indicator max lookback is 253 bars; 500 provides 247-bar warmup margin.
+_FETCH_PERIOD = "2y"
+_FETCH_WARMUP_BUFFER = 500
 
-def fetch_yf_series(ticker: str, name: str, period: str = "10y") -> pd.Series:
-    """Fetch a single yfinance series, return daily 'Close' with tz-aware UTC index."""
+_MACRO_TICKERS = ["DX-Y.NYB", "^VIX", "^GSPC", "CL=F", "^TNX"]
+
+
+class _TTLCache:
+    """Thread-safe TTL cache for fetched data.
+
+    Default TTL of 300s matches the engine cycle interval so data is
+    never stale across cycles but repeated per-asset fetches hit cache.
+    """
+
+    def __init__(self, ttl: int = 300):
+        self._cache: dict[str, tuple[float, Any]] = {}
+        self._lock = threading.Lock()
+        self._ttl = ttl
+
+    def get(self, key: str) -> Any | None:
+        with self._lock:
+            expiry, value = self._cache.get(key, (0.0, None))
+            if time.monotonic() < expiry:
+                return value
+        return None
+
+    def set(self, key: str, value: Any) -> None:
+        with self._lock:
+            self._cache[key] = (time.monotonic() + self._ttl, value)
+
+    def invalidate(self) -> None:
+        with self._lock:
+            self._cache.clear()
+
+
+# Module-level cache shared across all assets in the same cycle.
+_macro_cache = _TTLCache(ttl=300)
+
+
+def _normalize_index(idx: pd.Index) -> pd.Index:
+    """Normalize a DatetimeIndex to UTC midnight."""
+    idx = idx.tz_localize("UTC") if idx.tz is None else idx.tz_convert("UTC")
+    return idx.normalize()
+
+
+def _fetch_macro_batch() -> dict[str, pd.Series]:
+    """Fetch all macro tickers in a single yfinance call.
+
+    Returns dict of {name: Series} with UTC-normalized daily indices.
+    """
     import yfinance as yf
 
-    df = yf.download(ticker, period=period, auto_adjust=True, progress=False)
-    s = df["Close"].squeeze().rename(name)
-    idx = s.index
-    if idx.tz is None:
-        idx = idx.tz_localize("UTC")
+    cached = _macro_cache.get("macro_batch")
+    if cached is not None:
+        return cached
+
+    logger.debug("fetching macro batch: %s", _MACRO_TICKERS)
+    df = yf.download(
+        _MACRO_TICKERS,
+        period=_FETCH_PERIOD,
+        auto_adjust=True,
+        progress=False,
+        group_by="ticker",
+    )
+
+    result: dict[str, pd.Series] = {}
+    if df.empty:
+        logger.warning("macro batch download returned empty — retrying individually")
+        for ticker in _MACRO_TICKERS:
+            result[ticker] = _fetch_single_series(ticker)
+        _macro_cache.set("macro_batch", result)
+        return result
+
+    # yfinance with group_by="ticker" returns MultiIndex columns.
+    # Handle both MultiIndex and single-column cases.
+    if isinstance(df.columns, pd.MultiIndex):
+        for ticker in _MACRO_TICKERS:
+            clean = ticker.replace("=", "-")
+            if clean in df.columns.get_level_values(0):
+                series = df[clean]["Close"].squeeze().copy()
+                series.index = _normalize_index(series.index)
+                result[ticker] = series
     else:
-        idx = idx.tz_convert("UTC")
-    s.index = idx.normalize()
+        # Single ticker or fallback — shouldn't happen with multi-ticker download
+        for ticker in _MACRO_TICKERS:
+            # rename columns to match single-ticker format
+            pass  # fallback to individual fetch below
+
+    # Fallback for any ticker that wasn't in the batch result
+    for ticker in _MACRO_TICKERS:
+        if ticker not in result:
+            logger.debug("macro ticker %s not in batch — fetching individually", ticker)
+            result[ticker] = _fetch_single_series(ticker)
+
+    # Special handling: TNX yield as decimal
+    if "^TNX" in result:
+        result["^TNX"] = result["^TNX"] / 100.0
+
+    _macro_cache.set("macro_batch", result)
+    logger.debug("macro batch: %d tickers fetched", len(result))
+    return result
+
+
+def _fetch_single_series(ticker: str, name: str | None = None) -> pd.Series:
+    """Fetch a single yfinance series, return daily 'Close' Series.
+
+    Used as fallback when batch download fails for individual tickers.
+    """
+    import yfinance as yf
+
+    df = yf.download(ticker, period=_FETCH_PERIOD, auto_adjust=True, progress=False)
+    if df.empty:
+        logger.warning("single fetch returned empty for %s", ticker)
+        return pd.Series(dtype=float)
+    s = df["Close"].squeeze().copy()
+    s.index = _normalize_index(s.index)
+    if name:
+        s.name = name
     return s
+
+
+def fetch_yf_series(ticker: str, name: str, period: str | None = None) -> pd.Series:
+    """Fetch a single yfinance series, return daily 'Close' with UTC index.
+
+    Uses the macro cache if the ticker is a known macro ticker.
+    Falls back to individual fetch for per-asset tickers.
+    """
+    period = period or _FETCH_PERIOD
+
+    # Check macro cache for shared tickers
+    if ticker in _MACRO_TICKERS:
+        macro = _macro_cache.get("macro_batch")
+        if macro is not None and ticker in macro:
+            s = macro[ticker].copy()
+            s.name = name
+            return s
+
+    return _fetch_single_series(ticker, name=name)
 
 
 def fetch_asset_data(
@@ -26,6 +154,9 @@ def fetch_asset_data(
     ticker: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series, pd.DataFrame]:
     """Fetch asset + macro data from yfinance.
+
+    Macro tickers are batch-fetched once per cycle and cached.
+    Reduces 6 sequential HTTP calls to 2 (1 batch + 1 asset).
 
     Returns (prices, rate_diffs, dxy, vix, spx, commodities).
     prices: DataFrame with 'close' column
@@ -37,12 +168,14 @@ def fetch_asset_data(
     close = fetch_yf_series(ticker, f"{asset_name}_close")
     prices = close.to_frame("close")
 
-    logger.info("  fetching macro (DXY, VIX, SPY, CL=F, TNX)...")
-    dxy = fetch_yf_series("DX-Y.NYB", "dxy")
-    vix = fetch_yf_series("^VIX", "vix")
-    spx = fetch_yf_series("^GSPC", "spx")
-    wti = fetch_yf_series("CL=F", "WTI")
-    tnx = fetch_yf_series("^TNX", "tnx") / 100.0
+    # Macro data is batch-fetched once per cycle and cached
+    logger.debug("  fetching macro (DXY, VIX, SPY, CL=F, TNX)...")
+    macro = _fetch_macro_batch()
+    dxy = macro.get("DX-Y.NYB", pd.Series(dtype=float))
+    vix = macro.get("^VIX", pd.Series(dtype=float))
+    spx = macro.get("^GSPC", pd.Series(dtype=float))
+    wti = macro.get("CL=F", pd.Series(dtype=float))
+    tnx = macro.get("^TNX", pd.Series(dtype=float))
 
     common = close.index.intersection(dxy.index).intersection(vix.index).intersection(spx.index).intersection(wti.index)
     common = common.intersection(tnx.dropna().index)
@@ -68,18 +201,18 @@ def fetch_asset_data(
 
 def fetch_asset_ohlcv(
     ticker: str,
-    period: str = "10y",
+    period: str | None = None,
 ) -> pd.DataFrame:
-    """Fetch full-history OHLCV data with tz-aware UTC index.
+    """Fetch OHLCV data with UTC-normalized index.
 
     Returns DataFrame with columns: open, high, low, close, volume.
     Index is DatetimeIndex with UTC timezone, normalized to midnight.
+    Fetches 500 trading days (~2 years) instead of the legacy 10 years.
+    No hard-coded sleep — rate limiting is delegated to yfinance.
     """
-    import time as _time
-
+    period = period or _FETCH_PERIOD
     import yfinance as yf
 
-    _time.sleep(0.5)
     df = yf.download(ticker, period=period, auto_adjust=True, progress=False)
     if df.empty:
         return pd.DataFrame()
@@ -94,10 +227,5 @@ def fetch_asset_ohlcv(
             "Volume": "volume",
         }
     )
-    idx = df.index
-    if idx.tz is None:
-        idx = idx.tz_localize("UTC")
-    else:
-        idx = idx.tz_convert("UTC")
-    df.index = idx.normalize()
+    df.index = _normalize_index(df.index)
     return df

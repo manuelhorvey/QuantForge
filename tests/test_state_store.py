@@ -1,10 +1,11 @@
-import os
 import json
+import os
 import tempfile
+
 import pandas as pd
 import pytest
 
-from paper_trading.state_store import StateStore, EngineSnapshot, _SKIP_JOURNAL, sanitize
+from paper_trading.state_store import _SKIP_JOURNAL, EngineSnapshot, StateStore, sanitize
 
 
 class TestEngineSnapshot:
@@ -108,11 +109,12 @@ class TestStateStore:
         history = tmp_store.read_equity_history()
         assert len(history) == 1
 
-    def test_equity_history_max_2000(self, tmp_store):
+    def test_equity_history_all_entries(self, tmp_store):
+        """SQLite stores all entries (no cap)."""
         for i in range(2010):
             tmp_store.append_equity_history({"timestamp": f"2026-06-{i:03d}", "portfolio_value": i})
         history = tmp_store.read_equity_history()
-        assert len(history) == 2000
+        assert len(history) == 2010
 
     def test_cache_path(self, tmp_store):
         path = tmp_store.cache_path("BTC-USD")
@@ -132,10 +134,10 @@ class TestStateStore:
     def test_append_confidence_bucket(self, tmp_store):
         bucket = {"asset": "BTC", "date": "2026-06-01", "mean_conf": 0.5}
         tmp_store.append_confidence_bucket(bucket)
-        path = tmp_store.confidence_bucket_path
-        assert os.path.exists(path)
-        df = pd.read_parquet(path)
-        assert len(df) == 1
+        with tmp_store._connect() as conn:
+            rows = conn.execute("SELECT * FROM confidence_buckets").fetchall()
+        assert len(rows) == 1
+        assert rows[0]["asset"] == "BTC"
 
 
 class TestSkipJournal:
