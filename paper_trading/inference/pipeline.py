@@ -38,6 +38,7 @@ class AssetInferencePipeline:
     def __init__(self, asset):
         self.asset = asset
         self._truncation_validated = False
+        self._validated_model_id = -1
 
     def generate_signal(self, threshold=0.45):
         return self._generate_and_apply(threshold)
@@ -153,10 +154,12 @@ class AssetInferencePipeline:
             except Exception as e:
                 logger.debug("%s: PSI drift skipped: %s", asset.name, e)
 
-        # ── Inference truncation validation (first cycle only) ──
-        if not self._truncation_validated:
+        # ── Inference truncation validation (first cycle or model change) ──
+        _model_id = id(asset.model)
+        if not self._truncation_validated or self._validated_model_id != _model_id:
             self._validate_inference_truncation(asset, x)
             self._truncation_validated = True
+            self._validated_model_id = _model_id
 
         # ── Inference truncation (predict only on latest row) ──
         _infer_start = time.perf_counter()

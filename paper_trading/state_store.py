@@ -78,6 +78,8 @@ class StateStore:
 
         # SQLite-backed append store (replaces read-all-write-all parquet/JSON)
         self._db_path = os.path.join(self.live_dir, "state.db")
+        self._write_count = 0
+        self._checkpoint_interval = 50
         self._init_db()
 
     # ── SQLite initialisation ──────────────────────────────────────
@@ -88,6 +90,7 @@ class StateStore:
             conn.executescript("""
                 PRAGMA journal_mode=WAL;
                 PRAGMA synchronous=NORMAL;
+                PRAGMA wal_autocheckpoint=1000;
 
                 CREATE TABLE IF NOT EXISTS trades (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -235,6 +238,19 @@ class StateStore:
         with open(tmp_path, "w") as f:
             json.dump(data, f, indent=2, default=str)
         os.replace(tmp_path, self.state_path)
+        self._maybe_checkpoint()
+
+    def _maybe_checkpoint(self) -> None:
+        """Periodic WAL checkpoint to prevent unbounded WAL growth.
+        Runs every `_checkpoint_interval` writes (~hourly at 60s cycle).
+        """
+        self._write_count += 1
+        if self._write_count % self._checkpoint_interval == 0:
+            try:
+                with self._connect() as conn:
+                    conn.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+            except Exception as e:
+                logger.debug("WAL checkpoint skipped: %s", e)
 
     def load_snapshot(self) -> EngineSnapshot | None:
         if self._snapshot_cache is not None:
