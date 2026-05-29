@@ -88,6 +88,3 @@ def compute_sl_tp(
         sl = entry_price * (1 + vol * multiplier)
         tp = entry_price * (1 - vol * multiplier)
     return sl, tp
-
-
-

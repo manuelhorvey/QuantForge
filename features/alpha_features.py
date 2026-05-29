@@ -6,9 +6,7 @@ import pandas as pd
 logger = logging.getLogger("quantforge.alpha_features")
 
 
-def vol_adjusted_carry(
-    price: pd.Series, rate_diff: pd.Series, vol_window: int = 21
-) -> pd.Series:
+def vol_adjusted_carry(price: pd.Series, rate_diff: pd.Series, vol_window: int = 21) -> pd.Series:
     """
     Carry signal normalized by realized volatility.
 
@@ -26,9 +24,7 @@ def vol_adjusted_carry(
     return carry_to_vol.clip(lo, hi)
 
 
-def momentum_features(
-    price: pd.Series, horizons: list = None
-) -> pd.DataFrame:
+def momentum_features(price: pd.Series, horizons: list = None) -> pd.DataFrame:
     """
     Multi-horizon momentum with skip-1-day to avoid bid-ask bounce.
 
@@ -59,9 +55,7 @@ def zscore_reversion(price: pd.Series, window: int = 20) -> pd.Series:
     return z.clip(-3, 3)
 
 
-def vol_regime_ratio(
-    price: pd.Series, short_window: int = 5, long_window: int = 63
-) -> pd.Series:
+def vol_regime_ratio(price: pd.Series, short_window: int = 5, long_window: int = 63) -> pd.Series:
     """
     Ratio of short-term to long-term realized volatility.
 
@@ -98,10 +92,7 @@ def commodity_momentum(commodity_price: pd.Series, horizon: int = 21) -> pd.Seri
     Chen & Rogoff (2003) JIE.
     Expected decay: 5-15 days.
     """
-    ret = np.log(
-        commodity_price.astype(float)
-        / commodity_price.astype(float).shift(horizon + 1)
-    )
+    ret = np.log(commodity_price.astype(float) / commodity_price.astype(float).shift(horizon + 1))
     return ret.clip(-0.10, 0.10)
 
 
@@ -143,9 +134,7 @@ def cot_net_positioning(
     Use as regime context, not entry signal.
     Expected decay: 1-4 weeks.
     """
-    normalized = net_spec_long.astype(float) / open_interest.astype(float).replace(
-        0, np.nan
-    )
+    normalized = net_spec_long.astype(float) / open_interest.astype(float).replace(0, np.nan)
     roll_mean = normalized.rolling(lookback, min_periods=26).mean()
     roll_std = normalized.rolling(lookback, min_periods=26).std()
     z = (normalized - roll_mean) / roll_std.replace(0, np.nan)
@@ -232,9 +221,7 @@ def build_alpha_features(
 
     if commodities is not None:
         for comm in commodities.columns:
-            features[f"{comm.upper()}_mom_21d"] = commodity_momentum(
-                commodities[comm]
-            ).reindex(features.index)
+            features[f"{comm.upper()}_mom_21d"] = commodity_momentum(commodities[comm]).reindex(features.index)
     else:
         logger.warning("commodities is None — skipping commodity features")
 
@@ -242,9 +229,7 @@ def build_alpha_features(
         for pair in cot_data.columns:
             if pair in prices.columns:
                 asset_upper = pair.upper()
-                features[f"{asset_upper}_cot_z"] = cot_data[pair].reindex(
-                    features.index
-                )
+                features[f"{asset_upper}_cot_z"] = cot_data[pair].reindex(features.index)
     else:
         logger.info("cot_data is None — skipping COT features")
 

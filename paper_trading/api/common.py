@@ -10,7 +10,9 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DASHBOARD_DIST = os.path.join(BASE, "dashboard", "dist")
 FRONTEND_DIR = os.path.join(BASE, "frontend")
 LOG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "live", "engine.log")
-CONFIDENCE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "live", "confidence_buckets.parquet")
+CONFIDENCE_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "live", "confidence_buckets.parquet"
+)
 
 MIME_TYPES = {
     ".html": "text/html; charset=utf-8",

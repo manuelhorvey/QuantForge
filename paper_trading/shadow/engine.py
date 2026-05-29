@@ -21,14 +21,12 @@ This enables online counterfactual research without contaminating:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Literal
 
-import numpy as np
 import pandas as pd
 
 from paper_trading.position.dynamic_sltp import DynamicSLTPEngine, SLTPResult, TrailingResult
-from paper_trading.execution.simulator import FillResult, MarketSnapshot
 from paper_trading.position.manager import PositionManager
 from shared.volatility import VolatilityPrimitive
 

@@ -254,10 +254,14 @@ class StateStore:
                 pass
         df.to_parquet(path, index=False)
 
-    def read_attribution(self, limit: int = 100, offset: int = 0,
-                         archetype: str | None = None,
-                         regime: str | None = None,
-                         asset: str | None = None) -> list:
+    def read_attribution(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        archetype: str | None = None,
+        regime: str | None = None,
+        asset: str | None = None,
+    ) -> list:
         """Read attribution records with optional filters."""
         path = os.path.join(self.live_dir, "attribution.parquet")
         if not os.path.exists(path):
@@ -270,7 +274,7 @@ class StateStore:
                 df = df[df.get("pred_regime_at_entry", "") == regime]
             if asset:
                 df = df[df.get("asset", "") == asset]
-            df = df.sort_values("exit_date", ascending=False).iloc[offset:offset + limit]
+            df = df.sort_values("exit_date", ascending=False).iloc[offset : offset + limit]
             return json.loads(df.to_json(orient="records", default_handler=str))
         except Exception as e:
             logger.warning("Failed to read attribution: %s", e)
@@ -294,8 +298,7 @@ class StateStore:
                 pass
         df.to_parquet(path, index=False)
 
-    def read_shadow_trades(self, limit: int = 100, offset: int = 0,
-                           alt_label: str | None = None) -> list:
+    def read_shadow_trades(self, limit: int = 100, offset: int = 0, alt_label: str | None = None) -> list:
         """Read shadow trade records with optional filter."""
         path = os.path.join(self.live_dir, "shadow_trades.parquet")
         if not os.path.exists(path):
@@ -304,7 +307,7 @@ class StateStore:
             df = pd.read_parquet(path)
             if alt_label:
                 df = df[df.get("alt_label", "") == alt_label]
-            df = df.sort_values("exit_date", ascending=False).iloc[offset:offset + limit]
+            df = df.sort_values("exit_date", ascending=False).iloc[offset : offset + limit]
             return json.loads(df.to_json(orient="records", default_handler=str))
         except Exception as e:
             logger.warning("Failed to read shadow trades: %s", e)
@@ -328,6 +331,7 @@ class StateStore:
 
         if attrs:
             import pandas as pd
+
             df = pd.DataFrame(attrs)
             arch_col = "pred_archetype_at_entry"
             regime_col = "pred_regime_at_entry"
@@ -374,6 +378,7 @@ class StateStore:
 
         if shadows:
             import pandas as pd
+
             sdf = pd.DataFrame(shadows)
             n = len(sdf)
             same = (sdf.get("exit_reason", "") == sdf.get("live_exit_reason", "")).sum()

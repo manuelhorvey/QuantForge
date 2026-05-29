@@ -79,7 +79,9 @@ class RegimeConditionalModel:
             f.write("\n".join(feature_names))
         logger.info(
             "regime model trained on %d samples, %d features -> %s.json",
-            len(X), len(feature_names), path,
+            len(X),
+            len(feature_names),
+            path,
         )
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:

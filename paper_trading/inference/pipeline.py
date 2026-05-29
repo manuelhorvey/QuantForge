@@ -12,7 +12,7 @@ from paper_trading.governance.drift import get_shadow_intelligence as _get_drift
 from paper_trading.governance.risk import evaluate as _risk_evaluate
 from paper_trading.ops import diagnostics as diag
 from paper_trading.ops import wrappers as _w
-from paper_trading.ops.data_fetcher import fetch_live, fetch_ref
+from paper_trading.ops.data_fetcher import fetch_live
 from paper_trading.ops.tracer import (
     shadow_compare_signal,
     shadow_compare_sizing,
@@ -68,11 +68,16 @@ class AssetInferencePipeline:
         from features.data_fetch import fetch_asset_data, fetch_asset_ohlcv
 
         hist_prices, rate_diffs, dxy, vix, spx, commodities = fetch_asset_data(
-            asset.name, asset.ticker,
+            asset.name,
+            asset.ticker,
         )
         alpha_df = build_alpha_features(
-            hist_prices, rate_diffs,
-            dxy=dxy, vix=vix, spx=spx, commodities=commodities,
+            hist_prices,
+            rate_diffs,
+            dxy=dxy,
+            vix=vix,
+            spx=spx,
+            commodities=commodities,
         )
 
         # ── Build archetype features on full-history OHLCV ──
@@ -82,11 +87,14 @@ class AssetInferencePipeline:
             ohlcv = ohlcv.reindex(alpha_idx).ffill()
         archetype_df = pd.DataFrame(index=alpha_idx)
         import ta
+
         if not ohlcv.empty:
             ema_20 = ta.trend.ema_indicator(ohlcv["close"], window=20)
             ema_50 = ta.trend.ema_indicator(ohlcv["close"], window=50)
             archetype_df["ema_spread"] = ((ema_20 - ema_50) / ema_50).reindex(alpha_idx)
-            archetype_df["adx"] = ta.trend.adx(ohlcv["high"], ohlcv["low"], ohlcv["close"], window=14).reindex(alpha_idx)
+            archetype_df["adx"] = ta.trend.adx(ohlcv["high"], ohlcv["low"], ohlcv["close"], window=14).reindex(
+                alpha_idx
+            )
             archetype_df["rsi"] = ta.momentum.rsi(ohlcv["close"], window=14).reindex(alpha_idx)
             bb = ta.volatility.BollingerBands(ohlcv["close"], window=20, window_dev=2)
             bb_mavg = bb.bollinger_mavg()
@@ -98,9 +106,10 @@ class AssetInferencePipeline:
                 n_nan = archetype_df[col].isna().sum()
                 if n_nan > 30:
                     logger.warning(
-                        "%s: archetype feature '%s' has %d NaN rows "
-                        "(classifier will fall back to defaults)",
-                        asset.name, col, n_nan,
+                        "%s: archetype feature '%s' has %d NaN rows (classifier will fall back to defaults)",
+                        asset.name,
+                        col,
+                        n_nan,
                     )
 
         feature_cols = getattr(asset, "_alpha_feature_cols", None)
@@ -152,8 +161,12 @@ class AssetInferencePipeline:
                         base_p_long = raw[:, 1]
                         three_col, ensemble_signals = ensemble.combine_and_expand(base_p_long, regime_p_long)
                         proba = three_col
-                        logger.debug("%s: ensemble blended (base=%.2f regime=%.2f)",
-                                     asset.name, ensemble.base_weight, ensemble.regime_weight)
+                        logger.debug(
+                            "%s: ensemble blended (base=%.2f regime=%.2f)",
+                            asset.name,
+                            ensemble.base_weight,
+                            ensemble.regime_weight,
+                        )
                     except Exception as e:
                         logger.debug("%s: ensemble inference failed: %s", asset.name, e)
 
@@ -192,7 +205,9 @@ class AssetInferencePipeline:
             asset._ensemble_breakdown = {
                 "xgb_prob": round(float(proba[-1, 2]), 4),
                 "carry_normalized": round(float(carry_val), 4) if not np.isnan(carry_val) else 0.0,
-                "mom_normalized": round(float(mom_21 * 0.6 + mom_63 * 0.4), 4) if not (np.isnan(mom_21) or np.isnan(mom_63)) else 0.0,
+                "mom_normalized": round(float(mom_21 * 0.6 + mom_63 * 0.4), 4)
+                if not (np.isnan(mom_21) or np.isnan(mom_63))
+                else 0.0,
                 "reversion_normalized": round(float(zscore_val * -0.1), 4) if not np.isnan(zscore_val) else 0.0,
                 "dow_signal": round(float(dow_val), 4) if not np.isnan(dow_val) else 0.0,
                 "vol_ratio": round(float(vol_ratio), 4) if not np.isnan(vol_ratio) else 0.0,

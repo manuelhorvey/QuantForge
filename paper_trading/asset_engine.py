@@ -747,7 +747,9 @@ class AssetEngine:
                 if not ok:
                     logger.info(
                         "%s: entry gate blocking %s entry — %s",
-                        self.name, new_side, reason,
+                        self.name,
+                        new_side,
+                        reason,
                     )
                     new_side = None
 
@@ -911,7 +913,9 @@ class AssetEngine:
                 if not ok:
                     logger.info(
                         "%s: entry gate blocking deferred %s entry — %s",
-                        self.name, direction, reason,
+                        self.name,
+                        direction,
+                        reason,
                     )
                     entry.cancel(reason=reason)
                     to_remove.append(direction)

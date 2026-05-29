@@ -9,6 +9,7 @@ logger = logging.getLogger("quantforge.data_fetch")
 def fetch_yf_series(ticker: str, name: str, period: str = "10y") -> pd.Series:
     """Fetch a single yfinance series, return daily 'Close'."""
     import yfinance as yf
+
     df = yf.download(ticker, period=period, auto_adjust=True, progress=False)
     s = df["Close"].squeeze().rename(name)
     s.index = pd.to_datetime(s.index.date)
@@ -70,16 +71,23 @@ def fetch_asset_ohlcv(
     Index is datetime (TZ-naive) aligned to daily close dates.
     """
     import time as _time
+
     import yfinance as yf
+
     _time.sleep(0.5)
     df = yf.download(ticker, period=period, auto_adjust=True, progress=False)
     if df.empty:
         return pd.DataFrame()
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = [c[0] for c in df.columns]
-    df = df.rename(columns={
-        "Open": "open", "High": "high", "Low": "low",
-        "Close": "close", "Volume": "volume",
-    })
+    df = df.rename(
+        columns={
+            "Open": "open",
+            "High": "high",
+            "Low": "low",
+            "Close": "close",
+            "Volume": "volume",
+        }
+    )
     df.index = pd.to_datetime(df.index.date)
     return df

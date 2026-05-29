@@ -15,8 +15,6 @@ All functions are deterministic and stateless — no engine dependency.
 
 from __future__ import annotations
 
-from typing import Any
-
 
 def compute_eis(
     entry_slippage_bps: float,
@@ -64,15 +62,11 @@ def compute_eis(
 
     fqi = compute_fqi(fill_qty_ratio, gap_fill, partial_fill, latency_bars)
 
-    eis = (
-        w_slippage * (1 - slippage_penalty)
-        + w_fill * fqi
-        + w_latency * (1 - latency_penalty)
-    )
+    eis = w_slippage * (1 - slippage_penalty) + w_fill * fqi + w_latency * (1 - latency_penalty)
     return round(eis, 4)
 
 
-def compute_eis_from_df(df: "pd.DataFrame", min_trades: int = 3) -> dict[str, float]:
+def compute_eis_from_df(df: pd.DataFrame, min_trades: int = 3) -> dict[str, float]:
     """Compute aggregate EIS per asset from a DataFrame of attribution records.
 
     Parameters

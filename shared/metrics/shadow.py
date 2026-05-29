@@ -95,8 +95,8 @@ def compute_r_delta_distribution(
     -------
     dict with histogram, quartiles, and outlier counts.
     """
-    import pandas as pd
     import numpy as np
+    import pandas as pd
 
     if not shadow_records:
         return {"histogram": [], "quartiles": {}, "outliers": {"n_gt_1": 0, "n_lt_minus1": 0}}

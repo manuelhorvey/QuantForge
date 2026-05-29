@@ -50,7 +50,7 @@ def compute_fqi(
     return round(max(0.0, min(1.0, fqi)), 4)
 
 
-def compute_fqi_from_df(df: "pd.DataFrame", min_trades: int = 3) -> dict[str, float]:
+def compute_fqi_from_df(df: pd.DataFrame, min_trades: int = 3) -> dict[str, float]:
     """Compute average FQI per asset from a DataFrame.
 
     Parameters

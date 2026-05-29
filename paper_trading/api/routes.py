@@ -6,12 +6,6 @@ from datetime import datetime
 import pytz
 
 from features.fxstreet_fetcher import confirm_pending_narrative, get_narrative_status
-from paper_trading.config_manager import get_config
-from paper_trading.governance.health import compute_all as _compute_health_all
-from paper_trading.governance.health import get_latest as _get_health_latest
-from paper_trading.ops.market_hours import is_market_closed
-from paper_trading.portfolio_builder import build_paper_portfolio
-from paper_trading.governance.risk import get_latest as _get_risk_latest
 from paper_trading.api.common import (
     _STORE,
     CONFIDENCE_PATH,
@@ -20,7 +14,13 @@ from paper_trading.api.common import (
     cache_set,
     get_vol_baselines,
 )
+from paper_trading.config_manager import get_config
+from paper_trading.governance.health import compute_all as _compute_health_all
+from paper_trading.governance.health import get_latest as _get_health_latest
+from paper_trading.governance.risk import get_latest as _get_risk_latest
+from paper_trading.ops.market_hours import is_market_closed
 from paper_trading.ops.weekly_review import compute_weekly_review
+from paper_trading.portfolio_builder import build_paper_portfolio
 
 ET = pytz.timezone("US/Eastern")
 
@@ -408,8 +408,11 @@ def handle_attribution_trades(path: str, query: dict) -> str:
     regime = query.get("regime") or None
     asset = query.get("asset") or None
     records = _STORE.read_attribution(
-        limit=limit, offset=offset,
-        archetype=archetype, regime=regime, asset=asset,
+        limit=limit,
+        offset=offset,
+        archetype=archetype,
+        regime=regime,
+        asset=asset,
     )
     data = json.dumps(records, indent=2, default=str)
     cache_set("/attribution/trades.json", data)
@@ -437,13 +440,17 @@ def handle_attribution_summary(path: str, query: dict) -> str:
         "domain_scores": domain_scores["overall"],
     }
 
-    data = json.dumps({
-        "overall": overall,
-        "by_archetype": mae_mfe.get("by_archetype", {}),
-        "by_regime": mae_mfe.get("by_regime", {}),
-        "domain_scores": domain_scores.get("by_archetype", {}),
-        "updated_at": datetime.now(tz=ET).isoformat(),
-    }, indent=2, default=str)
+    data = json.dumps(
+        {
+            "overall": overall,
+            "by_archetype": mae_mfe.get("by_archetype", {}),
+            "by_regime": mae_mfe.get("by_regime", {}),
+            "domain_scores": domain_scores.get("by_archetype", {}),
+            "updated_at": datetime.now(tz=ET).isoformat(),
+        },
+        indent=2,
+        default=str,
+    )
     cache_set("/attribution/summary.json", data)
     return data
 
@@ -456,6 +463,7 @@ def handle_execution_quality(path: str, query: dict) -> str:
         return json.dumps({"by_asset": {}}, indent=2)
 
     import pandas as pd
+
     from shared.metrics.eis import compute_eis_from_df
     from shared.metrics.fqi import compute_fqi_from_df
 
@@ -506,13 +514,17 @@ def handle_execution_slippage(path: str, query: dict) -> str:
         if r.get("friction_partial_fill"):
             partial_count += 1
 
-    data = json.dumps({
-        "entry_slippage": entry_slippage,
-        "exit_slippage": exit_slippage,
-        "gap_count": gap_count,
-        "partial_fill_count": partial_count,
-        "n": len(records),
-    }, indent=2, default=str)
+    data = json.dumps(
+        {
+            "entry_slippage": entry_slippage,
+            "exit_slippage": exit_slippage,
+            "gap_count": gap_count,
+            "partial_fill_count": partial_count,
+            "n": len(records),
+        },
+        indent=2,
+        default=str,
+    )
     cache_set("/execution/slippage.json", data)
     return data
 
@@ -564,7 +576,17 @@ def handle_attribution_waterfall(path: str, query: dict) -> str:
     limit = max(1, min(int(query.get("limit", 500)), 2000))
     records = _STORE.read_attribution(limit=limit)
     if not records:
-        return json.dumps({"prediction_pnl": 0.0, "execution_cost": 0.0, "exit_cost": 0.0, "friction_cost": 0.0, "net_pnl": 0.0, "n": 0}, indent=2)
+        return json.dumps(
+            {
+                "prediction_pnl": 0.0,
+                "execution_cost": 0.0,
+                "exit_cost": 0.0,
+                "friction_cost": 0.0,
+                "net_pnl": 0.0,
+                "n": 0,
+            },
+            indent=2,
+        )
 
     from shared.metrics.attribution import compute_waterfall
 
@@ -583,6 +605,7 @@ def handle_archetype_stats(path: str, query: dict) -> str:
         return json.dumps({"by_archetype": {}}, indent=2)
 
     import pandas as pd
+
     df = pd.DataFrame(records)
     arch_col = "pred_archetype_at_entry"
 

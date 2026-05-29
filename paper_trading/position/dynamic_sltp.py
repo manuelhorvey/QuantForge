@@ -19,7 +19,6 @@ import numpy as np
 import pandas as pd
 
 from shared.volatility import (
-    VOLATILITY_PRIMITIVE_VERSION,
     VolatilityPrimitive,
     compute_latest_atr,
     compute_latest_atr_pct,
@@ -445,7 +444,9 @@ def build_dynamic_sltp_from_config(asset_config: dict, df: pd.DataFrame | None =
     """Construct engine from YAML config dict, optionally calibrating with price data."""
     sltp_cfg = asset_config.get("dynamic_sltp", {})
     atr_period = sltp_cfg.get("atr_period", 14)
-    vol_primitive = VolatilityPrimitive.detect(df, period=atr_period) if df is not None else VolatilityPrimitive(period=atr_period)
+    vol_primitive = (
+        VolatilityPrimitive.detect(df, period=atr_period) if df is not None else VolatilityPrimitive(period=atr_period)
+    )
 
     engine = DynamicSLTPEngine(
         method=sltp_cfg.get("method", "atr"),

@@ -48,16 +48,21 @@ class AssetTrainingPipeline:
 
         logger.info("%s: downloading history from yfinance...", asset.name)
         prices, rate_diffs, dxy, vix, spx, commodities = fetch_asset_data(
-            asset.name, asset.ticker,
+            asset.name,
+            asset.ticker,
         )
 
         features = build_alpha_features(
-            prices, rate_diffs,
-            dxy=dxy, vix=vix, spx=spx, commodities=commodities,
+            prices,
+            rate_diffs,
+            dxy=dxy,
+            vix=vix,
+            spx=spx,
+            commodities=commodities,
         )
 
-        tp_mult = float(getattr(asset, 'tp_mult', 2.0))
-        sl_mult = float(getattr(asset, 'sl_mult', 2.0))
+        tp_mult = float(getattr(asset, "tp_mult", 2.0))
+        sl_mult = float(getattr(asset, "sl_mult", 2.0))
         pt_sl = (tp_mult, sl_mult)
         logger.info("%s: training pt_sl=%s (tp_mult=%.2f, sl_mult=%.2f)", asset.name, pt_sl, tp_mult, sl_mult)
         labels = triple_barrier_labels(prices, pt_sl=pt_sl, vertical_barrier=10)
@@ -93,8 +98,11 @@ class AssetTrainingPipeline:
         min_class = y_binary.value_counts().min()
         strat = y_binary if min_class >= 2 else None
         X_tr, X_ev, y_tr, y_ev = train_test_split(
-            X_binary, y_vals,
-            test_size=0.2, random_state=42, stratify=strat,
+            X_binary,
+            y_vals,
+            test_size=0.2,
+            random_state=42,
+            stratify=strat,
         )
 
         model = xgb.XGBClassifier(
@@ -113,7 +121,9 @@ class AssetTrainingPipeline:
         asset._trained = True
         asset._enable_adaptive_macro()
         model.save_model(model_path)
-        logger.info("%s: binary model saved to %s (%d features)", asset.name, model_path, len(asset._alpha_feature_cols))
+        logger.info(
+            "%s: binary model saved to %s (%d features)", asset.name, model_path, len(asset._alpha_feature_cols)
+        )
 
         # Persist PSI baseline
         try:
@@ -206,5 +216,7 @@ class AssetTrainingPipeline:
         )
         logger.info(
             "%s: ensemble configured (base=%.2f, threshold=%.2f)",
-            asset.name, base_weight, ensemble_threshold,
+            asset.name,
+            base_weight,
+            ensemble_threshold,
         )

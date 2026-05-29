@@ -7,13 +7,12 @@ import pytz
 
 from paper_trading.ops import diagnostics as diag
 from paper_trading.ops import wrappers as _w
-from paper_trading.shadow.memory import store_event as _shadow_store
-from paper_trading.shadow.engine import ShadowSLTPEngine, ShadowTradeRecord
 from paper_trading.ops.tracer import (
     shadow_compare_pnl,
     shadow_compare_sltp,
     trace_diagnostic_report,
 )
+from paper_trading.shadow.memory import store_event as _shadow_store
 
 logger = logging.getLogger("quantforge.pnl_controller")
 

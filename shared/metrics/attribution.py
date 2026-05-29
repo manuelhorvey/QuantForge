@@ -110,7 +110,14 @@ def compute_waterfall(
     dict with keys: prediction_pnl, execution_cost, exit_cost, friction_cost, net_pnl, n
     """
     if not records:
-        return {"prediction_pnl": 0.0, "execution_cost": 0.0, "exit_cost": 0.0, "friction_cost": 0.0, "net_pnl": 0.0, "n": 0}
+        return {
+            "prediction_pnl": 0.0,
+            "execution_cost": 0.0,
+            "exit_cost": 0.0,
+            "friction_cost": 0.0,
+            "net_pnl": 0.0,
+            "n": 0,
+        }
 
     total_pnl = sum(float(r.get("realized_pnl", r.get("realized_return", 0))) for r in records)
     n = len(records)
@@ -123,7 +130,14 @@ def compute_waterfall(
 
     total_score = avg_pred + avg_exec + avg_exit + avg_friction
     if total_score == 0:
-        return {"prediction_pnl": 0.0, "execution_cost": 0.0, "exit_cost": 0.0, "friction_cost": 0.0, "net_pnl": total_pnl, "n": n}
+        return {
+            "prediction_pnl": 0.0,
+            "execution_cost": 0.0,
+            "exit_cost": 0.0,
+            "friction_cost": 0.0,
+            "net_pnl": total_pnl,
+            "n": n,
+        }
 
     # Allocate PnL proportionally to domain scores
     pred_pnl = total_pnl * (avg_pred / total_score)
@@ -168,9 +182,7 @@ def compute_aggregate_domain_scores(
     scores = pd.DataFrame([compute_domain_scores(r) for r in records])
 
     result: dict[str, Any] = {
-        "overall": {
-            col: round(float(scores[col].mean()), 4) for col in scores.columns
-        },
+        "overall": {col: round(float(scores[col].mean()), 4) for col in scores.columns},
         "by_archetype": {},
         "by_regime": {},
     }
@@ -189,8 +201,6 @@ def compute_aggregate_domain_scores(
         for reg in df[regime_col].unique():
             mask = df[regime_col].values == reg
             reg_scores = scores[mask]
-            result["by_regime"][reg] = {
-                col: round(float(reg_scores[col].mean()), 4) for col in reg_scores.columns
-            }
+            result["by_regime"][reg] = {col: round(float(reg_scores[col].mean()), 4) for col in reg_scores.columns}
 
     return result

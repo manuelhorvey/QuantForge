@@ -76,22 +76,22 @@ def vol_adjusted_label(
     forward_horizon: int = 1,
 ) -> pd.Series:
     """
-    Label based on forward returns scaled by realised vol.
+     Label based on forward returns scaled by realised vol.
 
-    1 if forward return > threshold * vol
-    0 if |forward return| <= threshold * vol
-   -1 if forward return < -threshold * vol
+     1 if forward return > threshold * vol
+     0 if |forward return| <= threshold * vol
+    -1 if forward return < -threshold * vol
 
-    Parameters
-    ----------
-    prices : pd.DataFrame with 'close' column.
-    vol_lookback : int  — window for vol estimate.
-    threshold : float  — vol multiplier for direction threshold.
-    forward_horizon : int  — number of bars forward to measure return.
+     Parameters
+     ----------
+     prices : pd.DataFrame with 'close' column.
+     vol_lookback : int  — window for vol estimate.
+     threshold : float  — vol multiplier for direction threshold.
+     forward_horizon : int  — number of bars forward to measure return.
 
-    Returns
-    -------
-    pd.Series of int in {-1, 0, 1}.
+     Returns
+     -------
+     pd.Series of int in {-1, 0, 1}.
     """
     close = prices["close"].astype(float)
     log_returns = np.log(close / close.shift(1))
@@ -155,4 +155,3 @@ class PurgedWalkForwardFolds(BaseCrossValidator):
                 continue
 
             yield np.array(train_idx, dtype=int), np.array(test_idx, dtype=int)
-
