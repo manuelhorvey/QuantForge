@@ -49,9 +49,11 @@ def main():
         for name, r in results.items():
             if name == "satellite":
                 continue
+            if not isinstance(r, dict):
+                continue
             if "error" in r:
                 logger.error("%s: ERROR - %s", name, r["error"])
-            else:
+            elif "signal" in r:
                 logger.info("%s: %s  conf=%s%%  @ $%s", name, r["signal"], r["confidence"], r["close_price"])
         p = engine.get_state()["portfolio"]
         logger.info("Portfolio: $%.2f (%s%%)", p["total_value"], p["total_return"])
