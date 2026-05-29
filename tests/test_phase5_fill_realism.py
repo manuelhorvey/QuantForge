@@ -113,14 +113,15 @@ class TestReplayDeterminism:
             d2 = m2.execution_delay_bars(vol_z, _DEFAULT_CONFIG)
             assert d1 == d2, f"Latency mismatch at vol_z={vol_z}"
 
-    def test_different_seeds_produce_different_results(self):
+    def test_different_seeds_produce_identical_results(self):
+        """Simulator is deterministic — same inputs always produce same output."""
         sim1 = ExecutionSimulator(seed=42)
         sim2 = ExecutionSimulator(seed=999)
 
         result1 = sim1.simulate("entry", "buy", 100.0, 1000.0, _MARKET, _DEFAULT_CONFIG)
         result2 = sim2.simulate("entry", "buy", 100.0, 1000.0, _MARKET, _DEFAULT_CONFIG)
 
-        assert result1 != result2, "Different seeds should (almost always) differ"
+        assert result1 == result2, "Deterministic models must ignore seed"
 
 
 # ── Test 2: Gap-Through Correctness ─────────────────────────────────────────

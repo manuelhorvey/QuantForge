@@ -9,6 +9,7 @@ from paper_trading.position.dynamic_sltp import (
     DynamicSLTPEngine,
     build_dynamic_sltp_from_config,
 )
+from shared.volatility import compute_latest_atr, estimate_ewm_vol, estimate_gap_risk
 
 
 class TestComputeBarriers:
@@ -299,18 +300,15 @@ class TestPostEntryAdjust:
 
 class TestHelpers:
     def test_compute_atr(self, sample_price_data):
-        engine = DynamicSLTPEngine()
-        atr = engine._compute_atr(sample_price_data, period=14)
+        atr = compute_latest_atr(sample_price_data, period=14)
         assert atr > 0
 
     def test_estimate_vol(self, sample_price_data):
-        engine = DynamicSLTPEngine()
-        vol = engine._estimate_vol(sample_price_data)
+        vol = estimate_ewm_vol(sample_price_data["close"])
         assert vol > 0
 
     def test_estimate_gap_risk(self, sample_price_data):
-        engine = DynamicSLTPEngine()
-        gap = engine._estimate_gap_risk(sample_price_data)
+        gap = estimate_gap_risk(sample_price_data)
         assert gap >= 0
 
     def test_is_tighter_long(self):
@@ -545,14 +543,21 @@ class TestPostEntryAdjustBoundaries:
         assert adj.new_sl is None
         assert adj.new_tp is None
 
-    def test_vol_drop_tightens_sl(self, engine, df):
-        engine = DynamicSLTPEngine(post_adjust_interval_bars=0, max_sl_widen_pct=0.0)
-        adj = engine.post_entry_adjust("long", 100.0, 98.0, 105.0, df, vol=0.05, bars_since_entry=10)
+    def test_vol_spike_tightens_sl(self, engine, df):
+        """Vol spike > 1.3x entry vol should tighten SL."""
+        engine.post_adjust_interval_bars = 0
+        adj = engine.post_entry_adjust("long", 100.0, 98.0, 105.0, df, vol=0.005, bars_since_entry=10)
         assert adj.new_sl is not None
-        assert "vol_dropped" in (adj.reason or "")
+        assert "vol_spike" in (adj.reason or "")
+
+    def test_vol_collapse_does_not_tighten(self, engine, df):
+        """Vol collapse < 0.7x entry vol should NOT tighten SL (no action)."""
+        engine.post_adjust_interval_bars = 0
+        adj = engine.post_entry_adjust("long", 100.0, 98.0, 105.0, df, vol=0.05, bars_since_entry=10)
+        assert adj.new_sl is None
 
     def test_no_widen_when_disabled(self, engine, df):
-        engine.max_sl_widen_pct = 0.0
+        engine.post_adjust_interval_bars = 0
         adj = engine.post_entry_adjust("long", 100.0, 98.0, 105.0, df, vol=0.01, bars_since_entry=10)
         if adj.new_sl is not None:
             assert adj.new_sl >= 98.0

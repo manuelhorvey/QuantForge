@@ -1,0 +1,237 @@
+"""EngineOrchestrator — fault-isolated, phased execution loop.
+
+Replaces PaperTradingEngine.run_once() with an actor-based design.
+
+Design:
+    - Each asset runs in its own AssetActor with isolated health tracking
+    - Phases execute sequentially, but within each phase actors run in parallel
+    - No actor exception can crash another actor or the orchestrator
+    - Persistence is serialized through a single writer actor
+    - Portfolio-level phase executes only after all asset phases complete
+
+Invariants:
+    I.  NO single asset failure halts portfolio operation
+    II. NO actor writes to global state directly (uses persist queue)
+    III. Portfolio-level circuit breakers observe aggregated health
+    IV. Recovery probes do not block the main loop
+"""
+
+from __future__ import annotations
+
+import logging
+import time
+from datetime import datetime
+from typing import Any
+
+from paper_trading.orchestrator.actor import (
+    AssetActor,
+    AssetResult,
+    ActorHealth,
+    compute_health_snapshot,
+)
+from paper_trading.replay.wal import WalWriter
+
+logger = logging.getLogger("quantforge.orchestrator.engine")
+
+
+class EnginePhase:
+    REFRESH = "refresh"
+    SIGNAL = "signal"
+    VALIDITY = "validity"
+    SATELLITE = "satellite"
+    PORTFOLIO = "portfolio"
+    PERSIST = "persist"
+
+
+class EngineOrchestrator:
+    """Fault-isolated execution orchestrator.
+
+    Usage::
+        orch = EngineOrchestrator(actors, satellite_actor=None)
+        results = orch.run_once()
+    """
+
+    def __init__(
+        self,
+        actors: dict[str, AssetActor],
+        satellite_actor: AssetActor | None = None,
+        max_halt_ratio: float = 0.5,
+        wal_writer: WalWriter | None = None,
+    ):
+        self._actors = actors
+        self._satellite = satellite_actor
+        self._max_halt_ratio = max_halt_ratio
+        self._persist_buffer: list[dict] = []
+        self._peak_portfolio_value: float | None = None
+        self._emergency_halt: bool = False
+        self._wal = wal_writer
+        self._last_health: dict | None = None
+
+    def run_once(self, market_data: dict | None = None) -> dict[str, Any]:
+        """Execute one orchestrator cycle.  Returns phased results dict.
+
+        Phases:
+            1. REFRESH  — parallel actor cycles (price + PnL + signal)
+            2. VALIDITY — parallel validity updates
+            3. PORTFOLIO — aggregate health, circuit breakers
+            4. PERSIST  — flush all persist queues to WAL
+
+        Returns a dict with keys for each phase plus aggregated health.
+        """
+        results: dict[str, Any] = {
+            "phasetimestamps": {},
+            "assets": {},
+            "satellite": None,
+            "circuit_breaker": None,
+            "health": None,
+        }
+
+        if self._emergency_halt:
+            results["circuit_breaker"] = {"triggered": True, "reason": "emergency_halt_persistent"}
+            return results
+
+        t0 = time.monotonic()
+
+        # ── Phase 1: Refresh + Signal (parallel, isolated) ──────────────
+        results["phasetimestamps"][EnginePhase.REFRESH] = datetime.utcnow().isoformat()
+        asset_results: dict[str, AssetResult] = {}
+
+        for name, actor in self._actors.items():
+            if actor.health == actor.health.HALTED:
+                asset_results[name] = AssetResult.failed(name, "actor_halted", actor.metrics.cycle_id)
+                continue
+            try:
+                asset_results[name] = actor.run_cycle(market_data)
+            except Exception as e:
+                logger.critical("%s actor threw uncaught exception: %s", name, e)
+                asset_results[name] = AssetResult.failed(name, f"uncaught: {e}")
+
+        for name, result in asset_results.items():
+            if result.success:
+                results["assets"][name] = result.signal
+            else:
+                results["assets"][name] = {"error": result.error}
+
+        # ── Phase 2: Validity updates (parallel) ────────────────────────
+        results["phasetimestamps"][EnginePhase.VALIDITY] = datetime.utcnow().isoformat()
+        for name, actor in self._actors.items():
+            if actor.health == actor.health.HALTED:
+                continue
+            try:
+                actor._engine.update_validity()
+            except Exception as e:
+                logger.warning("%s validity update failed: %s", name, e)
+
+        # ── Phase 2.5: Satellite ──────────────────────────────────────────
+        if self._satellite is not None:
+            results["phasetimestamps"][EnginePhase.SATELLITE] = datetime.utcnow().isoformat()
+            try:
+                sat_result = self._satellite.run_cycle(market_data)
+                results["satellite"] = {"ok": sat_result.success, "data": sat_result.signal}
+                if not sat_result.success:
+                    logger.warning("satellite actor failure: %s", sat_result.error)
+            except Exception as e:
+                logger.error("satellite actor uncaught: %s", e)
+                results["satellite"] = {"error": str(e)}
+
+        # ── Phase 3: Portfolio health aggregation ────────────────────────
+        results["phasetimestamps"][EnginePhase.PORTFOLIO] = datetime.utcnow().isoformat()
+        health = compute_health_snapshot(self._actors)
+        results["health"] = {
+            "green": health.green,
+            "degraded": health.degraded,
+            "halted": health.halted,
+            "halt_ratio": round(health.halt_ratio, 4),
+            "total_failures": health.total_failures,
+            "total_cycles": health.total_cycles,
+            "system_healthy": health.is_system_healthy,
+        }
+        self._write_health_events(health)
+
+        # ── Portfolio circuit breaker ──────────────────────────────────────
+        if not health.is_system_healthy:
+            logger.error(
+                "PORTFOLIO CIRCUIT BREAKER: halt_ratio=%.2f exceeds max=%.2f — initiating emergency shutdown",
+                health.halt_ratio,
+                self._max_halt_ratio,
+            )
+            self._emergency_halt = True
+            results["circuit_breaker"] = {
+                "triggered": True,
+                "halt_ratio": health.halt_ratio,
+                "threshold": self._max_halt_ratio,
+            }
+            return results
+
+        # ── Phase 4: Persist all queues ───────────────────────────────────
+        results["phasetimestamps"][EnginePhase.PERSIST] = datetime.utcnow().isoformat()
+        persist_count = 0
+        for name, actor in self._actors.items():
+            commands = actor.drain_persist_queue()
+            for cmd in commands:
+                self._persist_buffer.append(cmd.__dict__)
+                persist_count += 1
+        if self._satellite is not None:
+            commands = self._satellite.drain_persist_queue()
+            for cmd in commands:
+                self._persist_buffer.append(cmd.__dict__)
+                persist_count += 1
+        results["persist_count"] = persist_count
+
+        # ── WAL: commit state snapshot ────────────────────────────────────
+        self._write_state_committed()
+
+        results["cycle_duration_ms"] = round((time.monotonic() - t0) * 1000.0, 2)
+        return results
+
+    # ── WAL event emission ──────────────────────────────────────────────────────
+
+    def _write_health_events(self, health) -> None:
+        if self._wal is None:
+            return
+        current = {
+            "green": health.green,
+            "degraded": health.degraded,
+            "halted": health.halted,
+            "halt_ratio": round(health.halt_ratio, 4),
+            "system_healthy": health.is_system_healthy,
+        }
+        if current != self._last_health:
+            self._wal.write("actor_health", current)
+            self._last_health = current
+
+    def _write_state_committed(self) -> None:
+        if self._wal is None:
+            return
+        snapshot: dict[str, Any] = {"actors": {}}
+        for name, actor in self._actors.items():
+            snapshot["actors"][name] = {
+                "health": actor.health.name,
+                "cycle_id": actor.metrics.cycle_id,
+                "consecutive_failures": actor.metrics.consecutive_failures,
+                "has_position": actor._engine.pos_mgr.has_position() if hasattr(actor._engine, 'pos_mgr') else False,
+            }
+        if self._satellite is not None:
+            snapshot["satellite"] = {
+                "health": self._satellite.health.name,
+                "cycle_id": self._satellite.metrics.cycle_id,
+            }
+        snapshot["emergency_halt"] = self._emergency_halt
+        self._wal.write("state_committed", snapshot)
+
+    def drain_persist_buffer(self) -> list[dict]:
+        """Return and clear the global persist buffer."""
+        buf = list(self._persist_buffer)
+        self._persist_buffer.clear()
+        return buf
+
+    @property
+    def emergency_halt(self) -> bool:
+        return self._emergency_halt
+
+    def reset_emergency_halt(self) -> None:
+        """Reset emergency halt (e.g., after manual review)."""
+        self._emergency_halt = False
+        for actor in self._actors.values():
+            actor.reset()
+        logger.warning("Emergency halt reset — all actors restored to GREEN")

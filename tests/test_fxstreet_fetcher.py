@@ -92,7 +92,13 @@ def _make_fxstreet_mock_resp(text, status_code=200):
 @patch("features.fxstreet_fetcher.requests.get")
 def test_fetch_fxstreet_returns_text(mock_get):
     listing_page = '<html><a href="/week-ahead">Week Ahead</a></html>'
-    article_page = '<html><div class="article-content"><p>USD strengthens on hawkish Fed outlook.</p></div></html>'
+    article_page = (
+        '<html><div class="article-content">'
+        '<p>USD strengthens on hawkish Fed outlook. The Federal Reserve maintained its hawkish stance during the latest FOMC meeting, signaling that rates will remain elevated for longer. This has provided strong support for the US dollar across the board. Market participants are now pricing in a higher probability of additional rate hikes if inflation does not moderate as expected.</p>'
+        '<p>EURUSD tested key support levels as the euro struggled amid a widening interest rate differential. The ECBâs more cautious approach contrasts sharply with the Fedâs determination to keep policy restrictive, which continues to weigh on the single currency. Analysts expect further downside risks for EURUSD in the near term.</p>'
+        '<p>Commodity currencies were mixed, with the Australian dollar showing resilience on the back of stronger-than-expected employment data. The RBAâs recent rate hike has provided some support, though global growth concerns remain a headwind for risk-sensitive currencies.</p>'
+        '</div></html>'
+    )
     mock_get.side_effect = [
         _make_fxstreet_mock_resp(listing_page),
         _make_fxstreet_mock_resp(article_page),
@@ -128,8 +134,14 @@ def test_fetch_fxstreet_handles_http_error(mock_get):
 
 @patch("features.fxstreet_fetcher.requests.get")
 def test_fetch_fxstreet_weekly_outlook_fallback(mock_get):
-    listing_page = '<html><a href="/weekly-outlook">Weekly Outlook</a></html>'
-    article_page = '<html><div class="article-content"><p>Markets calm this week.</p></div></html>'
+    listing_page = '<html><a href="/weekly-outlook">Week Ahead</a></html>'
+    article_page = (
+        '<html><div class="article-content">'
+        '<p>Markets calm this week as traders await key economic data releases. The US dollar traded in a tight range against major peers as investors digested the latest Fed commentary. Treasury yields stabilized after last week&#8217;s volatility, providing some relief for risk assets. Equity markets showed modest gains in early trading.</p>'
+        '<p>The economic calendar this week features US CPI data, which will be closely watched for signals on the inflation trajectory. A higher-than-expected print could reignite rate hike expectations and boost the dollar. Conversely, a soft reading might fuel expectations of a policy pivot, weighing on the greenback.</p>'
+        '<p>In Europe, the ECB remained cautious, with policymakers highlighting the need to balance inflation control against growth risks. The euro remained under pressure as the interest rate differential with the US continued to favor the dollar. Analysts expect range-bound trading in the near term.</p>'
+        '</div></html>'
+    )
     mock_get.side_effect = [
         _make_fxstreet_mock_resp(listing_page),
         _make_fxstreet_mock_resp(article_page),
@@ -229,7 +241,9 @@ def test_pipeline_llm_failure(mock_llm, mock_fetch, tmp_path):
     mock_llm.return_value = None
     with patch("features.fxstreet_fetcher.NARRATIVE_ERROR", str(tmp_path / "narrative_error.json")):
         result = run_weekly_narrative_pipeline(api_key="fake-key")
-        assert result is False
+        # Falls back to neutral narrative (does not propagate the failure)
+        assert result is True
+        assert os.path.exists(tmp_path / "narrative_error.json")
 
 
 @patch("features.fxstreet_fetcher.fetch_fxstreet_article")

@@ -1,6 +1,5 @@
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from enum import Enum
 
@@ -18,6 +17,9 @@ from paper_trading.config_manager import get_config
 from paper_trading.entry.decision import PositionIntent, PositionSide
 from paper_trading.execution.bridge import ExecutionBridge
 from paper_trading.execution.paper_broker import PaperBroker
+from paper_trading.orchestrator.actor import AssetActor
+from paper_trading.orchestrator.engine import EngineOrchestrator
+from paper_trading.replay.wal import WalWriter
 
 # Re-exported from child modules for backward compatibility
 from paper_trading.ops.data_fetcher import (  # noqa: F401
@@ -71,7 +73,7 @@ os.makedirs(MODEL_DIR, exist_ok=True)
 
 
 class PaperTradingEngine:
-    def __init__(self, state_store=None):
+    def __init__(self, state_store=None, wal_writer=None):
         from tools.import_guard import verify_feature_pipeline
 
         report = verify_feature_pipeline()
@@ -87,6 +89,7 @@ class PaperTradingEngine:
         self.start_date = datetime.now(tz=ET)
         self.last_update = None
         self.portfolio_peak_value: float | None = None
+        self._wal = wal_writer or WalWriter(BASE, source="engine")
 
         snapshot = self.state_store.load_snapshot()
         if snapshot is not None and snapshot.engine_status:
@@ -111,6 +114,17 @@ class PaperTradingEngine:
         self._sim_store = SimulationStore(BASE)
         self._rebalance_last_day: datetime | None = None
         self._rebalance_weights: dict[str, float] = {}
+
+        # Fault-isolated actor orchestrator (Phase 5)
+        self._orchestrator = EngineOrchestrator(
+            actors={
+                name: AssetActor(name, asset, wal_writer=self._wal) for name, asset in self.assets.items()
+            },
+            satellite_actor=(
+                AssetActor("BTC", self.satellite, wal_writer=self._wal) if self.satellite is not None else None
+            ),
+            wal_writer=self._wal,
+        )
 
     def _build_asset_registry(self) -> None:
         from paper_trading.portfolio_builder import build_paper_portfolio as _build_paper_portfolio
@@ -305,20 +319,9 @@ class PaperTradingEngine:
                 )
 
         pd_limit = get_config().portfolio_drawdown_limit
-        results = {}
+        results: dict[str, object] = {}
 
-        # Phase 1: Refresh prices and settle P&L for all assets (parallel)
-        def _refresh_asset(name: str, asset):
-            try:
-                asset.refresh_price()
-                asset.update_pnl()
-            except Exception as e:
-                logger.error("%s: price/pnl refresh failed: %s", name, e)
-
-        with ThreadPoolExecutor(max_workers=8) as pool:
-            list(pool.map(lambda item: _refresh_asset(*item), list(self.assets.items())))
-
-        # Phase 2: Portfolio-level drawdown check
+        # ── Portfolio drawdown check (BEFORE any new trading) ────────
         mtm = sum(a.mtm_value for a in self.assets.values())
         if self.satellite is not None:
             mtm += self.satellite.current_value
@@ -348,49 +351,63 @@ class PaperTradingEngine:
                 "portfolio_drawdown": round(portfolio_dd * 100, 2),
                 "limit": round(pd_limit * 100, 2),
             }
+            self._wal.write("state_committed", {
+                "circuit_breaker": results["circuit_breaker"],
+                "portfolio_drawdown": round(portfolio_dd * 100, 2),
+            })
             self.last_update = datetime.now(tz=ET)
             return results
 
-        # Phase 3: Generate new signals for each asset (parallel)
-        def _generate_signal(name: str, asset):
-            try:
-                return name, asset.generate_signal()
-            except Exception as e:
-                import traceback
+        # ── Fault-isolated asset execution via orchestrator ──────────
+        # Replaces Phases 1 (refresh+pnl), 3 (signal), 4 (validity).
+        # Each asset runs in its own actor; no single failure halts others.
+        orch_results = self._orchestrator.run_once()
 
-                tb = traceback.format_exc()
-                logger.error("%s: signal generation failed\n%s", name, tb)
-                return name, {"asset": name, "error": str(e)}
+        # Propagate orchestrator health snapshot to results
+        if orch_results.get("health"):
+            results["orchestrator_health"] = orch_results["health"]
 
-        with ThreadPoolExecutor(max_workers=8) as pool:
-            for n, sig in pool.map(lambda item: _generate_signal(*item), list(self.assets.items())):
-                results[n] = sig
+        # Extract per-asset signals (backward-compat: {name: signal_dict})
+        asset_results = orch_results.get("assets", {})
+        for name, sig in asset_results.items():
+            if isinstance(sig, dict):
+                results[name] = sig
 
-        # Phase 3.5: Weekly narrative refresh + liquidity regime refresh
+        # Check orchestrator-level emergency halt
+        if orch_results.get("circuit_breaker"):
+            logger.error(
+                "Orchestrator circuit breaker triggered — actor halt ratio exceeded threshold"
+            )
+            results["orchestrator_circuit_breaker"] = orch_results["circuit_breaker"]
+
+        # Drain all actor persist queues into engine persist buffer
+        persist_commands = self._orchestrator.drain_persist_buffer()
+        for cmd in persist_commands:
+            if cmd["kind"] == "signal":
+                pass  # signals already captured in results
+            # Future: route trades, snapshots, attribution to state store
+
+        # ── Narrative refresh ──────────────────────────────────────────
         self._refresh_narrative()
 
-        # Phase 3.75: Periodic risk-parity portfolio rebalance
+        # ── Periodic risk-parity rebalance ─────────────────────────────
         if self._should_rebalance():
             self._rebalance_portfolio()
 
-        # Phase 4: Update validity-driven exposure multipliers (parallel)
-        def _update_validity(name: str, asset):
-            try:
-                validity = asset.update_validity()
-                asset.pos_mgr.exposure_multiplier = validity.get("exposure", 1.0)
-            except Exception as e:
-                logger.error("%s: validity update failed: %s", name, e)
-
-        with ThreadPoolExecutor(max_workers=8) as pool:
-            pool.map(lambda item: _update_validity(*item), list(self.assets.items()))
-
-        # ── Satellite run: evaluate gate, generate BTC signal ────────
+        # ── Satellite run ──────────────────────────────────────────────
         if self.satellite is not None:
             try:
                 self._run_satellite(results)
             except Exception as e:
                 logger.error("satellite run failed: %s", e)
                 results["satellite"] = {"asset": "BTC", "error": str(e)}
+
+        # ── WAL: engine-level state committed ──────────────────────────
+        self._wal.write("state_committed", {
+            "assets": {name: {"has_position": a.pos_mgr.has_position()} for name, a in self.assets.items()},
+            "satellite_active": self.satellite is not None and self.satellite.position_active if hasattr(self.satellite, 'position_active') else False,
+            "last_update": str(self.last_update),
+        })
 
         self.last_update = datetime.now(tz=ET)
         return results

@@ -78,21 +78,18 @@ class FillModel:
     ) -> float:
         """Return the actual fill quantity (may be degraded).
 
-        Never returns more than requested_qty.
+        Deterministic function of vol_zscore — no RNG dependency.
         Degradation increases with vol z-score above threshold.
+        Never returns more than requested_qty.
         """
         if vol_zscore <= config.fill_vol_threshold or requested_qty <= 0:
             return requested_qty
 
         excess = vol_zscore - config.fill_vol_threshold
-        reduction = min(config.fill_prob_slope * excess, 1.0 - config.min_fill_prob)
-        fill_prob = max(config.min_fill_prob, 1.0 + reduction)
-
-        if self._rng.random() > fill_prob:
-            fill_ratio = fill_prob + self._rng.random() * (1.0 - fill_prob)
-            return float(requested_qty * fill_ratio)
-
-        return requested_qty
+        slope = abs(config.fill_prob_slope) if config.fill_prob_slope < 0 else config.fill_prob_slope
+        reduction = min(slope * excess, 1.0 - config.min_fill_prob)
+        fill_prob = max(config.min_fill_prob, 1.0 - reduction)
+        return float(requested_qty * fill_prob)
 
     def seed_hash(self) -> str:
         h = hashlib.md5(str(self._rng.getstate()).encode())

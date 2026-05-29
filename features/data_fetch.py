@@ -7,12 +7,17 @@ logger = logging.getLogger("quantforge.data_fetch")
 
 
 def fetch_yf_series(ticker: str, name: str, period: str = "10y") -> pd.Series:
-    """Fetch a single yfinance series, return daily 'Close'."""
+    """Fetch a single yfinance series, return daily 'Close' with tz-aware UTC index."""
     import yfinance as yf
 
     df = yf.download(ticker, period=period, auto_adjust=True, progress=False)
     s = df["Close"].squeeze().rename(name)
-    s.index = pd.to_datetime(s.index.date)
+    idx = s.index
+    if idx.tz is None:
+        idx = idx.tz_localize("UTC")
+    else:
+        idx = idx.tz_convert("UTC")
+    s.index = idx.normalize()
     return s
 
 
@@ -65,10 +70,10 @@ def fetch_asset_ohlcv(
     ticker: str,
     period: str = "10y",
 ) -> pd.DataFrame:
-    """Fetch full-history OHLCV data with TZ-naive date index.
+    """Fetch full-history OHLCV data with tz-aware UTC index.
 
     Returns DataFrame with columns: open, high, low, close, volume.
-    Index is datetime (TZ-naive) aligned to daily close dates.
+    Index is DatetimeIndex with UTC timezone, normalized to midnight.
     """
     import time as _time
 
@@ -89,5 +94,10 @@ def fetch_asset_ohlcv(
             "Volume": "volume",
         }
     )
-    df.index = pd.to_datetime(df.index.date)
+    idx = df.index
+    if idx.tz is None:
+        idx = idx.tz_localize("UTC")
+    else:
+        idx = idx.tz_convert("UTC")
+    df.index = idx.normalize()
     return df

@@ -32,16 +32,15 @@ class TestCoreAssetMTM(unittest.TestCase):
                     with unittest.mock.patch('paper_trading.asset_engine.RegimeClassifier'):
                         with unittest.mock.patch('paper_trading.asset_engine.build_dynamic_sltp_from_config'):
                             with unittest.mock.patch('paper_trading.asset_engine.build_scale_out_from_config'):
-                                with unittest.mock.patch('paper_trading.asset_engine.model_path', return_value="/tmp/mock_model.pkl"):
-                                    self.asset = AssetEngine(
-                                        ticker=self.ticker,
-                                        name=self.name,
-                                        contract=mock_contract,
-                                        allocation=0.1,
-                                        config={},
-                                        state_store=mock_store,
-                                        initial_capital=self.initial_capital
-                                    )
+                                self.asset = AssetEngine(
+                                    ticker=self.ticker,
+                                    name=self.name,
+                                    contract=mock_contract,
+                                    allocation=0.1,
+                                    config={},
+                                    state_store=mock_store,
+                                    initial_capital=self.initial_capital
+                                )
         self.asset.peak_value = self.initial_capital
         self.asset.current_value = self.initial_capital
 

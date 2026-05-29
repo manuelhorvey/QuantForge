@@ -45,14 +45,14 @@ class AssetInferencePipeline:
 
         df = fetch_live(asset.ticker)
 
-        # Normalise index to TZ-naive date to match alpha feature alignment
+        # Normalise index to UTC midnight to match alpha feature alignment.
         # norm_index localises to US/Eastern; for FX crosses (24h in UTC) this
-        # shifts the date by a day, breaking close.reindex(alpha_index).
-        # Convert to UTC first so the extracted date matches fetch_yf_series.
+        # shifts the date by a day. Convert to UTC first so the extracted
+        # date matches fetch_yf_series (which also normalises to UTC midnight).
         if df.index.tz is not None:
-            df.index = pd.to_datetime(df.index.tz_convert("UTC").date)
+            df.index = df.index.tz_convert("UTC").normalize()
         else:
-            df.index = pd.to_datetime(df.index.date)
+            df.index = df.index.tz_localize("UTC").normalize()
 
         # Sync with latest price (same as dashboard) to ensure responsive SL/TP
         asset.refresh_price()

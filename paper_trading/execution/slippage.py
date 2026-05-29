@@ -1,14 +1,14 @@
-"""Asymmetric slippage model — SL worse, TP neutral.
+"""Asymmetric slippage model — SL worse, TP neutral, all deterministic.
 
 Sits AFTER PolicyDecision freeze.
 Only degrades outcomes, never improves them.
+All functions are pure (no RNG) for deterministic replay.
 """
 
 from __future__ import annotations
 
 import hashlib
 import logging
-import random
 
 from shared.execution_config import ExecutionConfig
 
@@ -16,38 +16,33 @@ logger = logging.getLogger("quantforge.slippage_model")
 
 
 class SlippageModel:
-    """Seeded asymmetric slippage engine.
+    """Deterministic asymmetric slippage engine.
 
-    SL fills always receive adverse slippage (fill worse than trigger).
-    TP fills receive neutral/near-zero slippage (limit order behavior).
-    Entry fills use the config-standard spread model with seeded noise.
-
-    All randomness is seeded and deterministic.
+    All functions are pure functions of (price, vol_zscore, config) —
+    no RNG, no mutable state. This ensures deterministic replay:
+    same inputs → same FillResult regardless of call order.
     """
 
     def __init__(self, seed: int = 42):
-        self._rng = random.Random(seed)
+        self._seed = seed
 
     def recreate(self, seed: int) -> SlippageModel:
-        """Return a fresh instance with the given seed (deterministic replay)."""
         return SlippageModel(seed)
 
     def _slip_bps(self, base_bps: float, vol_zscore: float, config: ExecutionConfig) -> float:
         excess = max(0.0, vol_zscore - 1.0)
         slip = base_bps * (1.0 + config.spread_vol_slope * excess)
         slip = min(slip, config.spread_max_bps)
-        return slip / 10000.0  # bps -> decimal
+        return slip / 10000.0
 
     def entry_slippage(self, mid_price: float, vol_zscore: float, config: ExecutionConfig) -> float:
-        """Base slippage for entries (identical to existing logic plus seeded noise)."""
+        """Deterministic entry slippage — pure function of mid, vol, config."""
         base = config.base_spread_bps
         slip_decimal = self._slip_bps(base, vol_zscore, config)
-        noise_decimal = self._rng.uniform(0.0, slip_decimal * 0.1)
-        result = slip_decimal + noise_decimal
-        return float(min(result, config.spread_max_bps / 10000.0))
+        return float(min(slip_decimal, config.spread_max_bps / 10000.0))
 
     def stop_loss_slippage(self, stop_price: float, vol_zscore: float, config: ExecutionConfig, side: str) -> float:
-        """Adverse slippage on stop-loss fills (marketable orders).
+        """Adverse slippage on stop-loss fills — deterministic, pure function.
 
         Returns a POSITIVE slippage factor in price units.
         For longs:  fill = stop - factor  (worse)
@@ -56,27 +51,18 @@ class SlippageModel:
         base_bps = config.base_spread_bps * 0.5
         slip_decimal = self._slip_bps(base_bps, vol_zscore, config)
         slip_decimal *= 1.5  # SL penalty: 1.5x worse than entry
-        noise = self._rng.uniform(0.0, slip_decimal * 0.15)
-        total = slip_decimal + noise
-        total = min(total, config.spread_max_bps * 1.5 / 10000.0)
-        price_slippage = stop_price * total
-        return float(price_slippage)
+        total = min(slip_decimal, config.spread_max_bps * 1.5 / 10000.0)
+        return float(stop_price * total)
 
     def take_profit_slippage(self, target_price: float, config: ExecutionConfig) -> float:
-        """Neutral-to-slightly-favorable slippage on take-profit fills (limit orders).
+        """Neutral slippage on take-profit fills (limit orders) — deterministic.
 
         Returns a signed slippage factor in price units.
-        Near-zero, may be slightly negative (favorable) at random.
-        For longs:  fill = target + factor  (neutral or slightly better)
-        For shorts: fill = target - factor  (neutral or slightly better)
+        Always non-negative (neutral), never favorable.
         """
         base_bps = config.base_spread_bps * 0.1
         slip_decimal = base_bps / 10000.0
-        noise = self._rng.uniform(-slip_decimal * 0.5, slip_decimal * 0.1)
-        total = slip_decimal + noise
-        total = max(total, -slip_decimal * 0.5)
-        return float(target_price * total)
+        return float(target_price * slip_decimal)
 
     def seed_hash(self) -> str:
-        h = hashlib.md5(str(self._rng.getstate()).encode())
-        return h.hexdigest()[:12]
+        return hashlib.md5(str(self._seed).encode()).hexdigest()[:12]

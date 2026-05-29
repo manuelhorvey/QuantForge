@@ -64,20 +64,20 @@ def _generate_scale_out_profile(archetype: str, convexity: float) -> list[tuple[
     """
     archetype = archetype.upper()
 
-    # High Convexity (Backloaded): Let the tail run
-    if convexity >= 1.5 or archetype in ["MOMENTUM_IGNITION", "BREAKOUT"]:
-        return [
-            (0.20, 0.50),  # Take 20% at 0.5R (breakeven trigger)
-            (0.30, 1.00),  # Take 30% at 1.0R
-            (0.50, 1.50),  # Take 50% at 1.5R (tail expansion)
-        ]
-
     # Low Convexity (Frontloaded): Capture quick reverts
     if convexity < 1.1 or archetype == "MEAN_REVERSION":
         return [
             (0.50, 0.50),  # Take 50% early
             (0.30, 0.80),  # Take 30% at 0.8R
             (0.20, 1.00),  # Take 20% at 1.0R
+        ]
+
+    # High Convexity (Backloaded): Let the tail run
+    if convexity >= 1.5 or archetype in ["MOMENTUM_IGNITION", "BREAKOUT"]:
+        return [
+            (0.20, 0.50),  # Take 20% at 0.5R (breakeven trigger)
+            (0.30, 1.00),  # Take 30% at 1.0R
+            (0.50, 1.50),  # Take 50% at 1.5R (tail expansion)
         ]
 
     # Balanced (Trend Pullback)

@@ -1,8 +1,8 @@
 """Connect PaperBroker execution physics to AssetEngine fills.
 
-Phase 5 integration: ExecutionSimulator wraps PaperBroker to add
-asymmetric slippage, gap-through modeling, partial fill degradation,
-and seeded stochastic latency for stop-loss and take-profit fills.
+Phase 4 integration: OHLC-driven MarketSnapshot with real gap-through
+detection, asymmetric slippage, partial fill degradation, and seeded
+stochastic latency for stop-loss and take-profit fills.
 
 The simulator sits AFTER PolicyDecision freeze and never mutates it.
 """
@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 
 import numpy as np
+import pandas as pd
 
 from paper_trading.entry.decision import PositionIntent
 from paper_trading.execution.order_manager import OrderManager
@@ -29,9 +30,9 @@ logger = logging.getLogger("quantforge.execution_bridge")
 class ExecutionBridge:
     """Simulates realistic fill prices via PaperBroker and ExecutionSimulator.
 
-    Phase 5 (ExecutionSimulator) is an additive degradation layer.
-    When enabled, it wraps entry, stop-loss, and take-profit fills
-    with realistic market physics. It never improves outcomes.
+    Phase 4 (real OHLC snapshots) provides gap-through detection using
+    actual bar data. When ohlcv is provided, open/high/low come from
+    real bars instead of collapsing to mid price.
     """
 
     def __init__(self, broker: PaperBroker, use_execution_simulator: bool = False, seed: int = 42):
@@ -40,14 +41,37 @@ class ExecutionBridge:
         self.orders = OrderManager(broker)
         self.simulator = ExecutionSimulator(seed) if use_execution_simulator else None
 
-    def _build_market_snapshot(self, asset: str, mid_price: float) -> MarketSnapshot:
-        """Build a MarketSnapshot from broker state."""
+    def _build_market_snapshot(
+        self,
+        asset: str,
+        mid_price: float,
+        ohlcv: pd.DataFrame | None = None,
+    ) -> MarketSnapshot:
+        """Build a MarketSnapshot from broker state and optional OHLC bar data.
+
+        When ohlcv is provided, open/high/low are taken from the last bar.
+        When ohlcv is None, all fields fall back to mid_price.
+        """
         vol_z = self.broker.get_vol_zscore(asset)
+        if ohlcv is not None and not ohlcv.empty:
+            last = ohlcv.iloc[-1]
+            open_px = float(last.get("open", mid_price))
+            high_px = float(last.get("high", mid_price))
+            low_px = float(last.get("low", mid_price))
+            # Clamp: high >= max(open, close), low <= min(open, close)
+            close_px = float(last.get("close", mid_price))
+            high_px = max(high_px, open_px, close_px)
+            low_px = min(low_px, open_px, close_px)
+        else:
+            open_px = mid_price
+            high_px = mid_price
+            low_px = mid_price
+
         return MarketSnapshot(
             current_price=mid_price,
-            open_price=mid_price,
-            high_price=mid_price,
-            low_price=mid_price,
+            open_price=open_px,
+            high_price=high_px,
+            low_price=low_px,
             vol_zscore=vol_z,
         )
 
@@ -64,12 +88,14 @@ class ExecutionBridge:
         side: str,
         quantity: float,
         mid_price: float,
+        ohlcv: pd.DataFrame | None = None,
     ) -> tuple[float, float, float]:
         """
         Returns (fill_price, slippage_bps, impact_bps) using vol-z spread + impact model.
 
-        When ExecutionSimulator is enabled, the entry fill is wrapped
-        with seeded noise and degradation. The PolicyDecision is never mutated.
+        When ohlcv is provided, the MarketSnapshot carries real bar data
+        for gap-through detection and vol-based degradation.
+        When ohlcv is None, all snapshot fields use mid_price.
         """
         if mid_price <= 0 or quantity <= 0:
             return mid_price, 0.0, 0.0
@@ -79,9 +105,8 @@ class ExecutionBridge:
         vol_z = self.broker.get_vol_zscore(asset)
         config = self.broker._get_config(asset)
 
-        # Phase 5: ExecutionSimulator entry fill (degradation only)
         if self.simulator is not None:
-            market = self._build_market_snapshot(asset, mid_price)
+            market = self._build_market_snapshot(asset, mid_price, ohlcv)
             result = self.simulator.simulate("entry", side, mid_price, quantity, market, config)
             fill = result.fill_price
             slippage_bps = result.slippage_bps
@@ -110,15 +135,16 @@ class ExecutionBridge:
         asset: str,
         position: PositionIntent,
         current_price: float,
+        ohlcv: pd.DataFrame | None = None,
     ) -> FillResult:
-        """Simulate a stop-loss fill with Phase 5 degradation.
+        """Simulate a stop-loss fill with real OHLC gap-through detection.
 
-        Returns an immutable FillResult. Does not mutate position or policy.
-        Falls back to simple price if simulator is disabled.
+        When ohlcv is provided, gap-through is checked against real bar data.
+        When ohlcv is None, falls back to price-based fill with no gap.
         """
         if self.simulator is not None:
             config = self.broker._get_config(asset)
-            market = self._build_market_snapshot(asset, current_price)
+            market = self._build_market_snapshot(asset, current_price, ohlcv)
             return self.simulator.simulate_stop_loss(position, current_price, market, config)
 
         fill_px = position.stop_loss
@@ -129,15 +155,16 @@ class ExecutionBridge:
         asset: str,
         position: PositionIntent,
         current_price: float,
+        ohlcv: pd.DataFrame | None = None,
     ) -> FillResult:
-        """Simulate a take-profit fill with Phase 5 degradation.
+        """Simulate a take-profit fill with OHLC context (gap-through never applies).
 
-        Returns an immutable FillResult. Does not mutate position or policy.
-        Falls back to simple price if simulator is disabled.
+        When ohlcv is provided, it informs vol-based degradation only.
+        When ohlcv is None, falls back to price-based fill.
         """
         if self.simulator is not None:
             config = self.broker._get_config(asset)
-            market = self._build_market_snapshot(asset, current_price)
+            market = self._build_market_snapshot(asset, current_price, ohlcv)
             return self.simulator.simulate_take_profit(position, current_price, market, config)
 
         fill_px = position.take_profit
@@ -149,8 +176,9 @@ class ExecutionBridge:
         side: str,
         quantity: float,
         mid_price: float,
+        ohlcv: pd.DataFrame | None = None,
     ) -> tuple[float, str]:
         """Place order through OrderManager; returns (fill_price, order_id)."""
-        fill, _, _ = self.fill_price(asset, side, quantity, mid_price)
+        fill, _, _ = self.fill_price(asset, side, quantity, mid_price, ohlcv)
         order_id = self.orders.submit_market_order(asset, side, quantity, fill_price=fill)
         return fill, order_id or ""

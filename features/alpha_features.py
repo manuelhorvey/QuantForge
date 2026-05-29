@@ -16,11 +16,16 @@ def vol_adjusted_carry(price: pd.Series, rate_diff: pd.Series, vol_window: int =
     Expected decay: ~1-3 months.
 
     rate_diff: domestic minus foreign annualized rate in decimal (e.g. 0.05 = 5%)
+
+    Clipping uses expanding-window quantiles to avoid L2/L5 leakage
+    (global distribution hindsight). Each observation is clipped by
+    thresholds that only depend on prior data.
     """
     log_returns = np.log(price.astype(float) / price.astype(float).shift(1))
     realized_vol = log_returns.rolling(vol_window).std() * np.sqrt(252)
     carry_to_vol = rate_diff.reindex(price.index) / realized_vol.replace(0, np.nan)
-    lo, hi = carry_to_vol.quantile([0.05, 0.95])
+    lo = carry_to_vol.expanding(min_periods=vol_window).quantile(0.05)
+    hi = carry_to_vol.expanding(min_periods=vol_window).quantile(0.95)
     return carry_to_vol.clip(lo, hi)
 
 
