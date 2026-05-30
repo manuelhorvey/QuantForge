@@ -9,8 +9,12 @@ import { Skeleton } from './ui/Skeleton'
 
 export default function AssetGrid() {
   const { data, isPending } = usePortfolioState()
-  const assetNames = useMemo(() => (data?.assets ? Object.keys(data.assets).sort() : []), [data])
   const sat = data?.engine_status?.satellite
+  const assetNames = useMemo(() => {
+    if (!data?.assets) return []
+    const names = Object.keys(data.assets).sort()
+    return sat ? names.filter(n => n !== "BTC") : names
+  }, [data, sat])
 
   if (isPending) {
     return (

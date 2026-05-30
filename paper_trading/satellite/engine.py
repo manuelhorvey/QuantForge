@@ -84,6 +84,7 @@ class SatelliteSnapshot:
     stop_price: float | None = None
     target_price: float | None = None
     exit_reason: str | None = None
+    trade_log: list = field(default_factory=list)
 
 
 class HighVolSatellite:
@@ -122,6 +123,10 @@ class HighVolSatellite:
         self.target_price: float | None = None
         self._last_exit_reason: str | None = None
         self._entry_capital: float = 0.0
+
+        # Trade tracking
+        self.trade_log: list[dict] = []
+        self.closed_trades: int = 0
 
         # Rolling performance buffer
         self._daily_returns: list[float] = []
@@ -285,6 +290,7 @@ class HighVolSatellite:
         self.stop_price = None
         self.target_price = None
         self._last_exit_reason = reason
+        self.closed_trades += 1
 
     def check_exit(self, current_price: float) -> str | None:
         """Check if SL or TP is breached and close position if so.
@@ -428,4 +434,5 @@ class HighVolSatellite:
             stop_price=self.stop_price,
             target_price=self.target_price,
             exit_reason=self._last_exit_reason,
+            trade_log=self.trade_log,
         )

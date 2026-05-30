@@ -571,6 +571,7 @@ class PaperTradingEngine:
                 self.state_store.append_trade(trade)
                 self.state_store.write_trade_outcomes_cache()
                 self.state_store.write_analytics_snapshot()
+                sat.trade_log.append(trade)
 
             logger.info(
                 "%s satellite: gate=%s, position=%s, value=%.2f%s",
@@ -755,6 +756,42 @@ class PaperTradingEngine:
                 "stop_out_last_side": getattr(asset, "_last_stop_out_side", None),
                 "stop_out_last_date": (str(d) if (d := getattr(asset, "_last_stop_out_date", None)) else None),
             }
+        # Inject satellite into assets dict for unified dashboard display
+        if self.satellite is not None:
+            s = self.satellite.get_state()
+            n_trades = len(s.trade_log)
+            tp = sum(1 for t in s.trade_log if t.get("reason", "").upper() in ("TP_HIT",))
+            sl = sum(1 for t in s.trade_log if t.get("reason", "").upper() in ("SL_HIT",))
+            flip = sum(1 for t in s.trade_log if t.get("reason", "").upper() in ("GATE_CLOSED",))
+            ad["BTC"] = {
+                "metrics": {
+                    "asset": "BTC",
+                    "current_value": s.current_value,
+                    "mtm_value": s.current_value,
+                    "settled_value": s.current_value,
+                    "total_return": s.total_return_pct,
+                    "mtm_return": s.total_return_pct,
+                    "settled_return": 0.0,
+                    "drawdown": s.drawdown_pct,
+                    "mean_confidence": 0.0,
+                    "n_trades": n_trades,
+                    "n_signals": 1 if s.position_active else 0,
+                    "current_price": s.current_price,
+                    "profit_factor": 0,
+                    "win_rate": 0,
+                    "exit_reasons": {"tp": tp, "sl": sl, "signal_flip": flip},
+                    "trade_log": s.trade_log[-10:],
+                    "position": {
+                        "side": "long",
+                        "entry": s.entry_price,
+                        "sl": s.stop_price,
+                        "tp": s.target_price,
+                    } if s.position_active else None,
+                },
+                "halt": {"halted": False},
+                "execution_state": "ACTIVE",
+                "validity_state": "GREEN",
+            }
         total_value = self._compute_mtm_total()
         rp_weights = {}
         rp_allocations = {}
@@ -841,8 +878,10 @@ class PaperTradingEngine:
             "capital": get_config().capital,
             "allocations": {n: a.allocation for n, a in self.assets.items()},
             "deployment_cleared": True,
-            "open_positions": sum(a.pos_mgr.has_position() for a in self.assets.values()),
-            "closed_trades": sum(len(a.trade_log) for a in self.assets.values()),
+            "open_positions": sum(a.pos_mgr.has_position() for a in self.assets.values())
+                + (1 if self.satellite is not None and self.satellite.position_active else 0),
+            "closed_trades": sum(len(a.trade_log) for a in self.assets.values())
+                + (self.satellite.closed_trades if self.satellite is not None else 0),
             "execution_state": exec_state.value,
             "average_validity_exposure": round(overall_validity / n, 4),
             "satellite_allocation_pct": round(satellite_pct, 2),
