@@ -2,6 +2,7 @@ import { useExecutionQuality } from '../../hooks/useExecutionQuality'
 import Panel from '../ui/Panel'
 import SectionHeader from '../ui/SectionHeader'
 import { Skeleton } from '../ui/Skeleton'
+import EmptyState from '../ui/EmptyState'
 
 function Gauge({ label, value, size = 80 }: { label: string; value: number; size?: number }) {
   const pct = Math.min(Math.max(value, 0), 1)
@@ -52,6 +53,17 @@ export default function FillQualityGauge() {
   const byAsset = data?.by_asset ?? {}
   const assets = Object.keys(byAsset)
   if (assets.length === 0) return null
+
+  const hasFqi = assets.some(a => byAsset[a].fqi != null)
+  const hasEis = assets.some(a => byAsset[a].eis != null)
+  if (!hasFqi && !hasEis) {
+    return (
+      <Panel padding="md">
+        <SectionHeader title="Fill Quality" accent="purple" />
+        <EmptyState message="Waiting for execution data…" compact />
+      </Panel>
+    )
+  }
 
   const avgFqi = assets.reduce((s, a) => s + (byAsset[a].fqi ?? 0), 0) / assets.length
   const avgFillRatio = assets.reduce((s, a) => s + byAsset[a].avg_fill_ratio, 0) / assets.length
