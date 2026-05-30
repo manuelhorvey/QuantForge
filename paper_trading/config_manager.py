@@ -41,13 +41,15 @@ class EngineConfig:
     liquidity_config: dict = field(default_factory=dict)
     defaults: dict = field(default_factory=dict)
     execution: dict = field(default_factory=dict)
-    optimizations: dict = field(default_factory=lambda: {
-        "truncate_inference": "auto",
-        "batch_http": True,
-        "sqlite_state": True,
-        "vectorized_labels": True,
-        "async_diagnostics": True,
-    })
+    optimizations: dict = field(
+        default_factory=lambda: {
+            "truncate_inference": "auto",
+            "batch_http": True,
+            "sqlite_state": True,
+            "vectorized_labels": True,
+            "async_diagnostics": True,
+        }
+    )
 
     @classmethod
     def from_dict(cls, data: dict) -> "EngineConfig":

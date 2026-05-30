@@ -15,6 +15,8 @@ All functions are deterministic and stateless — no engine dependency.
 
 from __future__ import annotations
 
+import pandas as pd
+
 
 def compute_eis(
     entry_slippage_bps: float,

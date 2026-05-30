@@ -41,6 +41,7 @@ class ActorHealth(Enum):
 @dataclass
 class ActorMetrics:
     """Observable metrics for a single actor cycle."""
+
     cycle_id: int = 0
     last_success_time: float = 0.0
     last_failure_time: float = 0.0
@@ -55,6 +56,7 @@ class ActorMetrics:
 @dataclass
 class AssetResult:
     """Immutable outcome of one asset cycle."""
+
     asset: str
     success: bool
     signal: dict | None = None
@@ -63,17 +65,18 @@ class AssetResult:
     duration_ms: float = 0.0
 
     @classmethod
-    def ok(cls, asset: str, signal: dict, cycle_id: int = 0, duration_ms: float = 0.0) -> "AssetResult":
+    def ok(cls, asset: str, signal: dict, cycle_id: int = 0, duration_ms: float = 0.0) -> AssetResult:
         return cls(asset=asset, success=True, signal=signal, cycle_id=cycle_id, duration_ms=duration_ms)
 
     @classmethod
-    def failed(cls, asset: str, error: str, cycle_id: int = 0, duration_ms: float = 0.0) -> "AssetResult":
+    def failed(cls, asset: str, error: str, cycle_id: int = 0, duration_ms: float = 0.0) -> AssetResult:
         return cls(asset=asset, success=False, error=error, cycle_id=cycle_id, duration_ms=duration_ms)
 
 
 @dataclass
 class PersistCommand:
     """Immutable command sent from actor to persistence writer thread."""
+
     kind: str  # "trade", "snapshot", "attribution", "signal"
     payload: dict
     asset: str = ""
@@ -127,7 +130,8 @@ class AssetActor:
             self._maybe_probe_recovery()
             if self.health == ActorHealth.HALTED:
                 return AssetResult.failed(
-                    self.name, f"actor_halted: {self._fault_reason}",
+                    self.name,
+                    f"actor_halted: {self._fault_reason}",
                     self.metrics.cycle_id,
                 )
 
@@ -173,7 +177,8 @@ class AssetActor:
         self.metrics.consecutive_successes += 1
         self.metrics.cycle_duration_ms = round(elapsed, 2)
         self.metrics.avg_duration_ms = round(
-            (self.metrics.avg_duration_ms * (self.metrics.total_cycles - 1) + elapsed) / max(self.metrics.total_cycles, 1),
+            (self.metrics.avg_duration_ms * (self.metrics.total_cycles - 1) + elapsed)
+            / max(self.metrics.total_cycles, 1),
             2,
         )
         self.health = ActorHealth.GREEN
@@ -226,11 +231,14 @@ class AssetActor:
             return
         price = self._engine.current_price
         if price is not None and not (isinstance(price, float) and pd.isna(price)):
-            self._wal.write("price_update", {
-                "asset": self.name,
-                "price": float(price),
-                "time": str(datetime.now()),
-            })
+            self._wal.write(
+                "price_update",
+                {
+                    "asset": self.name,
+                    "price": float(price),
+                    "time": str(datetime.now()),
+                },
+            )
             self._last_price = float(price)
 
     def _write_position_events(self) -> None:
@@ -238,29 +246,35 @@ class AssetActor:
             return
         current_count = len(getattr(self._engine, "trade_log", []))
         if current_count > self._last_trade_count:
-            for trade in getattr(self._engine, "trade_log", [])[self._last_trade_count:]:
-                self._wal.write("position_closed", {
-                    "asset": self.name,
-                    "reason": trade.get("reason", "unknown"),
-                    "pnl": trade.get("pnl", 0),
-                    "exit_price": trade.get("exit_price", 0),
-                    "entry_price": trade.get("entry_price", 0),
-                    "side": trade.get("side", ""),
-                    "exit_date": trade.get("exit_date", ""),
-                })
+            for trade in getattr(self._engine, "trade_log", [])[self._last_trade_count :]:
+                self._wal.write(
+                    "position_closed",
+                    {
+                        "asset": self.name,
+                        "reason": trade.get("reason", "unknown"),
+                        "pnl": trade.get("pnl", 0),
+                        "exit_price": trade.get("exit_price", 0),
+                        "entry_price": trade.get("entry_price", 0),
+                        "side": trade.get("side", ""),
+                        "exit_date": trade.get("exit_date", ""),
+                    },
+                )
         self._last_trade_count = current_count
 
     def _write_signal(self, signal: dict | None) -> None:
         if self._wal is None:
             return
         if signal is not None:
-            self._wal.write("signal_generated", {
-                "asset": self.name,
-                "signal": signal.get("signal"),
-                "confidence": signal.get("confidence"),
-                "position_size": signal.get("position_size", 0),
-                "time": str(datetime.now()),
-            })
+            self._wal.write(
+                "signal_generated",
+                {
+                    "asset": self.name,
+                    "signal": signal.get("signal"),
+                    "confidence": signal.get("confidence"),
+                    "position_size": signal.get("position_size", 0),
+                    "time": str(datetime.now()),
+                },
+            )
 
 
 # ── Actor Health Aggregator ───────────────────────────────────────────────────
@@ -269,6 +283,7 @@ class AssetActor:
 @dataclass
 class ActorHealthSnapshot:
     """Point-in-time health snapshot across all actors."""
+
     timestamp: float = field(default_factory=time.monotonic)
     green: int = 0
     degraded: int = 0

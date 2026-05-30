@@ -40,9 +40,21 @@ for name in ["quantforge", "yfinance", "matplotlib", "urllib3"]:
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = os.path.dirname(HERE)
 DEFAULT_TICKERS = [
-    "BTC-USD", "EURGBP=X", "GC=F", "NZDCHF=X", "CHFJPY=X",
-    "CADJPY=X", "USDCHF=X", "EURJPY=X", "EURCAD=X", "AUDCHF=X",
-    "USDJPY=X", "USDCAD=X", "GBPCHF=X", "ES=F", "NQ=F",
+    "BTC-USD",
+    "EURGBP=X",
+    "GC=F",
+    "NZDCHF=X",
+    "CHFJPY=X",
+    "CADJPY=X",
+    "USDCHF=X",
+    "EURJPY=X",
+    "EURCAD=X",
+    "AUDCHF=X",
+    "USDJPY=X",
+    "USDCAD=X",
+    "GBPCHF=X",
+    "ES=F",
+    "NQ=F",
 ]
 
 
@@ -54,6 +66,7 @@ def _make_dummy_model(asset) -> None:
     Uses tiny hyperparams (10 trees, depth 2) to keep setup fast.
     """
     import xgboost as xgb
+
     from features.alpha_features import build_alpha_features
     from features.data_fetch import fetch_asset_data
 
@@ -70,9 +83,9 @@ def _make_dummy_model(asset) -> None:
         rng = np.random.RandomState(42)
         n = len(features)
         y = rng.randint(0, 2, size=n)
-        X = features.values
+        x_data = features.values
         model = xgb.XGBClassifier(n_estimators=10, max_depth=2, verbosity=0, tree_method="hist")
-        model.fit(X, y)
+        model.fit(x_data, y)
         asset.model = model
         asset._trained = True
         asset._truncate_inference = True
@@ -88,7 +101,7 @@ def build_engine(n_assets: int, n_workers: int, skip_validation: bool, quick: bo
     If *state_dir* is ``None`` a temporary directory is created so the
     benchmark never touches the production ``data/live/`` state store.
     """
-    from paper_trading.config_manager import reset_config, get_config
+    from paper_trading.config_manager import get_config, reset_config
     from paper_trading.state_store import StateStore
 
     reset_config()
@@ -144,9 +157,7 @@ def run_benchmark(args) -> list[dict]:
             t0 = time.monotonic()
             engine.initialize()
             init_s = time.monotonic() - t0
-            results.append(
-                {"event": "init", "init_s": round(init_s, 3), "n_assets": args.assets}
-            )
+            results.append({"event": "init", "init_s": round(init_s, 3), "n_assets": args.assets})
 
         # Cold cycle (first run — TTLCache empty, PSI baseline set)
         t0 = time.monotonic()

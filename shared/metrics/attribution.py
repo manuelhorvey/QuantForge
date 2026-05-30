@@ -34,6 +34,17 @@ def compute_domain_scores(
     # How confident was the model, and was it directionally correct?
     confidence = record.get("pred_confidence") or 0.0
     forecast_correct = record.get("pred_forecast_direction_correct")
+    if forecast_correct is None:
+        # Fallback for SQLite schema which might lack this field explicitly
+        sig = record.get("side") or record.get("pred_signal")
+        exit_px = record.get("exit_price")
+        entry_px = record.get("exec_entry_price") or record.get("entry_price")
+        if exit_px and entry_px:
+            if sig == "long":
+                forecast_correct = exit_px > entry_px
+            elif sig == "short":
+                forecast_correct = exit_px < entry_px
+
     if forecast_correct is True:
         prediction_score = min(0.5 + confidence * 0.5, 1.0)
     elif forecast_correct is False:
@@ -44,6 +55,13 @@ def compute_domain_scores(
     # ── Execution score ─────────────────────────────────────────────
     # How efficient was entry timing?
     efficiency = record.get("exec_entry_timing_efficiency")
+    if efficiency is None:
+        # Fallback for SQLite
+        entry_px = record.get("exec_entry_price") or record.get("entry_price")
+        mid_px = record.get("exec_mid_price_at_signal")
+        if entry_px and mid_px and mid_px > 0:
+            efficiency = entry_px / mid_px
+
     if efficiency is not None and efficiency > 0:
         exec_ratio = min(efficiency, 1.0 / efficiency) if efficiency != 0 else 0
         execution_score = min(exec_ratio, 1.0)
@@ -51,13 +69,13 @@ def compute_domain_scores(
         execution_score = 0.5
 
     # Blend in slippage penalty
-    entry_slip = abs(record.get("friction_entry_slippage_bps", 0))
+    entry_slip = abs(record.get("friction_entry_slippage_bps", record.get("exec_entry_slippage_bps", 0)))
     execution_score *= max(0.0, 1.0 - entry_slip / 100.0)
 
     # ── Exit score ──────────────────────────────────────────────────
     # How well did the exit preserve theoretical R?
-    realized_r = record.get("exit_realized_r")
-    theoretical_r = record.get("exit_theoretical_r")
+    realized_r = record.get("exit_realized_r", record.get("realized_r"))
+    theoretical_r = record.get("exit_theoretical_r", record.get("theoretical_r"))
     if theoretical_r is not None and theoretical_r != 0 and realized_r is not None:
         exit_ratio = max(-1.0, min(realized_r / (abs(theoretical_r) + 1e-9), 1.0))
         exit_score = max(0.0, (exit_ratio + 1.0) / 2.0)
@@ -140,7 +158,6 @@ def compute_waterfall(
         }
 
     # Allocate PnL proportionally to domain scores
-    pred_pnl = total_pnl * (avg_pred / total_score)
     exec_cost = -abs(total_pnl) * (1 - avg_exec) * 0.5  # exec is always a cost
     exit_cost = -abs(total_pnl) * (1 - avg_exit) * 0.3  # exit is mostly a cost
     friction_cost = -abs(total_pnl) * (1 - avg_friction) * 0.5  # friction is a cost

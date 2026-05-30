@@ -27,7 +27,6 @@ from typing import Any
 from paper_trading.orchestrator.actor import (
     AssetActor,
     AssetResult,
-    ActorHealth,
     compute_health_snapshot,
 )
 from paper_trading.replay.wal import WalWriter
@@ -217,7 +216,7 @@ class EngineOrchestrator:
                 "health": actor.health.name,
                 "cycle_id": actor.metrics.cycle_id,
                 "consecutive_failures": actor.metrics.consecutive_failures,
-                "has_position": actor._engine.pos_mgr.has_position() if hasattr(actor._engine, 'pos_mgr') else False,
+                "has_position": actor._engine.pos_mgr.has_position() if hasattr(actor._engine, "pos_mgr") else False,
             }
         if self._satellite is not None:
             snapshot["satellite"] = {

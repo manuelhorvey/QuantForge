@@ -123,9 +123,7 @@ class PaperTradingEngine:
 
         # Fault-isolated actor orchestrator (Phase 5)
         self._orchestrator = EngineOrchestrator(
-            actors={
-                name: AssetActor(name, asset, wal_writer=self._wal) for name, asset in self.assets.items()
-            },
+            actors={name: AssetActor(name, asset, wal_writer=self._wal) for name, asset in self.assets.items()},
             satellite_actor=(
                 AssetActor("BTC", self.satellite, wal_writer=self._wal) if self.satellite is not None else None
             ),
@@ -382,10 +380,13 @@ class PaperTradingEngine:
                 "portfolio_drawdown": round(portfolio_dd * 100, 2),
                 "limit": round(pd_limit * 100, 2),
             }
-            self._wal.write("state_committed", {
-                "circuit_breaker": results["circuit_breaker"],
-                "portfolio_drawdown": round(portfolio_dd * 100, 2),
-            })
+            self._wal.write(
+                "state_committed",
+                {
+                    "circuit_breaker": results["circuit_breaker"],
+                    "portfolio_drawdown": round(portfolio_dd * 100, 2),
+                },
+            )
             self.last_update = datetime.now(tz=ET)
             return results
 
@@ -406,9 +407,7 @@ class PaperTradingEngine:
 
         # Check orchestrator-level emergency halt
         if orch_results.get("circuit_breaker"):
-            logger.error(
-                "Orchestrator circuit breaker triggered — actor halt ratio exceeded threshold"
-            )
+            logger.error("Orchestrator circuit breaker triggered — actor halt ratio exceeded threshold")
             results["orchestrator_circuit_breaker"] = orch_results["circuit_breaker"]
 
         # Drain all actor persist queues into engine persist buffer
@@ -440,11 +439,16 @@ class PaperTradingEngine:
                 results["satellite"] = {"asset": "BTC", "error": str(e)}
 
         # ── WAL: engine-level state committed ──────────────────────────
-        self._wal.write("state_committed", {
-            "assets": {name: {"has_position": a.pos_mgr.has_position()} for name, a in self.assets.items()},
-            "satellite_active": self.satellite is not None and self.satellite.position_active if hasattr(self.satellite, 'position_active') else False,
-            "last_update": str(self.last_update),
-        })
+        self._wal.write(
+            "state_committed",
+            {
+                "assets": {name: {"has_position": a.pos_mgr.has_position()} for name, a in self.assets.items()},
+                "satellite_active": self.satellite is not None and self.satellite.position_active
+                if hasattr(self.satellite, "position_active")
+                else False,
+                "last_update": str(self.last_update),
+            },
+        )
 
         self.last_update = datetime.now(tz=ET)
 
@@ -452,7 +456,7 @@ class PaperTradingEngine:
         _elapsed = time.perf_counter() - _t0
         self._cycle_times.append(_elapsed)
         if len(self._cycle_times) > self._cycle_times_maxlen:
-            self._cycle_times = self._cycle_times[-self._cycle_times_maxlen:]
+            self._cycle_times = self._cycle_times[-self._cycle_times_maxlen :]
         _orch_time = _t1 - _t0
         _narr_time = _t2 - _t1
         _rebal_time = _t3 - _t2
@@ -462,10 +466,15 @@ class PaperTradingEngine:
             p50 = statistics.median(recent)
             p95 = sorted(recent)[int(len(recent) * 0.95)]
             logger.info(
-                "BENCHMARK: cycle=%.3fs  orch=%.3fs  narr=%.3fs  rebal=%.3fs  sat=%.3fs  "
-                "p50=%.3fs  p95=%.3fs  n=%d",
-                _elapsed, _orch_time, _narr_time, _rebal_time, _sat_time,
-                p50, p95, len(recent),
+                "BENCHMARK: cycle=%.3fs  orch=%.3fs  narr=%.3fs  rebal=%.3fs  sat=%.3fs  p50=%.3fs  p95=%.3fs  n=%d",
+                _elapsed,
+                _orch_time,
+                _narr_time,
+                _rebal_time,
+                _sat_time,
+                p50,
+                p95,
+                len(recent),
             )
 
         return results

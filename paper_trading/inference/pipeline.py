@@ -357,23 +357,30 @@ class AssetInferencePipeline:
             get_diagnostics_queue().enqueue(_snap)
         else:
             try:
+                from paper_trading.governance.drift import get_shadow_intelligence as _get_drift
+                from paper_trading.governance.risk import evaluate as _risk_evaluate
                 from paper_trading.ops import diagnostics as diag
                 from paper_trading.ops.tracer import trace_diagnostic_report
                 from paper_trading.shadow.actions import compute_shadow_actions as _compute_shadow
                 from paper_trading.shadow.feedback import record_shadow_feedback as _record_feedback
                 from paper_trading.shadow.learning import compile_shadow_learning as _compile_learning
                 from paper_trading.shadow.memory import store_event as _shadow_store
-                from paper_trading.governance.drift import get_shadow_intelligence as _get_drift
-                from paper_trading.governance.risk import evaluate as _risk_evaluate
 
                 _proba_list = [float(proba[-1, 0]), float(proba[-1, 1]), float(proba[-1, 2])]
                 _sig_div = diag.analyze_signal_divergence(
-                    _proba_list, threshold, decision.signal, decision.confidence,
-                    _shadow_stype, _shadow_conf_pct,
+                    _proba_list,
+                    threshold,
+                    decision.signal,
+                    decision.confidence,
+                    _shadow_stype,
+                    _shadow_conf_pct,
                 )
                 _mod_div = diag.analyze_model_distribution(asset.name, _proba_list)
                 _feat_drivers = diag.analyze_feature_impact(
-                    asset.model, x.iloc[[-1]], asset.features, proba[-1:],
+                    asset.model,
+                    x.iloc[[-1]],
+                    asset.features,
+                    proba[-1:],
                 )
                 _regime = diag.analyze_regime_context(df["close"])
                 _report = diag.build_shadow_report(
@@ -390,7 +397,8 @@ class AssetInferencePipeline:
                 asset._risk_signal = _risk_evaluate(asset.name)
                 asset._shadow_drift_intel = _get_drift(asset.name)
                 asset._shadow_action = _compute_shadow(
-                    asset=asset.name, state=None,
+                    asset=asset.name,
+                    state=None,
                     drift_report=asset._shadow_drift_intel,
                     risk_signal=asset._risk_signal,
                 )
@@ -416,9 +424,13 @@ class AssetInferencePipeline:
         _infer_time = _t_infer - _t_features
         _apply_time = _t_total - _t_infer
         logger.debug(
-            "PIPELINE_BENCHMARK %s: fetch=%.3fs feat=%.3fs infer=%.3fs apply=%.3fs total=%.3fs "
-            "truncate=%s rows=%d",
-            asset.name, _fetch_time, _feat_time, _infer_time, _apply_time, _t_total - _t0,
+            "PIPELINE_BENCHMARK %s: fetch=%.3fs feat=%.3fs infer=%.3fs apply=%.3fs total=%.3fs truncate=%s rows=%d",
+            asset.name,
+            _fetch_time,
+            _feat_time,
+            _infer_time,
+            _apply_time,
+            _t_total - _t0,
             getattr(asset, "_truncate_inference", False),
             len(x),
         )
@@ -447,7 +459,8 @@ class AssetInferencePipeline:
         if len(x) < _MAX_INDICATOR_LOOKBACK + 1:
             logger.warning(
                 "%s: insufficient rows (%d) for truncation validation — disabling",
-                asset.name, len(x),
+                asset.name,
+                len(x),
             )
             asset._truncate_inference = False
             return
@@ -465,13 +478,16 @@ class AssetInferencePipeline:
         if max_diff > 1e-6:
             logger.warning(
                 "%s: inference truncation diff=%.2e (>=1e-6) — disabling truncation",
-                asset.name, max_diff,
+                asset.name,
+                max_diff,
             )
             asset._truncate_inference = False
         else:
             logger.info(
                 "%s: inference truncation validated (diff=%.2e, rows=%d)",
-                asset.name, max_diff, len(x),
+                asset.name,
+                max_diff,
+                len(x),
             )
             asset._truncate_inference = True
 

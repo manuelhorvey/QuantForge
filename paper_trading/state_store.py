@@ -322,9 +322,7 @@ class StateStore:
     def read_trades(self, limit: int = 10) -> list:
         try:
             with self._connect() as conn:
-                rows = conn.execute(
-                    "SELECT * FROM trades ORDER BY exit_date DESC LIMIT ?", (limit,)
-                ).fetchall()
+                rows = conn.execute("SELECT * FROM trades ORDER BY exit_date DESC LIMIT ?", (limit,)).fetchall()
                 return [dict(r) for r in rows]
         except Exception:
             return []
@@ -387,16 +385,18 @@ class StateStore:
                 total_loss = float((-group[ret_col].clip(upper=0)).sum())
                 avg_r = float(group[r_col].mean()) if r_col and r_col in group else 0.0
 
-                by_asset.append({
-                    "asset": asset_name,
-                    "n_trades": n,
-                    "tp_rate": round(tp / n, 4) if n > 0 else 0.0,
-                    "sl_rate": round(sl / n, 4) if n > 0 else 0.0,
-                    "signal_flip_rate": round(flip / n, 4) if n > 0 else 0.0,
-                    "avg_r": round(avg_r, 4),
-                    "win_rate": round(wins / n, 4) if n > 0 else 0.0,
-                    "profit_factor": round(total_profit / total_loss, 4) if total_loss > 0 else None,
-                })
+                by_asset.append(
+                    {
+                        "asset": asset_name,
+                        "n_trades": n,
+                        "tp_rate": round(tp / n, 4) if n > 0 else 0.0,
+                        "sl_rate": round(sl / n, 4) if n > 0 else 0.0,
+                        "signal_flip_rate": round(flip / n, 4) if n > 0 else 0.0,
+                        "avg_r": round(avg_r, 4),
+                        "win_rate": round(wins / n, 4) if n > 0 else 0.0,
+                        "profit_factor": round(total_profit / total_loss, 4) if total_loss > 0 else None,
+                    }
+                )
 
             n_total = len(df)
             tp_total = int((df[reason_col] == "tp").sum())
@@ -510,8 +510,7 @@ class StateStore:
                 where_sql = " AND ".join(where_parts) if where_parts else "1=1"
                 params.extend([limit, offset])
                 rows = conn.execute(
-                    f"SELECT * FROM attribution WHERE {where_sql} "
-                    "ORDER BY exit_date DESC LIMIT ? OFFSET ?",
+                    f"SELECT * FROM attribution WHERE {where_sql} ORDER BY exit_date DESC LIMIT ? OFFSET ?",
                     tuple(params),
                 ).fetchall()
                 return [dict(r) for r in rows]
@@ -559,8 +558,7 @@ class StateStore:
             with self._connect() as conn:
                 if alt_label:
                     rows = conn.execute(
-                        "SELECT * FROM shadow_trades WHERE alt_label = ? "
-                        "ORDER BY exit_date DESC LIMIT ? OFFSET ?",
+                        "SELECT * FROM shadow_trades WHERE alt_label = ? ORDER BY exit_date DESC LIMIT ? OFFSET ?",
                         (alt_label, limit, offset),
                     ).fetchall()
                 else:
@@ -716,9 +714,7 @@ class StateStore:
     def read_equity_history(self) -> list:
         try:
             with self._connect() as conn:
-                rows = conn.execute(
-                    "SELECT * FROM equity_history ORDER BY id ASC"
-                ).fetchall()
+                rows = conn.execute("SELECT * FROM equity_history ORDER BY id ASC").fetchall()
                 return [dict(r) for r in rows]
         except Exception:
             return []

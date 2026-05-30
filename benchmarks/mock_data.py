@@ -98,6 +98,7 @@ class MockDataFixture:
 
     def install(self) -> None:
         import yfinance as yf_mod
+
         import paper_trading.ops.data_fetcher as fetcher_mod
 
         self._originals["yf_download"] = yf_mod.download
@@ -125,6 +126,7 @@ class MockDataFixture:
 
     def uninstall(self) -> None:
         import yfinance as yf_mod
+
         import paper_trading.ops.data_fetcher as fetcher_mod
 
         if "yf_download" in self._originals:
@@ -161,10 +163,7 @@ class MockDataFixture:
         - Single ticker string → flat DataFrame (Open/High/Low/Close/Volume)
         - Multiple tickers with ``group_by='ticker'`` → MultiIndex columns
         """
-        if isinstance(tickers, str):
-            ticker_list = [tickers]
-        else:
-            ticker_list = list(tickers)
+        ticker_list = [tickers] if isinstance(tickers, str) else list(tickers)
 
         if len(ticker_list) == 1 and group_by != "ticker":
             df = self._lookup_ohlcv(ticker_list[0])

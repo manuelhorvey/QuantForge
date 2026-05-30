@@ -93,18 +93,24 @@ def compute_mae_mfe_stats(
 
     mae_col = "exit_mae"
     mfe_col = "exit_mfe"
-    price_col = "entry_price"
+    price_col = "exec_entry_price" if "exec_entry_price" in df.columns else "entry_price"
     reason_col = "exit_exit_reason"
     arch_col = "pred_archetype_at_entry"
     regime_col = "pred_regime_at_entry"
 
     def _norm(grp: pd.DataFrame) -> dict:
-        mae_vals = grp.get(mae_col, 0).abs()
-        mfe_vals = grp.get(mfe_col, 0).abs()
-        prices = grp.get(price_col, 1).replace(0, 1e-9)
+        mae_vals = grp.get(mae_col, pd.Series([0] * len(grp))).abs()
+        mfe_vals = grp.get(mfe_col, pd.Series([0] * len(grp))).abs()
+        raw_prices = grp.get(price_col)
+        if raw_prices is None:
+            raw_prices = pd.Series([1.0] * len(grp))
+        prices = raw_prices.replace(0, 1e-9)
         ratios = mfe_vals / (mae_vals + 1e-9)
-        tp_mask = grp.get(reason_col, "") == "tp"
-        sl_mask = grp.get(reason_col, "") == "sl"
+        raw_reasons = grp.get(reason_col)
+        if raw_reasons is None:
+            raw_reasons = pd.Series([""] * len(grp))
+        tp_mask = raw_reasons == "tp"
+        sl_mask = raw_reasons == "sl"
         return {
             "n": len(grp),
             "avg_mae_pct": float((mae_vals / prices).mean()),

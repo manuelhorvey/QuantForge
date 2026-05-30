@@ -10,6 +10,8 @@ All functions are deterministic and stateless — no engine dependency.
 
 from __future__ import annotations
 
+import pandas as pd
+
 
 def compute_fqi(
     fill_qty_ratio: float,

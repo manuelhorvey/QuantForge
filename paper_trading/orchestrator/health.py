@@ -11,11 +11,8 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from typing import Any
 
 from paper_trading.orchestrator.actor import (
-    ActorHealth,
     AssetActor,
     compute_health_snapshot,
 )
@@ -29,6 +26,7 @@ logger = logging.getLogger("quantforge.orchestrator.health")
 @dataclass
 class HealthSummary:
     """System-wide health summary for one observation point."""
+
     timestamp: float = field(default_factory=time.monotonic)
     n_green: int = 0
     n_degraded: int = 0
@@ -84,9 +82,11 @@ class HealthMonitor:
             dd = (portfolio_value - portfolio_peak) / portfolio_peak
             summary.portfolio_drawdown_pct = round(dd * 100, 2)
             if dd <= -self._max_drawdown:
-                summary.recommendations.append(
-                    f"portfolio_drawdown_{summary.portfolio_drawdown_pct:.1f}%_exceeds_{self._max_drawdown*100:.0f}%_limit"
+                rec = (
+                    f"portfolio_drawdown_{summary.portfolio_drawdown_pct:.1f}%_exceeds_"
+                    f"{self._max_drawdown * 100:.0f}%_limit"
                 )
+                summary.recommendations.append(rec)
 
         # Portfolio vol spike
         if portfolio_vol is not None and baseline_vol is not None and baseline_vol > 0:
@@ -99,9 +99,7 @@ class HealthMonitor:
 
         # Halt ratio exceeded
         if snapshot.halt_ratio >= self._max_halt_ratio:
-            summary.recommendations.append(
-                f"halt_ratio_{snapshot.halt_ratio:.2f}_exceeds_{self._max_halt_ratio:.2f}"
-            )
+            summary.recommendations.append(f"halt_ratio_{snapshot.halt_ratio:.2f}_exceeds_{self._max_halt_ratio:.2f}")
 
         # Rate-limit warnings: same recommendation within 60s
         throttled = []
@@ -116,7 +114,7 @@ class HealthMonitor:
 
         self._history.append(summary)
         if len(self._history) > self._history_window:
-            self._history = self._history[-self._history_window:]
+            self._history = self._history[-self._history_window :]
 
         return summary
 
@@ -209,7 +207,7 @@ class CircuitBreaker:
                 )
 
         # 4. Consecutive loss streak
-        recent = self._daily_pnl_history[-self._loss_lookback:]
+        recent = self._daily_pnl_history[-self._loss_lookback :]
         streak = 0
         for pnl in reversed(recent):
             if pnl < 0:
@@ -228,7 +226,7 @@ class CircuitBreaker:
     def record_daily_pnl(self, pnl: float) -> None:
         self._daily_pnl_history.append(pnl)
         if len(self._daily_pnl_history) > 252 * 3:
-            self._daily_pnl_history = self._daily_pnl_history[-(252 * 3):]
+            self._daily_pnl_history = self._daily_pnl_history[-(252 * 3) :]
 
 
 # ── RecoveryScheduler ─────────────────────────────────────────────────────────
@@ -264,12 +262,14 @@ class RecoveryScheduler:
         return (now - last) >= delay
 
     def record_result(self, asset: str, success: bool, error: str = "") -> None:
-        self._history.append(RecoveryAttempt(
-            asset=asset,
-            attempt_time=time.monotonic(),
-            success=success,
-            error=error,
-        ))
+        self._history.append(
+            RecoveryAttempt(
+                asset=asset,
+                attempt_time=time.monotonic(),
+                success=success,
+                error=error,
+            )
+        )
         if success:
             self._attempts[asset] = 0
         else:

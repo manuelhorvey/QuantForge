@@ -134,11 +134,11 @@ class PurgedWalkForwardFolds(BaseCrossValidator):
         self.gap = gap
         self.min_train = min_train
 
-    def get_n_splits(self, X=None, y=None, groups=None):
+    def get_n_splits(self, x=None, y=None, groups=None):
         return self.n_folds
 
-    def split(self, X, y=None, groups=None):
-        n = len(X)
+    def split(self, x, y=None, groups=None):
+        n = len(x)
         fold_size = n // (self.n_folds + 1)
 
         for i in range(1, self.n_folds + 1):

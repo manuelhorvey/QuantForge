@@ -35,24 +35,25 @@ class DiagnosticsQueue:
         self._consumer.start()
 
     def enqueue(self, snapshot: DiagnosticsSnapshot) -> None:
+        import contextlib
+
         if self._queue.full():
-            try:
+            with contextlib.suppress(queue.Empty):
                 self._queue.get_nowait()
-            except queue.Empty:
-                pass
         self._queue.put_nowait(snapshot)
 
     def _run(self) -> None:
+        import numpy as np
+        import pandas as pd
+
+        from paper_trading.governance.drift import get_shadow_intelligence as _get_drift
+        from paper_trading.governance.risk import evaluate as _risk_evaluate
         from paper_trading.ops import diagnostics as diag
         from paper_trading.ops.tracer import trace_diagnostic_report
-        from paper_trading.shadow.memory import store_event as _shadow_store
-        from paper_trading.governance.risk import evaluate as _risk_evaluate
-        from paper_trading.governance.drift import get_shadow_intelligence as _get_drift
         from paper_trading.shadow.actions import compute_shadow_actions as _compute_shadow
         from paper_trading.shadow.feedback import record_shadow_feedback as _record_feedback
         from paper_trading.shadow.learning import compile_shadow_learning as _compile_learning
-        import numpy as np
-        import pandas as pd
+        from paper_trading.shadow.memory import store_event as _shadow_store
 
         while True:
             snap = self._queue.get()
@@ -70,7 +71,10 @@ class DiagnosticsQueue:
                 x_row = pd.DataFrame([snap.feature_row])
                 proba_arr = np.array([[snap.proba_long, snap.proba_short, snap.proba_neutral]])
                 feat_drivers = diag.analyze_feature_impact(
-                    snap.model, x_row, snap.features, proba_arr,
+                    snap.model,
+                    x_row,
+                    snap.features,
+                    proba_arr,
                 )
                 close_series = pd.Series(snap.close_prices)
                 regime = diag.analyze_regime_context(close_series)

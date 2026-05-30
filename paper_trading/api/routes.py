@@ -487,8 +487,12 @@ def handle_execution_quality(path: str, query: dict) -> str:
             "n": n,
             "eis": eis_by_asset.get(asset_name),
             "fqi": fqi_by_asset.get(asset_name),
-            "avg_entry_slippage_bps": round(float(grp["friction_entry_slippage_bps"].mean()), 2) if has_entry_slip else 0.0,
-            "avg_exit_slippage_bps": round(float(grp["friction_exit_slippage_bps"].mean()), 2) if has_exit_slip else 0.0,
+            "avg_entry_slippage_bps": round(float(grp["friction_entry_slippage_bps"].mean()), 2)
+            if has_entry_slip
+            else 0.0,
+            "avg_exit_slippage_bps": round(float(grp["friction_exit_slippage_bps"].mean()), 2)
+            if has_exit_slip
+            else 0.0,
             "avg_latency_bars": round(float(grp["friction_latency_bars"].mean()), 2) if has_latency else 0.0,
             "gap_rate": round(float(grp["friction_gap_fill"].mean()), 4) if has_gap else 0.0,
             "partial_fill_rate": round(float(grp["friction_partial_fill"].mean()), 4) if has_partial else 0.0,

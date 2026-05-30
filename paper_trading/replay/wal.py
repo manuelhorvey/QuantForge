@@ -28,9 +28,8 @@ import json
 import logging
 import os
 import threading
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
 
 logger = logging.getLogger("quantforge.replay.wal")
 

@@ -82,12 +82,11 @@ def _check_file(filepath: Path) -> list[tuple[int, str]]:
                 blocked = _module_forbidden(alias.name)
                 if blocked:
                     violations.append((node.lineno or 0, f"import {alias.name}"))
-        elif isinstance(node, ast.ImportFrom):
-            if node.module:
-                blocked = _module_forbidden(node.module)
-                if blocked:
-                    names = ", ".join(a.name for a in node.names)
-                    violations.append((node.lineno or 0, f"from {node.module} import {names}"))
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            blocked = _module_forbidden(node.module)
+            if blocked:
+                names = ", ".join(a.name for a in node.names)
+                violations.append((node.lineno or 0, f"from {node.module} import {names}"))
 
     return violations
 

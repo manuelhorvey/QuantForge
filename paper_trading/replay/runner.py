@@ -19,9 +19,7 @@ Invariants:
 
 from __future__ import annotations
 
-import json
 import logging
-from datetime import datetime
 from typing import Any
 
 from paper_trading.replay.wal import WalEvent, WalReader
@@ -242,8 +240,7 @@ class ReplayRunner:
                             )
                 elif sv != cv:
                     raise ReplayMismatchError(
-                        f"Sequence {sequence}, asset {asset_name}, key {key}: "
-                        f"saved={sv} != current={cv}"
+                        f"Sequence {sequence}, asset {asset_name}, key {key}: saved={sv} != current={cv}"
                     )
 
     def _get_base_dir(self) -> str:

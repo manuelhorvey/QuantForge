@@ -62,10 +62,7 @@ class LabelGenerator:
         # Build volatility primitive from contract params (with fallback)
         vol_method = contract.label_params.get("vol_method", "ewm_100")
         atr_period = contract.label_params.get("atr_period", 14)
-        if vol_method == "atr":
-            vol_prim = VolatilityPrimitive.detect(df, period=atr_period)
-        else:
-            vol_prim = None
+        vol_prim = VolatilityPrimitive.detect(df, period=atr_period) if vol_method == "atr" else None
 
         # New Labels (from current contract params)
         logger.info(f"Computing NEW labels for {contract.name} (v:{v_hash})...")
