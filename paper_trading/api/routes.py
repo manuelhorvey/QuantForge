@@ -471,6 +471,15 @@ def handle_execution_quality(path: str, query: dict) -> str:
     eis_by_asset = compute_eis_from_df(df)
     fqi_by_asset = compute_fqi_from_df(df)
 
+    _col = "friction_entry_slippage_bps"
+    has_entry_slip = _col in df.columns
+    _col = "friction_exit_slippage_bps"
+    has_exit_slip = _col in df.columns
+    has_latency = "friction_latency_bars" in df.columns
+    has_gap = "friction_gap_fill" in df.columns
+    has_partial = "friction_partial_fill" in df.columns
+    has_fill_ratio = "friction_fill_qty_ratio" in df.columns
+
     by_asset = {}
     for asset_name, grp in df.groupby("asset"):
         n = len(grp)
@@ -478,12 +487,12 @@ def handle_execution_quality(path: str, query: dict) -> str:
             "n": n,
             "eis": eis_by_asset.get(asset_name),
             "fqi": fqi_by_asset.get(asset_name),
-            "avg_entry_slippage_bps": round(float(grp.get("friction_entry_slippage_bps", 0).mean()), 2),
-            "avg_exit_slippage_bps": round(float(grp.get("friction_exit_slippage_bps", 0).mean()), 2),
-            "avg_latency_bars": round(float(grp.get("friction_latency_bars", 0).mean()), 2),
-            "gap_rate": round(float(grp.get("friction_gap_fill", False).mean()), 4),
-            "partial_fill_rate": round(float(grp.get("friction_partial_fill", False).mean()), 4),
-            "avg_fill_ratio": round(float(grp.get("friction_fill_qty_ratio", 1.0).mean()), 4),
+            "avg_entry_slippage_bps": round(float(grp["friction_entry_slippage_bps"].mean()), 2) if has_entry_slip else 0.0,
+            "avg_exit_slippage_bps": round(float(grp["friction_exit_slippage_bps"].mean()), 2) if has_exit_slip else 0.0,
+            "avg_latency_bars": round(float(grp["friction_latency_bars"].mean()), 2) if has_latency else 0.0,
+            "gap_rate": round(float(grp["friction_gap_fill"].mean()), 4) if has_gap else 0.0,
+            "partial_fill_rate": round(float(grp["friction_partial_fill"].mean()), 4) if has_partial else 0.0,
+            "avg_fill_ratio": round(float(grp["friction_fill_qty_ratio"].mean()), 4) if has_fill_ratio else 1.0,
         }
 
     data = json.dumps({"by_asset": by_asset}, indent=2, default=str)

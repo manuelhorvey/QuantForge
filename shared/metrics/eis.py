@@ -89,8 +89,9 @@ def compute_eis_from_df(df: pd.DataFrame, min_trades: int = 3) -> dict[str, floa
     partial_col = "friction_partial_fill"
     latency_col = "friction_latency_bars"
 
-    # Infer column presence
-    if slippage_col not in df.columns:
+    required = {slippage_col, fill_col, gap_col, partial_col, latency_col}
+    missing = required - set(df.columns)
+    if missing:
         return {}
 
     results = {}
