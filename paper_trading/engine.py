@@ -290,22 +290,6 @@ class PaperTradingEngine:
             except Exception as e:
                 logger.error("%s: training FAILED - %s", name, e)
 
-    def _compute_mtm_total(self) -> float:
-        if not hasattr(self, "_cycle_count"):
-            self._cycle_count = 0
-            self._mtm_cache_value = None
-            self._mtm_cache_cycle = -1
-        elif not hasattr(self, "_mtm_cache_value"):
-            self._mtm_cache_value = None
-            self._mtm_cache_cycle = -1
-        if self._mtm_cache_value is not None and self._mtm_cache_cycle == self._cycle_count:
-            return self._mtm_cache_value
-        mtm = sum(a.mtm_value for a in self.assets.values())
-        if self.satellite is not None:
-            mtm += self.satellite.current_value
-        self._mtm_cache_value = mtm
-        self._mtm_cache_cycle = self._cycle_count
-
     def run_once(self):
         _t0 = time.perf_counter()
         self._cycle_count += 1

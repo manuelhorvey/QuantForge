@@ -49,6 +49,14 @@ class TestApplyTripleBarrier:
         target = pd.Series(np.full(len(sample_price_data), 0.02), index=sample_price_data.index)
         result = apply_triple_barrier(sample_price_data, pt_sl=[1, 1], target=target, vertical_barrier=5)
         assert "label" in result.columns
+        assert result.attrs["vol_method"] == "explicit"
+
+    def test_vol_primitive(self, sample_price_data):
+        from shared.volatility import VolatilityPrimitive
+        vol_prim = VolatilityPrimitive(period=14, mode="ohlc")
+        result = apply_triple_barrier(sample_price_data, pt_sl=[1, 1], vol_primitive=vol_prim, vertical_barrier=5)
+        assert "label" in result.columns
+        assert result.attrs["vol_method"] == "atr_ohlc"
 
     def test_main_executes_without_error(self):
         import labels.triple_barrier as tb

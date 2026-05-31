@@ -111,9 +111,8 @@ class Handler:
                 return
 
         # SPA routing fallback: serve index.html for extension-less routes (e.g. /dashboard)
-        if not os.path.splitext(path)[1]:
-            if self._serve_index():
-                return
+        if not os.path.splitext(path)[1] and self._serve_index():
+            return
 
         self.send_response(404)
         self.end_headers()
