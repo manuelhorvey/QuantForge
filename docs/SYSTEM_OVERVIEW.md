@@ -1,209 +1,504 @@
 # QuantForge — System Overview
 
-Architecture, component responsibilities, and data flow for the QuantForge cross-sectional factor ranking and paper trading system.
+Architecture, component responsibilities, execution lifecycle, and persistence model for the QuantForge cross-sectional research and paper trading platform.
 
-## Architecture
+---
 
+# System Philosophy
+
+QuantForge is designed around a simple operational principle:
+
+> robustness matters more than alpha complexity.
+
+The system prioritizes:
+
+* deterministic execution,
+* replay-oriented persistence,
+* walk-forward validation,
+* train/serve symmetry,
+* per-asset isolation,
+* governance layering,
+* and operational observability
+
+over maximizing in-sample returns.
+
+The repository intentionally treats trading infrastructure as a distributed state-management problem rather than purely a signal-generation problem.
+
+---
+
+# High-Level Architecture
+
+```text id="z2l0cm"
+Research Universe
+        ↓
+Walk-Forward Validation
+        ↓
+Asset Selection
+        ↓
+Per-Asset Training
+        ↓
+Live Inference
+        ↓
+Governance Filters
+        ↓
+Execution & Positioning
+        ↓
+Persistence & Replay
+        ↓
+Monitoring & Attribution
 ```
+
+---
+
+# System Architecture
+
+```text id="0qfg98"
 ┌─────────────────────────────────────────────────────────────────────┐
-│                       SCREENING (offline)                           │
-│  30 tickers → walk_forward_backtest.py → score_tickers.py          │
-│  → generate_promotion_report.py → PROMOTION_REPORT.md              │
-│  Output: promotion_report.json (GREEN/YELLOW/RED), fold ICs        │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    TRAINING (per promoted asset)                     │
-│  fetch_asset_data(ticker) → build_alpha_features()                  │
-│  → triple_barrier_labels(pt_sl) → binary reduction (drop HOLD)     │
-│  → XGBoost binary:logistic (300 trees, depth=2, lr=0.02)          │
-│  → save .json model → persist PSI baseline                         │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    LIVE INFERENCE (every 300s)                       │
-│  Parallel asset fetch (ThreadPoolExecutor, max_workers=8)           │
+│                       RESEARCH / SCREENING                          │
 │                                                                     │
-│  ┌─────────────┐    ┌──────────────────┐    ┌────────────────┐     │
-│  │ fetch_live  │───▶│ build_alpha_     │───▶│ XGBoost        │     │
-│  │ 500d OHLCV  │    │ features()       │    │ binary predict │     │
-│  │ (truncated  │    └──────────────────┘    └────────────────┘     │
-│  │  to 250d    │                              │    │               │
-│  │  for XGB)   │                              │    ▼               │
-│  └─────────────┘    ┌──────────────────┐    ┌────────────────┐     │
-│                     │ AsyncDiagnostics │    │ Archetype      │     │
-│                     │ Queue (daemon)   │    │ features       │     │
-│                     │ → 8 heavy imports│    │ (OHLCV)        │     │
-│                     │   off hot path   │    └────────────────┘     │
-│                     └──────────────────┘         │                  │
-│                                                   ▼                 │
-│  ┌──────────────┐    ┌──────────────┐    ┌────────────────┐        │
-│  │ Entry        │───▶│ Execution    │───▶│ Position       │        │
-│  │ Optimizer    │    │ Policy Layer │    │ Manager        │        │
-│  └──────────────┘    └──────────────┘    └────────────────┘        │
+│  30+ tickers                                                        │
+│      ↓                                                              │
+│  walk_forward_backtest.py                                           │
+│      ↓                                                              │
+│  score_tickers.py                                                   │
+│      ↓                                                              │
+│  generate_promotion_report.py                                       │
+│      ↓                                                              │
+│  promotion_report.json                                              │
+│                                                                     │
+│  Output:                                                            │
+│  - fold ICs                                                         │
+│  - directional consistency                                          │
+│  - GREEN / YELLOW / RED states                                      │
 └─────────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    STATE PERSISTENCE                                 │
-│  SQLite state store (WAL mode, O(1) append):                        │
-│  trades, attribution, shadow_trades, confidence_buckets,            │
-│  equity_history → trade_outcomes.json (cached aggregates)          │
-│  state.json (EngineSnapshot) → dashboard                            │
+│                    MODEL TRAINING                                   │
+│                                                                     │
+│  fetch_asset_data()                                                 │
+│      ↓                                                              │
+│  build_alpha_features()                                             │
+│      ↓                                                              │
+│  triple_barrier_labels()                                            │
+│      ↓                                                              │
+│  binary reduction                                                   │
+│      ↓                                                              │
+│  XGBoost binary:logistic                                            │
+│      ↓                                                              │
+│  model persistence + PSI baseline                                   │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    LIVE INFERENCE                                   │
+│                                                                     │
+│  Parallel asset execution                                           │
+│  ThreadPoolExecutor(max_workers=8)                                  │
+│                                                                     │
+│  fetch_live()                                                       │
+│      ↓                                                              │
+│  build_alpha_features()                                             │
+│      ↓                                                              │
+│  XGBoost inference                                                  │
+│      ↓                                                              │
+│  archetype classification                                           │
+│      ↓                                                              │
+│  EntryOptimizer                                                     │
+│      ↓                                                              │
+│  ExecutionPolicyLayer                                               │
+│      ↓                                                              │
+│  PositionManager                                                    │
+│                                                                     │
+│  Async diagnostics run off-thread                                   │
+│  via daemon consumer queue                                          │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    STATE PERSISTENCE                                │
+│                                                                     │
+│  SQLite WAL-mode persistence                                        │
+│                                                                     │
+│  - trades                                                           │
+│  - attribution                                                      │
+│  - shadow_trades                                                    │
+│  - confidence_buckets                                               │
+│  - equity_history                                                   │
+│                                                                     │
+│  Replay-oriented append semantics                                   │
+│  with deterministic reconstruction support                          │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-## Component Responsibilities
+---
 
-### Feature Engineering (`features/`)
+# Core Architectural Properties
 
-| Module | Key Exports | Purpose |
-|---|---|---|
-| `alpha_features.py` | `build_alpha_features()` | Alpha feature factory: vol-adjusted carry, multi-horizon momentum (21/63/126/252d), z-score reversion (20d), vol regime ratio, day-of-week signal + cross-asset (DXY/VIX/SPX/WTI momentum) |
-| `data_fetch.py` | `fetch_asset_data()`, `fetch_asset_ohlcv()`, `fetch_yf_series()`, `_fetch_macro_batch()` | YFinance ingestion: asset close + macro (10y), full OHLCV (10y), TZ-naive date normalization. Macro tickers batched into single `yf.download` call. TTL cache (300s) for macro data. Removed 0.5s hard sleep. |
-| `labels.py` | `triple_barrier_labels()`, `PurgedWalkForwardFolds` | Vol-scaled triple-barrier labeling with purged walk-forward CV |
-| `regime_features.py` | `generate_regime_features()`, `compute_hurst()`, `compute_kaufman_er()` | Regime detection: Hurst exponent, KER, ADX, vol z-score, compression ratio, session vol profile |
-| `archetypes.py` | `ArchetypeClassifier`, `SetupArchetype` | 5 pure-feature market structure archetypes (MOMENTUM_IGNITION, MEAN_REVERSION, BREAKOUT_TEST, VOL_EXPANSION, UNKNOWN) |
-| `macro_narrative.py` | `MacroNarrativeFeatures`, `narrative_governance_scalars()` | Weekly LLM-driven macro context (geopol risk, USD bias, regime) |
-| `liquidity_regime.py` | `compute_liquidity_features()`, `classify_liquidity_regime()` | Volume z-score + Amihud illiquidity → NORMAL/THIN/STRESSED |
-| `contract.py` | `FeatureContract`, `validate_no_cross_asset_leakage()` | Immutable feature schema contract (used for validation only) |
-| `fxstreet_fetcher.py` | `run_weekly_narrative_pipeline()` | FXStreet article → LLM → structured narrative extraction |
+| Property                    | Description                                                    |
+| --------------------------- | -------------------------------------------------------------- |
+| Walk-forward validated      | Assets must pass expanding-window validation before deployment |
+| Per-asset isolation         | Every asset runs independently with its own model lifecycle    |
+| Replay-oriented persistence | Persistent state supports deterministic reconstruction         |
+| Immutable execution chain   | PolicyDecision → FillResult → AttributionRecord                |
+| Governance-first execution  | Exposure controlled by layered governance                      |
+| Failure isolation           | Asset failures cannot halt the global engine                   |
+| Single entry authority      | All entries route through `_can_enter()`                       |
+| Train/serve symmetry        | Shared feature generation between training and inference       |
+| Parallel orchestration      | Assets execute concurrently through isolated actors            |
 
-### Screening & Promotion (`scripts/`)
+---
 
-| Script | Purpose | Output |
-|---|---|---|
-| `walk_forward_backtest.py --tickers` | Run 5-fold expanding window backtest per ticker | Per-asset fold ICs, signal parquet, summary CSV |
-| `score_tickers.py` | Compute composite score (IC + hit rate + consistency + bidirectionality); classify GREEN/YELLOW/RED | `promotion_report.json`, `promotion_report.csv` |
-| `generate_promotion_report.py` | Generate markdown report with YAML config block | `PROMOTION_REPORT.md` |
+# Execution Lifecycle
 
-### Paper Trading Engine (`paper_trading/`)
+## 1. Research & Asset Selection
 
-| Component | File | Role |
-|---|---|---|
-| `PaperTradingEngine` | `engine.py` | Top-level orchestrator: manages 15 AssetEngine instances + BTC satellite; `run_once()` cycle every 300s |
-| `AssetEngine` | `asset_engine.py` | Per-asset lifecycle: inference, position management, governance, halt conditions |
-| `AssetInferencePipeline` | `inference/pipeline.py` | Live inference: OHLCV fetch → alpha features → XGBoost → archetype → decision. Inference truncation (500d → 250d) with behavioral validation. Model hot-swap re-validation on object identity change. |
-| `AssetTrainingPipeline` | `inference/training.py` | On-demand training: yfinance → alpha features → binary XGBoost → model save |
-| `DiagnosticsSnapshot` | `inference/async_diagnostics.py` | Deferred diagnostics: captures model/feature snapshots on hot path, processes off-thread via daemon consumer queue. 8 heavy imports removed from inference hot path. |
-| `EnsembleSignal` | `inference/ensemble.py` | Optional regime ensemble blend (disabled by default) |
-| `RegimeConditionalModel` | `inference/regime_model.py` | Optional regime-conditional XGBoost (disabled by default) |
-| `PortfolioBuilder` | `portfolio_builder.py` | Builds asset registry from `configs/paper_trading.yaml` |
-| `StateStore` | `state_store.py` | SQLite-backed persistent state (WAL mode). 5 tables: trades, attribution, shadow_trades, confidence_buckets, equity_history. O(1) append, periodic WAL checkpoint. Falls back to legacy JSON files. |
-| `EntryOptimizer` | `entry/optimizer.py` | Evaluate signal + archetype + structure → ENTER/DEFER/SKIP |
-| `ExecutionPolicyLayer` | `entry/policy.py` | Unified policy routing with POLICY_MAP dispatch |
-| `PositionManager` | `position/manager.py` | Position lifecycle (open/close/SL/TP/scale-out) |
-| `DynamicSLTPEngine` | `position/dynamic_sltp.py` | Vol-adaptive SL/TP via ATR |
-| `PaperBroker` | `execution/paper_broker.py` | Simulated fills, capital tracking, execution configs |
-| `ExecutionBridge` | `execution/bridge.py` | Fill price adjustment (slippage, impact) |
-| `ShadowSLTPEngine` | `shadow/engine.py` | Counterfactual SL/TP replay on live tape |
-| `AttributionCollector` | `attribution/collector.py` | Observe-only 4-domain trade attribution |
-| `HighVolSatellite` | `satellite/engine.py` | BTC satellite with macro gate |
-| `EngineOrchestrator` | `orchestrator/engine.py` | Orchestrates parallel asset execution (ThreadPoolExecutor, max_workers=8). Phases: REFRESH+Signal (parallel), VALIDITY (sequential), PORTFOLIO health, PERSIST. |
-| `AssetActor` | `orchestrator/actor.py` | Actor wrapper around each asset. Tracks health state (HEALTHY/DEGRADED/HALTED), cycle timing, exposure. |
-| `HealthMonitor` | `orchestrator/health.py` | Portfolio-level health computation: drawdown, vol spike, signal drought, halt ratio. Emergency circuit breaker at 50% halt ratio. |
+The offline research stage evaluates a universe of 30+ assets using expanding-window walk-forward validation.
 
-### Governance (`paper_trading/governance/`, `monitoring/`)
+### Validation Structure
 
-| Component | File | Role |
-|---|---|---|
-| `ValidityStateMachine` | `monitoring/validity_state_machine.py` | GREEN/YELLOW/RED with hysteresis + inertia |
-| `FeatureImportanceTracker` | `monitoring/importance_tracker.py` | Jaccard + Spearman stability per retrain |
-| `PSIMonitor` | `monitoring/psi_monitor.py` | Fixed-width bin distribution shift detection |
-| `AssetGovernance` | `governance/asset.py` | Narrative + liquidity governance state |
-| `RegimeClassifier` | `governance/regime.py` | KER+ADX+vol regime detection |
+* 3-year rolling training window
+* 1-year forward evaluation
+* 5-fold walk-forward process
+* per-asset PT/SL calibration
+* IC + hit-rate scoring
+* directional consistency weighting
+* bidirectionality evaluation
 
-### Web Dashboard (`paper_trading/`)
+Assets are classified into:
 
-| Component | File | Role |
-|---|---|---|
-| HTTP Server | `serve.py` | Zero-dependency stdlib REST API |
-| API Routes | `api/routes.py`, `api/handler.py` | Route registry, request handling |
-| Dashboard UI | `dashboard/` | React + Vite + Tailwind + react-query (70+ components) |
+* GREEN
+* YELLOW
+* RED
 
-## Data Flow
+Only promoted assets enter the live portfolio.
 
-### 1. Screening Pipeline
+---
 
-```mermaid
-graph LR
-    A[30 tickers] --> B[walk_forward_backtest.py]
-    B --> C[Per-asset fold ICs + summaries]
-    C --> D[score_tickers.py]
-    D --> E[promotion_report.json]
-    E --> F[generate_promotion_report.py]
-    F --> G[PROMOTION_REPORT.md + YAML]
+## 2. Model Training
+
+Each promoted asset trains an independent binary XGBoost model.
+
+### Training Pipeline
+
+```text id="bh0b5h"
+fetch_asset_data()
+        ↓
+build_alpha_features()
+        ↓
+triple_barrier_labels()
+        ↓
+drop HOLD states
+        ↓
+binary reduction {0,1}
+        ↓
+XGBoost binary:logistic
+        ↓
+persist model + PSI baseline
 ```
 
-### 2. Live Inference Pipeline
+### Model Configuration
 
-```mermaid
-graph TD
-    A[yfinance 5min] --> B[fetch_live: 500d OHLCV]
-    B --> C[TZ-normalize to UTC date]
-    C --> D[refresh_price: realtime or 5d fallback]
-    D --> E[ffill close column]
-    E --> F[fetch_asset_data: 10y close + macro]
-    F --> F1[macro batched via yf.download<br>TTL cache 300s]
-    F1 --> G[build_alpha_features]
-    G --> H[fetch_asset_ohlcv: 10y OHLCV]
-    H --> I[archetype features: ema_spread, ADX, RSI, BB]
-    I --> J[XGBoost predict binary]
-    J --> K[3-col proba expansion]
-    K --> L[FixedThresholdStrategy(0.45)]
-    L --> M[archetype classification]
-    M --> N[TradeDecision]
-    N --> O[inference truncation: 500d→250d<br>model hot-swap validation]
-    O --> P[_apply_decision]
-    P --> Q[EntryOptimizer → Policy → Position]
-    R[DiagnosticsSnapshot<br>async daemon queue<br>8 heavy imports off hotpath] -.-> J
+| Parameter     | Value             |
+| ------------- | ----------------- |
+| Objective     | `binary:logistic` |
+| Trees         | 300               |
+| Max Depth     | 2                 |
+| Learning Rate | 0.02              |
+
+No shared multi-asset model exists.
+
+This intentionally isolates:
+
+* feature drift,
+* calibration instability,
+* regime degradation,
+* and inference failures
+
+to individual assets.
+
+---
+
+# Feature Engineering
+
+## Alpha Features
+
+Implemented in `features/alpha_features.py`.
+
+### Feature Families
+
+* Volatility-adjusted carry
+* Multi-horizon momentum:
+
+  * 21d
+  * 63d
+  * 126d
+  * 252d
+* Z-score mean reversion
+* Volatility regime ratio
+* Day-of-week effects
+* Cross-asset macro momentum:
+
+  * DXY
+  * VIX
+  * SPX
+  * WTI
+
+Macro data is batch-fetched through a single `yf.download()` call with TTL caching.
+
+---
+
+## Market Structure Features
+
+Inference-only archetype features derived from OHLCV:
+
+* EMA spread
+* ADX(14)
+* RSI(14)
+* Bollinger z-score
+
+Used for:
+
+* execution conditioning,
+* trade timing,
+* and regime-aware management.
+
+---
+
+# Live Inference Pipeline
+
+The live engine executes every 300 seconds.
+
+## Runtime Pipeline
+
+```text id="2u8l08"
+1. Fetch 500d OHLCV
+2. Normalize timestamps
+3. Refresh latest price
+4. Fetch macro data
+5. Build alpha features
+6. Fetch full OHLCV
+7. Compute archetype features
+8. Validate inference truncation
+9. Validate model hot-swap integrity
+10. Run XGBoost inference
+11. Expand binary probabilities
+12. Apply threshold strategy
+13. Generate TradeDecision
+14. Route through governance
+15. Execute position lifecycle
 ```
 
-### 3. Training Pipeline
+---
 
-```mermaid
-graph LR
-    A[fetch_asset_data: 10y] --> B[build_alpha_features]
-    B --> C[triple_barrier_labels(pt_sl)]
-    C --> D[drop HOLD → binary {0,1}]
-    D --> E[XGBoost binary:logistic]
-    E --> F[save .json model]
-    E --> G[persist PSI baseline]
-    E --> H[train meta-label model]
-    E --> I[train regime model if configured]
+# Runtime Optimizations
+
+QuantForge contains multiple optimizations designed to reduce hot-path latency and runtime instability.
+
+## Optimizations
+
+* Vectorized triple-barrier labeling
+* Broadcast-based inference operations
+* Parallel asset execution
+* Async diagnostics off hot path
+* TTL macro cache
+* SQLite WAL persistence
+* Inference truncation validation
+* Model object-identity hot-swap checks
+* Heavy-import isolation via daemon queue
+
+---
+
+# Parallel Orchestration
+
+Live assets execute through isolated actors managed by `EngineOrchestrator`.
+
+## Orchestration Phases
+
+```text id="8x8xv4"
+REFRESH + SIGNAL (parallel)
+            ↓
+VALIDITY CHECKS
+            ↓
+PORTFOLIO HEALTH
+            ↓
+STATE PERSISTENCE
 ```
 
-## Data Persistence
+Each `AssetActor` tracks:
 
-| Store | Format | Purpose |
-|---|---|---|
-| `state.json` | JSON | EngineSnapshot serialization → dashboard |
-| `state.db` (SQLite) | SQLite (WAL mode) | 5 persistent tables: trades, attribution, shadow_trades, confidence_buckets, equity_history |
-| `trade_outcomes.json` | JSON | Cached aggregate outcomes (rebuilt from SQLite on demand) |
+* health state,
+* execution timing,
+* exposure,
+* and degradation status.
 
-## Configuration
+---
 
-`configs/paper_trading.yaml` defines:
-- Capital, position size, rebalance frequency
-- 15 assets with ticker, allocation, sl_mult, tp_mult
-- Ensemble config (disabled by default)
-- Meta-labeling config
-- Narrative governance config
-- Liquidity governance config
-- Per-asset regime geometry (GREEN/YELLOW/RED sl/tp multipliers)
-- Engine orchestrator (parallel asset fetch, max_workers)
+# Governance Architecture
 
-## Key Entry Points
+QuantForge uses independently configurable governance layers with worst-wins aggregation.
 
-| Action | Command |
-|---|---|
-| Run walk-forward screening | `python scripts/walk_forward_backtest.py --tickers BTC-USD,EURGBP=X,...` |
-| Score screened tickers | `python scripts/score_tickers.py` |
+## Governance Layers
+
+| Layer                  | Scope      | Effect                    |
+| ---------------------- | ---------- | ------------------------- |
+| Exposure state machine | Per asset  | Exposure scaling          |
+| Feature stability      | Per asset  | Validity penalties        |
+| Meta-labeling          | Per signal | Position scalar           |
+| Macro regime overlay   | Global     | Exposure + SL adjustments |
+| Liquidity regime       | Per asset  | Throttling + halts        |
+| PSI drift monitor      | Per asset  | Penalties + halts         |
+| Portfolio drawdown     | Global     | Portfolio throttling      |
+
+---
+
+# Persistence Model
+
+Persistent state is stored in SQLite WAL mode.
+
+## Persistent Tables
+
+| Table                | Purpose               |
+| -------------------- | --------------------- |
+| `trades`             | Trade records         |
+| `attribution`        | Attribution outputs   |
+| `shadow_trades`      | Counterfactual replay |
+| `confidence_buckets` | Confidence analytics  |
+| `equity_history`     | Equity curve history  |
+
+## Persistence Properties
+
+* append-oriented writes
+* replay-oriented semantics
+* deterministic recovery support
+* periodic WAL checkpointing
+* backward-compatible JSON snapshots
+
+---
+
+# Failure Isolation
+
+Each asset executes independently.
+
+Failures in:
+
+* data ingestion,
+* inference,
+* governance,
+* diagnostics,
+* or execution
+
+cannot halt the global engine.
+
+Emergency portfolio circuit breakers activate when halt ratios exceed configured thresholds.
+
+---
+
+# Component Responsibilities
+
+## Feature Engineering (`features/`)
+
+| Module                | Purpose                             |
+| --------------------- | ----------------------------------- |
+| `alpha_features.py`   | Alpha feature generation            |
+| `data_fetch.py`       | YFinance ingestion + macro batching |
+| `labels.py`           | Triple-barrier labeling             |
+| `regime_features.py`  | Regime feature computation          |
+| `archetypes.py`       | Market structure classification     |
+| `macro_narrative.py`  | Weekly macro narrative overlays     |
+| `liquidity_regime.py` | Liquidity classification            |
+| `contract.py`         | Immutable feature contracts         |
+| `fxstreet_fetcher.py` | FXStreet → LLM narrative extraction |
+
+---
+
+## Paper Trading Engine (`paper_trading/`)
+
+| Component                | Role                        |
+| ------------------------ | --------------------------- |
+| `PaperTradingEngine`     | Top-level orchestrator      |
+| `AssetEngine`            | Per-asset lifecycle         |
+| `AssetInferencePipeline` | Live inference              |
+| `AssetTrainingPipeline`  | Training pipeline           |
+| `DiagnosticsSnapshot`    | Deferred diagnostics        |
+| `PortfolioBuilder`       | Asset registry construction |
+| `StateStore`             | SQLite persistence          |
+| `EntryOptimizer`         | Entry conditioning          |
+| `ExecutionPolicyLayer`   | Unified execution routing   |
+| `PositionManager`        | Position lifecycle          |
+| `PaperBroker`            | Simulated fills             |
+| `ExecutionBridge`        | Slippage + impact           |
+| `ShadowSLTPEngine`       | Counterfactual replay       |
+| `AttributionCollector`   | Attribution pipeline        |
+| `HighVolSatellite`       | BTC opportunistic sleeve    |
+| `EngineOrchestrator`     | Parallel orchestration      |
+| `AssetActor`             | Asset execution wrapper     |
+| `HealthMonitor`          | Portfolio-level health      |
+
+---
+
+# Configuration
+
+`configs/paper_trading.yaml` controls:
+
+* capital allocation,
+* rebalance frequency,
+* per-asset SL/TP geometry,
+* governance layers,
+* orchestrator settings,
+* ensemble configuration,
+* narrative overlays,
+* and liquidity controls.
+
+---
+
+# Data Persistence
+
+| Store                 | Format     | Purpose                    |
+| --------------------- | ---------- | -------------------------- |
+| `state.json`          | JSON       | Dashboard snapshot         |
+| `state.db`            | SQLite WAL | Persistent execution state |
+| `trade_outcomes.json` | JSON       | Cached aggregate analytics |
+
+---
+
+# Key Entry Points
+
+| Action                    | Command                                       |
+| ------------------------- | --------------------------------------------- |
+| Walk-forward screening    | `python scripts/walk_forward_backtest.py`     |
+| Score tickers             | `python scripts/score_tickers.py`             |
 | Generate promotion report | `python scripts/generate_promotion_report.py` |
-| Start paper trading + dashboard | `./monitor_all` |
-| Force-retrain all assets | `python scripts/train_all_assets.py` |
-| Run microbenchmark | `python benchmarks/microbenchmark.py --state-dir /tmp/bench-state` |
-| Run tests | `pytest tests/ -q --tb=short` |
-| Dashboard URL | `http://127.0.0.1:5000` |
+| Start engine + dashboard  | `./monitor_all`                               |
+| Retrain all assets        | `python scripts/train_all_assets.py`          |
+| Run microbenchmark        | `python benchmarks/microbenchmark.py`         |
+| Run tests                 | `pytest tests/ -q --tb=short`                 |
+
+Dashboard URL:
+
+```text id="q8n6hf"
+http://127.0.0.1:5000
+```
+
+---
+
+# Known Constraints
+
+* Paper trading only
+* Yahoo Finance dependency
+* No live brokerage integration
+* Ensemble disabled by default
+* Some FX crosses may produce incomplete first-cycle bars
+* Macro data sourced entirely from Yahoo Finance
+
+---
+
+# Future Work
+
+* Deterministic full-day replay reconstruction
+* Event-sequence verification tooling
+* Distributed multi-engine orchestration
+* Extended execution quality analytics
+* Portfolio-level regime optimization
+* Broker abstraction layer
+* Advanced replay visualization tooling
