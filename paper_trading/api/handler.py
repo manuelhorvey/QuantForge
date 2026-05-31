@@ -48,26 +48,32 @@ class Handler:
         self._send_body = False
         self.do_GET()
 
+    def _serve_index(self) -> bool:
+        idx_path = get_index_html()
+        try:
+            with open(idx_path, "rb") as f:
+                data = f.read()
+            ext = os.path.splitext(idx_path)[1]
+            ct = MIME_TYPES.get(ext, "text/html; charset=utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", ct)
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(data)
+            return True
+        except (FileNotFoundError, PermissionError):
+            return False
+
     def do_GET(self):  # noqa: N802
         qs = self.path.split("?", 1)
         path = qs[0]
         query = self._parse_query(qs[1] if len(qs) > 1 else "")
 
         if path in ("/", "/index.html"):
-            idx_path = get_index_html()
-            try:
-                with open(idx_path, "rb") as f:
-                    data = f.read()
-                ext = os.path.splitext(idx_path)[1]
-                ct = MIME_TYPES.get(ext, "text/html; charset=utf-8")
-                self.send_response(200)
-                self.send_header("Content-Type", ct)
-                self.send_header("Cache-Control", "no-cache")
-                self.end_headers()
-                self.wfile.write(data)
-            except FileNotFoundError:
-                self.send_response(404)
-                self.end_headers()
+            if self._serve_index():
+                return
+            self.send_response(404)
+            self.end_headers()
             return
 
         if path.startswith("/assets/") or path.startswith("/favicon.ico"):
@@ -102,6 +108,11 @@ class Handler:
                     self._send_text(result)
                 else:
                     self._send_json(result)
+                return
+
+        # SPA routing fallback: serve index.html for extension-less routes (e.g. /dashboard)
+        if not os.path.splitext(path)[1]:
+            if self._serve_index():
                 return
 
         self.send_response(404)
