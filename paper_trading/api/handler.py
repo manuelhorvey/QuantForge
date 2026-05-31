@@ -1,8 +1,9 @@
 import gzip
 import json
 import os
+from urllib.parse import parse_qsl, urlsplit
 
-from paper_trading.api.common import MIME_TYPES, cache_get, get_index_html, try_serve_file
+from paper_trading.api.common import MIME_TYPES, cache_get, get_index_html, route_cache_key, try_serve_file
 from paper_trading.api.routes import GET_ROUTES, GET_ROUTES_PREFIX, POST_ROUTES
 
 
@@ -36,13 +37,7 @@ class Handler:
 
     @staticmethod
     def _parse_query(query_string: str) -> dict[str, str]:
-        params = {}
-        if query_string:
-            for part in query_string.split("&"):
-                if "=" in part:
-                    k, v = part.split("=", 1)
-                    params[k] = v
-        return params
+        return dict(parse_qsl(query_string, keep_blank_values=True))
 
     def do_HEAD(self):  # noqa: N802
         self._send_body = False
@@ -65,9 +60,9 @@ class Handler:
             return False
 
     def do_GET(self):  # noqa: N802
-        qs = self.path.split("?", 1)
-        path = qs[0]
-        query = self._parse_query(qs[1] if len(qs) > 1 else "")
+        parsed = urlsplit(self.path)
+        path = parsed.path
+        query = self._parse_query(parsed.query)
 
         if path in ("/", "/index.html"):
             if self._serve_index():
@@ -87,7 +82,7 @@ class Handler:
             cached = None
             fn, is_text = GET_ROUTES[path]
             if not is_text:
-                cached = cache_get(self.path)
+                cached = cache_get(route_cache_key(path, query))
             if cached is not None:
                 self._send_json(cached)
                 return

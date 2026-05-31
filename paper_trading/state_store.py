@@ -60,6 +60,378 @@ def sanitize(obj):
     return obj
 
 
+class _TradeStore:
+    def __init__(self, connect, trade_outcomes_path: str):
+        self._connect = connect
+        self._trade_outcomes_path = trade_outcomes_path
+        self._trade_outcomes_cache = None
+        self._trade_outcomes_cache_ts = 0.0
+
+    def append(self, trade: dict) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO trades (
+                    asset, side, entry, exit, entry_date, exit_date,
+                    return, pnl, total_pnl, reason, realized_r, bars,
+                    conf_at_entry, archetype_at_entry, attribution_trade_id,
+                    mae, mfe, mae_per_bar, mfe_per_bar,
+                    entry_slippage_bps, exit_slippage_bps, fill_qty_ratio,
+                    gap_fill, partial_fill, latency_bars,
+                    pred_confidence, pred_archetype, pred_regime
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    trade.get("asset"),
+                    trade.get("side"),
+                    trade.get("entry"),
+                    trade.get("exit"),
+                    str(trade.get("entry_date", "")),
+                    str(trade.get("exit_date", "")),
+                    trade.get("return"),
+                    trade.get("pnl"),
+                    trade.get("total_pnl"),
+                    trade.get("reason"),
+                    trade.get("realized_r"),
+                    trade.get("bars"),
+                    trade.get("conf_at_entry"),
+                    trade.get("archetype_at_entry"),
+                    trade.get("attribution_trade_id"),
+                    trade.get("mae"),
+                    trade.get("mfe"),
+                    trade.get("mae_per_bar"),
+                    trade.get("mfe_per_bar"),
+                    trade.get("entry_slippage_bps"),
+                    trade.get("exit_slippage_bps"),
+                    trade.get("fill_qty_ratio"),
+                    trade.get("gap_fill"),
+                    trade.get("partial_fill"),
+                    trade.get("latency_bars"),
+                    trade.get("pred_confidence"),
+                    trade.get("pred_archetype"),
+                    trade.get("pred_regime"),
+                ),
+            )
+
+    def read(self, limit: int = 10) -> list:
+        try:
+            with self._connect() as conn:
+                rows = conn.execute("SELECT * FROM trades ORDER BY exit_date DESC LIMIT ?", (limit,)).fetchall()
+                return [dict(r) for r in rows]
+        except Exception:
+            return []
+
+    def read_since(self, date: str) -> pd.DataFrame:
+        columns = ["asset", "side", "entry", "exit", "return", "bars", "reason", "entry_date", "exit_date"]
+        try:
+            with self._connect() as conn:
+                rows = conn.execute(
+                    "SELECT asset, side, entry, exit, return, bars, reason, entry_date, exit_date "
+                    "FROM trades WHERE exit_date >= ? ORDER BY exit_date DESC",
+                    (date,),
+                ).fetchall()
+                if not rows:
+                    return pd.DataFrame(columns=columns)
+                return pd.DataFrame([dict(r) for r in rows])
+        except Exception:
+            return pd.DataFrame(columns=columns)
+
+    def read_outcomes(self) -> dict | None:
+        now = time.monotonic()
+        if self._trade_outcomes_cache is not None and now - self._trade_outcomes_cache_ts < 30.0:
+            return self._trade_outcomes_cache
+        result = self._compute_outcomes()
+        if result is not None:
+            self._trade_outcomes_cache = result
+            self._trade_outcomes_cache_ts = now
+        return result
+
+    def _compute_outcomes(self) -> dict | None:
+        try:
+            with self._connect() as conn:
+                rows = conn.execute("SELECT * FROM trades").fetchall()
+                if not rows:
+                    return None
+                df = pd.DataFrame([dict(r) for r in rows])
+
+            reason_col = "reason" if "reason" in df.columns else "exit_reason"
+            ret_col = "return" if "return" in df.columns else "pnl"
+            r_col = "realized_r" if "realized_r" in df.columns else None
+
+            if reason_col in df.columns:
+                df[reason_col] = (
+                    df[reason_col]
+                    .astype(str)
+                    .str.lower()
+                    .replace({"sl_hit": "sl", "tp_hit": "tp", "gate_closed": "signal_flip"})
+                )
+            if ret_col in df.columns:
+                df[ret_col] = pd.to_numeric(df[ret_col], errors="coerce").fillna(0.0)
+
+            by_asset = []
+            for asset_name, group in df.groupby("asset"):
+                n = len(group)
+                tp = int((group[reason_col] == "tp").sum())
+                sl = int((group[reason_col] == "sl").sum())
+                flip = int((group[reason_col] == "signal_flip").sum())
+                wins = int((group[ret_col] > 0).sum())
+                total_profit = float(group[ret_col].clip(lower=0).sum())
+                total_loss = float((-group[ret_col].clip(upper=0)).sum())
+                avg_r = float(group[r_col].mean()) if r_col and r_col in group else 0.0
+
+                by_asset.append(
+                    {
+                        "asset": asset_name,
+                        "n_trades": n,
+                        "tp_rate": round(tp / n, 4) if n > 0 else 0.0,
+                        "sl_rate": round(sl / n, 4) if n > 0 else 0.0,
+                        "signal_flip_rate": round(flip / n, 4) if n > 0 else 0.0,
+                        "avg_r": round(avg_r, 4),
+                        "win_rate": round(wins / n, 4) if n > 0 else 0.0,
+                        "profit_factor": round(total_profit / total_loss, 4) if total_loss > 0 else None,
+                    }
+                )
+
+            n_total = len(df)
+            tp_total = int((df[reason_col] == "tp").sum())
+            sl_total = int((df[reason_col] == "sl").sum())
+            flip_total = int((df[reason_col] == "signal_flip").sum())
+            wins_total = int((df[ret_col] > 0).sum())
+            profit_total = float(df[ret_col].clip(lower=0).sum())
+            loss_total = float((-df[ret_col].clip(upper=0)).sum())
+            avg_r_total = float(df[r_col].mean()) if r_col and r_col in df.columns else 0.0
+
+            payload = {
+                "overall": {
+                    "tp_rate": round(tp_total / n_total, 4) if n_total > 0 else 0.0,
+                    "sl_rate": round(sl_total / n_total, 4) if n_total > 0 else 0.0,
+                    "signal_flip_rate": round(flip_total / n_total, 4) if n_total > 0 else 0.0,
+                    "avg_r": round(avg_r_total, 4),
+                    "win_rate": round(wins_total / n_total, 4) if n_total > 0 else 0.0,
+                    "profit_factor": round(profit_total / loss_total, 4) if loss_total > 0 else None,
+                },
+                "by_asset": by_asset,
+                "updated_at": datetime.now(tz=ET).isoformat(),
+            }
+
+            with open(self._trade_outcomes_path, "w") as f:
+                json.dump(payload, f, indent=2)
+            return payload
+        except Exception:
+            logger.exception("Failed to compute trade outcomes")
+            return None
+
+
+class _AttributionStore:
+    def __init__(self, connect):
+        self._connect = connect
+
+    def append(self, record_dict: dict) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO attribution (
+                    asset, trade_id, entry_date, exit_date,
+                    side, exit_price, exit_reason,
+                    realized_r, realized_return, realized_pnl, theoretical_r,
+                    policy_hash, archetype_version, exit_archetype,
+                    pred_signal, pred_label, pred_confidence,
+                    pred_prob_long, pred_prob_short, pred_prob_neutral, pred_meta_proba,
+                    pred_regime_at_entry, pred_archetype_at_entry,
+                    exec_entry_type, exec_deferred_bars,
+                    exec_entry_price, exec_mid_price_at_signal, exec_entry_slippage_bps,
+                    friction_entry_slippage_bps, friction_exit_slippage_bps,
+                    exit_mae, exit_mfe, exit_mae_per_bar, exit_mfe_per_bar,
+                    exit_realized_r, exit_bars_held, exit_exit_archetype
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    record_dict.get("asset"),
+                    record_dict.get("trade_id"),
+                    str(record_dict.get("entry_date", "")),
+                    str(record_dict.get("exit_date", "")),
+                    record_dict.get("side"),
+                    record_dict.get("exit_price"),
+                    record_dict.get("exit_reason"),
+                    record_dict.get("realized_r"),
+                    record_dict.get("realized_return"),
+                    record_dict.get("realized_pnl"),
+                    record_dict.get("theoretical_r"),
+                    record_dict.get("policy_hash"),
+                    record_dict.get("archetype_version"),
+                    record_dict.get("exit_archetype"),
+                    record_dict.get("pred_signal"),
+                    record_dict.get("pred_label"),
+                    record_dict.get("pred_confidence"),
+                    record_dict.get("pred_prob_long"),
+                    record_dict.get("pred_prob_short"),
+                    record_dict.get("pred_prob_neutral"),
+                    record_dict.get("pred_meta_proba"),
+                    record_dict.get("pred_regime_at_entry"),
+                    record_dict.get("pred_archetype_at_entry"),
+                    record_dict.get("exec_entry_type"),
+                    record_dict.get("exec_deferred_bars"),
+                    record_dict.get("exec_entry_price"),
+                    record_dict.get("exec_mid_price_at_signal"),
+                    record_dict.get("exec_entry_slippage_bps"),
+                    record_dict.get("friction_entry_slippage_bps"),
+                    record_dict.get("friction_exit_slippage_bps"),
+                    record_dict.get("exit_mae"),
+                    record_dict.get("exit_mfe"),
+                    record_dict.get("exit_mae_per_bar"),
+                    record_dict.get("exit_mfe_per_bar"),
+                    record_dict.get("exit_realized_r"),
+                    record_dict.get("exit_bars_held"),
+                    record_dict.get("exit_exit_archetype"),
+                ),
+            )
+
+    def read(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        archetype: str | None = None,
+        regime: str | None = None,
+        asset: str | None = None,
+    ) -> list:
+        try:
+            with self._connect() as conn:
+                where_parts = []
+                params = []
+                if archetype:
+                    where_parts.append("pred_archetype_at_entry = ?")
+                    params.append(archetype)
+                if regime:
+                    where_parts.append("pred_regime_at_entry = ?")
+                    params.append(regime)
+                if asset:
+                    where_parts.append("asset = ?")
+                    params.append(asset)
+                where_sql = " AND ".join(where_parts) if where_parts else "1=1"
+                params.extend([limit, offset])
+                rows = conn.execute(
+                    f"SELECT * FROM attribution WHERE {where_sql} ORDER BY exit_date DESC LIMIT ? OFFSET ?",
+                    tuple(params),
+                ).fetchall()
+                return [dict(r) for r in rows]
+        except Exception as e:
+            logger.warning("Failed to read attribution: %s", e)
+            return []
+
+
+class _ShadowTradeStore:
+    def __init__(self, connect):
+        self._connect = connect
+
+    def append(self, record_dict: dict) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO shadow_trades (
+                    asset, alt_label, entry_date, exit_date,
+                    side, entry_price, exit_price,
+                    sl_price, tp_price, stop_loss, take_profit,
+                    reason, return, pnl, realized_r, bars_held,
+                    live_exit_reason, live_realized_r
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    record_dict.get("asset"),
+                    record_dict.get("alt_label"),
+                    str(record_dict.get("entry_date", "")),
+                    str(record_dict.get("exit_date", "")),
+                    record_dict.get("side"),
+                    record_dict.get("entry_price"),
+                    record_dict.get("exit_price"),
+                    record_dict.get("sl_price"),
+                    record_dict.get("tp_price"),
+                    record_dict.get("stop_loss"),
+                    record_dict.get("take_profit"),
+                    record_dict.get("reason"),
+                    record_dict.get("return"),
+                    record_dict.get("pnl"),
+                    record_dict.get("realized_r"),
+                    record_dict.get("bars_held"),
+                    record_dict.get("live_exit_reason"),
+                    record_dict.get("live_realized_r"),
+                ),
+            )
+
+    def read(self, limit: int = 100, offset: int = 0, alt_label: str | None = None) -> list:
+        try:
+            with self._connect() as conn:
+                if alt_label:
+                    rows = conn.execute(
+                        "SELECT * FROM shadow_trades WHERE alt_label = ? ORDER BY exit_date DESC LIMIT ? OFFSET ?",
+                        (alt_label, limit, offset),
+                    ).fetchall()
+                else:
+                    rows = conn.execute(
+                        "SELECT * FROM shadow_trades ORDER BY exit_date DESC LIMIT ? OFFSET ?",
+                        (limit, offset),
+                    ).fetchall()
+                return [dict(r) for r in rows]
+        except Exception:
+            return []
+
+
+class _EquityHistoryStore:
+    def __init__(self, connect):
+        self._connect = connect
+
+    def append(self, record: dict) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO equity_history (
+                    timestamp, portfolio_value, portfolio_return, drawdown,
+                    gross_exposure, net_exposure
+                ) VALUES (?,?,?,?,?,?)""",
+                (
+                    record.get("timestamp"),
+                    record.get("portfolio_value"),
+                    record.get("portfolio_return"),
+                    record.get("drawdown"),
+                    record.get("gross_exposure"),
+                    record.get("net_exposure"),
+                ),
+            )
+
+    def read(self) -> list:
+        try:
+            with self._connect() as conn:
+                rows = conn.execute("SELECT * FROM equity_history ORDER BY id ASC").fetchall()
+                return [dict(r) for r in rows]
+        except Exception:
+            return []
+
+
+class _ConfidenceBucketStore:
+    def __init__(self, connect):
+        self._connect = connect
+
+    def append(self, bucket: dict) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO confidence_buckets (
+                    asset, date,
+                    count_0_10, count_10_20, count_20_30, count_30_40,
+                    count_40_50, count_50_60, count_60_70, count_70_80,
+                    count_80_90, count_90_100,
+                    mean_conf, n_signals
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    bucket.get("asset"),
+                    bucket.get("date"),
+                    bucket.get("count_0_10", 0),
+                    bucket.get("count_10_20", 0),
+                    bucket.get("count_20_30", 0),
+                    bucket.get("count_30_40", 0),
+                    bucket.get("count_40_50", 0),
+                    bucket.get("count_50_60", 0),
+                    bucket.get("count_60_70", 0),
+                    bucket.get("count_70_80", 0),
+                    bucket.get("count_80_90", 0),
+                    bucket.get("count_90_100", 0),
+                    bucket.get("mean_conf", 0.0),
+                    bucket.get("n_signals", 0),
+                ),
+            )
+
+
 class StateStore:
     def __init__(self, base_dir: str, snapshot_cache_ttl: float = 1.0):
         self.base_dir = base_dir
@@ -81,6 +453,11 @@ class StateStore:
         self._write_count = 0
         self._checkpoint_interval = 50
         self._init_db()
+        self._trades = _TradeStore(self._connect, self.trade_outcomes_path)
+        self._attribution = _AttributionStore(self._connect)
+        self._shadow_trades = _ShadowTradeStore(self._connect)
+        self._equity_history = _EquityHistoryStore(self._connect)
+        self._confidence_buckets = _ConfidenceBucketStore(self._connect)
 
     # ── SQLite initialisation ──────────────────────────────────────
 
@@ -219,6 +596,25 @@ class StateStore:
                     net_exposure REAL,
                     created_at TEXT DEFAULT (datetime('now'))
                 );
+
+                CREATE INDEX IF NOT EXISTS idx_trades_exit_date
+                    ON trades(exit_date DESC);
+                CREATE INDEX IF NOT EXISTS idx_trades_asset_exit_date
+                    ON trades(asset, exit_date DESC);
+                CREATE INDEX IF NOT EXISTS idx_attribution_exit_date
+                    ON attribution(exit_date DESC);
+                CREATE INDEX IF NOT EXISTS idx_attribution_asset_exit_date
+                    ON attribution(asset, exit_date DESC);
+                CREATE INDEX IF NOT EXISTS idx_attribution_archetype_exit_date
+                    ON attribution(pred_archetype_at_entry, exit_date DESC);
+                CREATE INDEX IF NOT EXISTS idx_attribution_regime_exit_date
+                    ON attribution(pred_regime_at_entry, exit_date DESC);
+                CREATE INDEX IF NOT EXISTS idx_shadow_trades_exit_date
+                    ON shadow_trades(exit_date DESC);
+                CREATE INDEX IF NOT EXISTS idx_shadow_trades_alt_label_exit_date
+                    ON shadow_trades(alt_label, exit_date DESC);
+                CREATE INDEX IF NOT EXISTS idx_equity_history_id
+                    ON equity_history(id ASC);
             """)
 
     def _connect(self) -> sqlite3.Connection:
@@ -276,225 +672,28 @@ class StateStore:
         """Append a single trade record via SQLite INSERT.
         O(1) — no read-all-then-write-all.
         """
-        with self._connect() as conn:
-            conn.execute(
-                """INSERT INTO trades (
-                    asset, side, entry, exit, entry_date, exit_date,
-                    return, pnl, total_pnl, reason, realized_r, bars,
-                    conf_at_entry, archetype_at_entry, attribution_trade_id,
-                    mae, mfe, mae_per_bar, mfe_per_bar,
-                    entry_slippage_bps, exit_slippage_bps, fill_qty_ratio,
-                    gap_fill, partial_fill, latency_bars,
-                    pred_confidence, pred_archetype, pred_regime
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (
-                    trade.get("asset"),
-                    trade.get("side"),
-                    trade.get("entry"),
-                    trade.get("exit"),
-                    str(trade.get("entry_date", "")),
-                    str(trade.get("exit_date", "")),
-                    trade.get("return"),
-                    trade.get("pnl"),
-                    trade.get("total_pnl"),
-                    trade.get("reason"),
-                    trade.get("realized_r"),
-                    trade.get("bars"),
-                    trade.get("conf_at_entry"),
-                    trade.get("archetype_at_entry"),
-                    trade.get("attribution_trade_id"),
-                    trade.get("mae"),
-                    trade.get("mfe"),
-                    trade.get("mae_per_bar"),
-                    trade.get("mfe_per_bar"),
-                    trade.get("entry_slippage_bps"),
-                    trade.get("exit_slippage_bps"),
-                    trade.get("fill_qty_ratio"),
-                    trade.get("gap_fill"),
-                    trade.get("partial_fill"),
-                    trade.get("latency_bars"),
-                    trade.get("pred_confidence"),
-                    trade.get("pred_archetype"),
-                    trade.get("pred_regime"),
-                ),
-            )
+        self._trades.append(trade)
 
     def read_trades(self, limit: int = 10) -> list:
-        try:
-            with self._connect() as conn:
-                rows = conn.execute("SELECT * FROM trades ORDER BY exit_date DESC LIMIT ?", (limit,)).fetchall()
-                return [dict(r) for r in rows]
-        except Exception:
-            return []
+        return self._trades.read(limit)
 
     def read_trades_since(self, date: str) -> pd.DataFrame:
-        columns = ["asset", "side", "entry", "exit", "return", "bars", "reason", "entry_date", "exit_date"]
-        try:
-            with self._connect() as conn:
-                rows = conn.execute(
-                    "SELECT asset, side, entry, exit, return, bars, reason, entry_date, exit_date "
-                    "FROM trades WHERE exit_date >= ? ORDER BY exit_date DESC",
-                    (date,),
-                ).fetchall()
-                if not rows:
-                    return pd.DataFrame(columns=columns)
-                return pd.DataFrame([dict(r) for r in rows])
-        except Exception:
-            return pd.DataFrame(columns=columns)
+        return self._trades.read_since(date)
 
     def write_trade_outcomes_cache(self) -> None:
         self.read_trade_outcomes()
 
     def read_trade_outcomes(self) -> dict | None:
-        now = time.monotonic()
-        if (
-            hasattr(self, "_trade_outcomes_cache_ts")
-            and now - self._trade_outcomes_cache_ts < 30.0
-            and hasattr(self, "_trade_outcomes_cache")
-            and self._trade_outcomes_cache is not None
-        ):
-            return self._trade_outcomes_cache
-        result = self._compute_trade_outcomes()
-        if result is not None:
-            self._trade_outcomes_cache = result
-            self._trade_outcomes_cache_ts = now
-        return result
+        return self._trades.read_outcomes()
 
     def _compute_trade_outcomes(self) -> dict | None:
-        try:
-            with self._connect() as conn:
-                rows = conn.execute("SELECT * FROM trades").fetchall()
-                if not rows:
-                    return None
-                df = pd.DataFrame([dict(r) for r in rows])
-
-            reason_col = "reason" if "reason" in df.columns else "exit_reason"
-            ret_col = "return" if "return" in df.columns else "pnl"
-            r_col = "realized_r" if "realized_r" in df.columns else None
-
-            if reason_col in df.columns:
-                df[reason_col] = (
-                    df[reason_col]
-                    .astype(str)
-                    .str.lower()
-                    .replace({"sl_hit": "sl", "tp_hit": "tp", "gate_closed": "signal_flip"})
-                )
-            if ret_col in df.columns:
-                df[ret_col] = pd.to_numeric(df[ret_col], errors="coerce").fillna(0.0)
-
-            by_asset = []
-            for asset_name, group in df.groupby("asset"):
-                n = len(group)
-                tp = int((group[reason_col] == "tp").sum())
-                sl = int((group[reason_col] == "sl").sum())
-                flip = int((group[reason_col] == "signal_flip").sum())
-                wins = int((group[ret_col] > 0).sum())
-                total_profit = float(group[ret_col].clip(lower=0).sum())
-                total_loss = float((-group[ret_col].clip(upper=0)).sum())
-                avg_r = float(group[r_col].mean()) if r_col and r_col in group else 0.0
-
-                by_asset.append(
-                    {
-                        "asset": asset_name,
-                        "n_trades": n,
-                        "tp_rate": round(tp / n, 4) if n > 0 else 0.0,
-                        "sl_rate": round(sl / n, 4) if n > 0 else 0.0,
-                        "signal_flip_rate": round(flip / n, 4) if n > 0 else 0.0,
-                        "avg_r": round(avg_r, 4),
-                        "win_rate": round(wins / n, 4) if n > 0 else 0.0,
-                        "profit_factor": round(total_profit / total_loss, 4) if total_loss > 0 else None,
-                    }
-                )
-
-            n_total = len(df)
-            tp_total = int((df[reason_col] == "tp").sum())
-            sl_total = int((df[reason_col] == "sl").sum())
-            flip_total = int((df[reason_col] == "signal_flip").sum())
-            wins_total = int((df[ret_col] > 0).sum())
-            profit_total = float(df[ret_col].clip(lower=0).sum())
-            loss_total = float((-df[ret_col].clip(upper=0)).sum())
-            avg_r_total = float(df[r_col].mean()) if r_col and r_col in df.columns else 0.0
-
-            payload = {
-                "overall": {
-                    "tp_rate": round(tp_total / n_total, 4) if n_total > 0 else 0.0,
-                    "sl_rate": round(sl_total / n_total, 4) if n_total > 0 else 0.0,
-                    "signal_flip_rate": round(flip_total / n_total, 4) if n_total > 0 else 0.0,
-                    "avg_r": round(avg_r_total, 4),
-                    "win_rate": round(wins_total / n_total, 4) if n_total > 0 else 0.0,
-                    "profit_factor": round(profit_total / loss_total, 4) if loss_total > 0 else None,
-                },
-                "by_asset": by_asset,
-                "updated_at": datetime.now(tz=ET).isoformat(),
-            }
-
-            with open(self.trade_outcomes_path, "w") as f:
-                json.dump(payload, f, indent=2)
-            return payload
-        except Exception:
-            logger.exception("Failed to compute trade outcomes")
-            return None
+        return self._trades._compute_outcomes()
 
     # ── Attribution (SQLite) ───────────────────────────────────────
 
     def append_attribution(self, record_dict: dict) -> None:
         """Append a single attribution record via SQLite INSERT."""
-        with self._connect() as conn:
-            conn.execute(
-                """INSERT INTO attribution (
-                    asset, trade_id, entry_date, exit_date,
-                    side, exit_price, exit_reason,
-                    realized_r, realized_return, realized_pnl, theoretical_r,
-                    policy_hash, archetype_version, exit_archetype,
-                    pred_signal, pred_label, pred_confidence,
-                    pred_prob_long, pred_prob_short, pred_prob_neutral, pred_meta_proba,
-                    pred_regime_at_entry, pred_archetype_at_entry,
-                    exec_entry_type, exec_deferred_bars,
-                    exec_entry_price, exec_mid_price_at_signal, exec_entry_slippage_bps,
-                    friction_entry_slippage_bps, friction_exit_slippage_bps,
-                    exit_mae, exit_mfe, exit_mae_per_bar, exit_mfe_per_bar,
-                    exit_realized_r, exit_bars_held, exit_exit_archetype
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (
-                    record_dict.get("asset"),
-                    record_dict.get("trade_id"),
-                    str(record_dict.get("entry_date", "")),
-                    str(record_dict.get("exit_date", "")),
-                    record_dict.get("side"),
-                    record_dict.get("exit_price"),
-                    record_dict.get("exit_reason"),
-                    record_dict.get("realized_r"),
-                    record_dict.get("realized_return"),
-                    record_dict.get("realized_pnl"),
-                    record_dict.get("theoretical_r"),
-                    record_dict.get("policy_hash"),
-                    record_dict.get("archetype_version"),
-                    record_dict.get("exit_archetype"),
-                    record_dict.get("pred_signal"),
-                    record_dict.get("pred_label"),
-                    record_dict.get("pred_confidence"),
-                    record_dict.get("pred_prob_long"),
-                    record_dict.get("pred_prob_short"),
-                    record_dict.get("pred_prob_neutral"),
-                    record_dict.get("pred_meta_proba"),
-                    record_dict.get("pred_regime_at_entry"),
-                    record_dict.get("pred_archetype_at_entry"),
-                    record_dict.get("exec_entry_type"),
-                    record_dict.get("exec_deferred_bars"),
-                    record_dict.get("exec_entry_price"),
-                    record_dict.get("exec_mid_price_at_signal"),
-                    record_dict.get("exec_entry_slippage_bps"),
-                    record_dict.get("friction_entry_slippage_bps"),
-                    record_dict.get("friction_exit_slippage_bps"),
-                    record_dict.get("exit_mae"),
-                    record_dict.get("exit_mfe"),
-                    record_dict.get("exit_mae_per_bar"),
-                    record_dict.get("exit_mfe_per_bar"),
-                    record_dict.get("exit_realized_r"),
-                    record_dict.get("exit_bars_held"),
-                    record_dict.get("exit_exit_archetype"),
-                ),
-            )
+        self._attribution.append(record_dict)
 
     def read_attribution(
         self,
@@ -504,81 +703,16 @@ class StateStore:
         regime: str | None = None,
         asset: str | None = None,
     ) -> list:
-        try:
-            with self._connect() as conn:
-                where_parts = []
-                params = []
-                if archetype:
-                    where_parts.append("pred_archetype_at_entry = ?")
-                    params.append(archetype)
-                if regime:
-                    where_parts.append("pred_regime_at_entry = ?")
-                    params.append(regime)
-                if asset:
-                    where_parts.append("asset = ?")
-                    params.append(asset)
-                where_sql = " AND ".join(where_parts) if where_parts else "1=1"
-                params.extend([limit, offset])
-                rows = conn.execute(
-                    f"SELECT * FROM attribution WHERE {where_sql} ORDER BY exit_date DESC LIMIT ? OFFSET ?",
-                    tuple(params),
-                ).fetchall()
-                return [dict(r) for r in rows]
-        except Exception as e:
-            logger.warning("Failed to read attribution: %s", e)
-            return []
+        return self._attribution.read(limit, offset, archetype, regime, asset)
 
     # ── Shadow trades (SQLite) ─────────────────────────────────────
 
     def append_shadow_trade(self, record_dict: dict) -> None:
         """Append a single shadow trade record via SQLite INSERT."""
-        with self._connect() as conn:
-            conn.execute(
-                """INSERT INTO shadow_trades (
-                    asset, alt_label, entry_date, exit_date,
-                    side, entry_price, exit_price,
-                    sl_price, tp_price, stop_loss, take_profit,
-                    reason, return, pnl, realized_r, bars_held,
-                    live_exit_reason, live_realized_r
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (
-                    record_dict.get("asset"),
-                    record_dict.get("alt_label"),
-                    str(record_dict.get("entry_date", "")),
-                    str(record_dict.get("exit_date", "")),
-                    record_dict.get("side"),
-                    record_dict.get("entry_price"),
-                    record_dict.get("exit_price"),
-                    record_dict.get("sl_price"),
-                    record_dict.get("tp_price"),
-                    record_dict.get("stop_loss"),
-                    record_dict.get("take_profit"),
-                    record_dict.get("reason"),
-                    record_dict.get("return"),
-                    record_dict.get("pnl"),
-                    record_dict.get("realized_r"),
-                    record_dict.get("bars_held"),
-                    record_dict.get("live_exit_reason"),
-                    record_dict.get("live_realized_r"),
-                ),
-            )
+        self._shadow_trades.append(record_dict)
 
     def read_shadow_trades(self, limit: int = 100, offset: int = 0, alt_label: str | None = None) -> list:
-        try:
-            with self._connect() as conn:
-                if alt_label:
-                    rows = conn.execute(
-                        "SELECT * FROM shadow_trades WHERE alt_label = ? ORDER BY exit_date DESC LIMIT ? OFFSET ?",
-                        (alt_label, limit, offset),
-                    ).fetchall()
-                else:
-                    rows = conn.execute(
-                        "SELECT * FROM shadow_trades ORDER BY exit_date DESC LIMIT ? OFFSET ?",
-                        (limit, offset),
-                    ).fetchall()
-                return [dict(r) for r in rows]
-        except Exception:
-            return []
+        return self._shadow_trades.read(limit, offset, alt_label)
 
     # ── Analytics snapshot (JSON, periodic compute) ────────────────
 
@@ -674,60 +808,16 @@ class StateStore:
 
     def append_confidence_bucket(self, bucket: dict) -> None:
         """Append a single confidence bucket via SQLite INSERT."""
-        with self._connect() as conn:
-            conn.execute(
-                """INSERT INTO confidence_buckets (
-                    asset, date,
-                    count_0_10, count_10_20, count_20_30, count_30_40,
-                    count_40_50, count_50_60, count_60_70, count_70_80,
-                    count_80_90, count_90_100,
-                    mean_conf, n_signals
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (
-                    bucket.get("asset"),
-                    bucket.get("date"),
-                    bucket.get("count_0_10", 0),
-                    bucket.get("count_10_20", 0),
-                    bucket.get("count_20_30", 0),
-                    bucket.get("count_30_40", 0),
-                    bucket.get("count_40_50", 0),
-                    bucket.get("count_50_60", 0),
-                    bucket.get("count_60_70", 0),
-                    bucket.get("count_70_80", 0),
-                    bucket.get("count_80_90", 0),
-                    bucket.get("count_90_100", 0),
-                    bucket.get("mean_conf", 0.0),
-                    bucket.get("n_signals", 0),
-                ),
-            )
+        self._confidence_buckets.append(bucket)
 
     # ── Equity history (SQLite) ────────────────────────────────────
 
     def append_equity_history(self, record: dict) -> None:
         """Append a single equity history record via SQLite INSERT."""
-        with self._connect() as conn:
-            conn.execute(
-                """INSERT INTO equity_history (
-                    timestamp, portfolio_value, portfolio_return, drawdown,
-                    gross_exposure, net_exposure
-                ) VALUES (?,?,?,?,?,?)""",
-                (
-                    record.get("timestamp"),
-                    record.get("portfolio_value"),
-                    record.get("portfolio_return"),
-                    record.get("drawdown"),
-                    record.get("gross_exposure"),
-                    record.get("net_exposure"),
-                ),
-            )
+        self._equity_history.append(record)
 
     def read_equity_history(self) -> list:
-        try:
-            with self._connect() as conn:
-                rows = conn.execute("SELECT * FROM equity_history ORDER BY id ASC").fetchall()
-                return [dict(r) for r in rows]
-        except Exception:
-            return []
+        return self._equity_history.read()
 
     # ── Legacy path helpers (unchanged) ────────────────────────────
 

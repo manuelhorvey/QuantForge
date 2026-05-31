@@ -4,8 +4,8 @@ import numpy as np
 import pandas as pd
 import pytz
 
-from paper_trading.entry.decision import EntryAction, PositionIntent, PositionSide
-from paper_trading.entry.deferred_entry import DeferredEntryStatus
+from paper_trading.entry.decision import EntryAction, PositionIntent, PositionSide, TradeDecision
+from paper_trading.entry.deferred_entry import DeferredEntry, DeferredEntryStatus
 from paper_trading.governance.multipliers import compute_effective_multipliers
 
 logger = logging.getLogger("quantforge.entry_service")
@@ -83,6 +83,100 @@ class EntryService:
             return False, f"signal_flip_cooldown_{cycles_since_flip}"
 
         return True, "ok"
+
+    def _validity_state(self) -> str:
+        asset = self.asset
+        return asset.validity_sm.current_state.value if asset.validity_sm else "YELLOW"
+
+    def _effective_sl_multiplier(self, state: str) -> float:
+        asset = self.asset
+        curr_sl_mult, _, _ = compute_effective_multipliers(
+            base_sl=asset.sl_mult,
+            base_tp=asset.tp_mult,
+            validity_state=state,
+            regime_geometry=asset.regime_geometry,
+            narrative_sl_mult=asset.governance._narrative_sl_mult,
+            liquidity_sl_mult=asset.governance._liquidity_sl_mult,
+            narrative_size_scalar=asset.governance._narrative_size_scalar,
+            liquidity_size_scalar=asset.governance._liquidity_size_scalar,
+        )
+        return curr_sl_mult
+
+    def _take_profit_geometry(self, entry_price: float, close: pd.Series, archetype: str, structure):
+        from paper_trading.entry.tp_compiler import compute_take_profit
+
+        state = self._validity_state()
+        sl_dist = entry_price * self.tb_vol(close) * self._effective_sl_multiplier(state)
+        return compute_take_profit(entry_price, sl_dist, state, archetype, structure)
+
+    @staticmethod
+    def _policy_hash(policy_dec) -> str:
+        return str(
+            hash(
+                (
+                    policy_dec.action,
+                    policy_dec.archetype,
+                    policy_dec.reason,
+                    str(policy_dec.entry_plan),
+                    str(policy_dec.exit_plan),
+                )
+            )
+        )[:12]
+
+    def _route_policy(self, entry_action, decision: TradeDecision, structure, tp_geo=None, deferred=None):
+        asset = self.asset
+        policy_dec = asset._execution_policy.handle(
+            entry_action,
+            decision,
+            decision.archetype,
+            structure,
+            tp_geo=tp_geo,
+            deferred=deferred,
+        )
+        asset._last_policy_hash = self._policy_hash(policy_dec)
+        return policy_dec
+
+    def handle_immediate_entry_policy(self, side: PositionSide, decision: TradeDecision, df: pd.DataFrame) -> None:
+        asset = self.asset
+        structure = asset._structure_detector.detect(df)
+        entry_action = asset._entry_optimizer.evaluate(
+            decision.signal,
+            decision.archetype,
+            structure,
+            asset.config.get("entry_optimization", {}),
+        )
+
+        tp_geo = None
+        deferred_entry = None
+        if entry_action == EntryAction.ENTER:
+            tp_geo = self._take_profit_geometry(
+                float(decision.close_price),
+                df["close"],
+                decision.archetype,
+                structure,
+            )
+        elif entry_action == EntryAction.DEFER:
+            deferred_entry = DeferredEntry.from_decision(
+                decision,
+                max_bars=asset.config.get("entry_defer_max_bars", 5),
+            )
+
+        policy_dec = self._route_policy(entry_action, decision, structure, tp_geo=tp_geo, deferred=deferred_entry)
+
+        if policy_dec.action == EntryAction.ENTER:
+            logger.info(f"{asset.name}: POLICY APPROVED ENTER ({policy_dec.reason})")
+            self.open_position(side, decision.close_price, decision.timestamp, df, tp_geo=policy_dec.exit_plan)
+            if asset.position is not None:
+                asset.position["confidence"] = decision.confidence
+                asset.position["policy_reason"] = policy_dec.reason
+
+        elif policy_dec.action == EntryAction.DEFER:
+            if policy_dec.entry_plan:
+                asset._pending_entries[side.value] = policy_dec.entry_plan
+                logger.info(f"{asset.name}: POLICY APPROVED DEFER ({policy_dec.reason})")
+
+        else:
+            logger.info(f"{asset.name}: POLICY APPROVED SKIP ({policy_dec.reason})")
 
     def open_position(self, side, entry_price, entry_date, df=None, tp_geo=None):
         asset = self.asset
@@ -263,40 +357,14 @@ class EntryService:
 
             tp_geo = None
             if entry_action == EntryAction.ENTER:
-                vol = self.tb_vol(df["close"] if isinstance(df, pd.DataFrame) and "close" in df.columns else df)
-                state = asset.validity_sm.current_state.value if asset.validity_sm else "YELLOW"
-                curr_sl_mult, _, _ = compute_effective_multipliers(
-                    base_sl=asset.sl_mult,
-                    base_tp=asset.tp_mult,
-                    validity_state=state,
-                    regime_geometry=asset.regime_geometry,
-                    narrative_sl_mult=asset.governance._narrative_sl_mult,
-                    liquidity_sl_mult=asset.governance._liquidity_sl_mult,
-                    narrative_size_scalar=asset.governance._narrative_size_scalar,
-                    liquidity_size_scalar=asset.governance._liquidity_size_scalar,
-                )
-                sl_dist = float(df["close"].iloc[-1]) * vol * curr_sl_mult
-
-                from paper_trading.entry.tp_compiler import compute_take_profit
-
-                tp_geo = compute_take_profit(
-                    float(df["close"].iloc[-1]), sl_dist, state, entry.decision.archetype, structure
+                tp_geo = self._take_profit_geometry(
+                    float(df["close"].iloc[-1]),
+                    df["close"] if isinstance(df, pd.DataFrame) and "close" in df.columns else df,
+                    entry.decision.archetype,
+                    structure,
                 )
 
-            policy_dec = asset._execution_policy.handle(
-                entry_action, entry.decision, entry.decision.archetype, structure, tp_geo=tp_geo, deferred=entry
-            )
-            asset._last_policy_hash = str(
-                hash(
-                    (
-                        policy_dec.action,
-                        policy_dec.archetype,
-                        policy_dec.reason,
-                        str(policy_dec.entry_plan),
-                        str(policy_dec.exit_plan),
-                    )
-                )
-            )[:12]
+            policy_dec = self._route_policy(entry_action, entry.decision, structure, tp_geo=tp_geo, deferred=entry)
             asset._entry_archetype = entry.decision.archetype
 
             if policy_dec.action == EntryAction.ENTER:

@@ -1,6 +1,6 @@
 import os
 import time
-from urllib.parse import unquote
+from urllib.parse import unquote, urlencode
 
 from paper_trading.state_store import StateStore
 
@@ -61,6 +61,45 @@ def cache_set(key: str, value: str, ttl: float | None = None) -> None:
         base_key = key.split("?")[0]
         ttl = _CACHE_TTL.get(base_key, 5.0)
     _CACHE[key] = (value, time.monotonic() + ttl)
+
+
+def route_cache_key(path: str, query: dict[str, str] | None = None) -> str:
+    """Build a stable cache key for a route and its effective query params."""
+    if not query:
+        return path
+    return f"{path}?{urlencode(sorted(query.items()))}"
+
+
+def bounded_int_query(
+    query: dict[str, str],
+    name: str,
+    default: int,
+    minimum: int,
+    maximum: int,
+) -> int:
+    """Parse an integer query parameter and clamp it to a safe range."""
+    raw = query.get(name)
+    if raw is None:
+        value = default
+    else:
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            value = default
+    return max(minimum, min(value, maximum))
+
+
+def query_window(
+    query: dict[str, str],
+    *,
+    default_limit: int,
+    max_limit: int,
+    max_offset: int = 1_000_000,
+) -> tuple[int, int]:
+    """Return validated limit/offset query params for paged API reads."""
+    limit = bounded_int_query(query, "limit", default=default_limit, minimum=1, maximum=max_limit)
+    offset = bounded_int_query(query, "offset", default=0, minimum=0, maximum=max_offset)
+    return limit, offset
 
 
 _FALLBACK_VOL_BASELINES = {

@@ -77,6 +77,11 @@ def _normalize_index(idx: pd.Index) -> pd.Index:
     return idx.normalize()
 
 
+def _empty_utc_series(name: str | None = None) -> pd.Series:
+    """Return an empty series with the same index contract as fetched data."""
+    return pd.Series(dtype=float, index=pd.DatetimeIndex([], tz="UTC"), name=name)
+
+
 def _fetch_macro_batch() -> dict[str, pd.Series]:
     """Fetch all macro tickers in a single yfinance call.
 
@@ -137,17 +142,17 @@ def _fetch_macro_batch() -> dict[str, pd.Series]:
     return result
 
 
-def _fetch_single_series(ticker: str, name: str | None = None) -> pd.Series:
+def _fetch_single_series(ticker: str, name: str | None = None, period: str | None = None) -> pd.Series:
     """Fetch a single yfinance series, return daily 'Close' Series.
 
     Used as fallback when batch download fails for individual tickers.
     """
     import yfinance as yf
 
-    df = yf.download(ticker, period=_FETCH_PERIOD, auto_adjust=True, progress=False)
+    df = yf.download(ticker, period=period or _FETCH_PERIOD, auto_adjust=True, progress=False)
     if df.empty:
         logger.warning("single fetch returned empty for %s", ticker)
-        return pd.Series(dtype=float)
+        return _empty_utc_series(name)
     s = df["Close"].squeeze().copy()
     s.index = _normalize_index(s.index)
     if name:
@@ -171,7 +176,7 @@ def fetch_yf_series(ticker: str, name: str, period: str | None = None) -> pd.Ser
             s.name = name
             return s
 
-    return _fetch_single_series(ticker, name=name)
+    return _fetch_single_series(ticker, name=name, period=period)
 
 
 def fetch_asset_data(
@@ -196,11 +201,11 @@ def fetch_asset_data(
     # Macro data is batch-fetched once per cycle and cached
     logger.debug("  fetching macro (DXY, VIX, SPY, CL=F, TNX)...")
     macro = _fetch_macro_batch()
-    dxy = macro.get("DX-Y.NYB", pd.Series(dtype=float))
-    vix = macro.get("^VIX", pd.Series(dtype=float))
-    spx = macro.get("^GSPC", pd.Series(dtype=float))
-    wti = macro.get("CL=F", pd.Series(dtype=float))
-    tnx = macro.get("^TNX", pd.Series(dtype=float))
+    dxy = macro.get("DX-Y.NYB", _empty_utc_series("dxy"))
+    vix = macro.get("^VIX", _empty_utc_series("vix"))
+    spx = macro.get("^GSPC", _empty_utc_series("spx"))
+    wti = macro.get("CL=F", _empty_utc_series("wti"))
+    tnx = macro.get("^TNX", _empty_utc_series("tnx"))
 
     common = close.index.intersection(dxy.index).intersection(vix.index).intersection(spx.index).intersection(wti.index)
     common = common.intersection(tnx.dropna().index)

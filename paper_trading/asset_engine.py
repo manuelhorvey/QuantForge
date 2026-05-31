@@ -11,10 +11,9 @@ from monitoring.validity_state_machine import ValidityStateMachine as _ValidityS
 from paper_trading.asset_pnl_controller import AssetPnlController
 from paper_trading.attribution.collector import AttributionCollector, TradeAttributionRecord
 from paper_trading.config_manager import get_config
-from paper_trading.entry.decision import EntryAction, PositionSide, SignalType, TradeDecision
+from paper_trading.entry.decision import PositionSide, SignalType, TradeDecision
 from paper_trading.governance.asset import AssetGovernance
 from paper_trading.governance.conviction_gate import RegimeRow
-from paper_trading.governance.multipliers import compute_effective_multipliers
 from paper_trading.governance.regime import RegimeClassifier
 from paper_trading.inference.pipeline import AssetInferencePipeline
 from paper_trading.inference.training import AssetTrainingPipeline
@@ -321,12 +320,7 @@ class AssetEngine:
     def generate_signal(self, threshold=0.45):
         return self._inference.generate_signal(threshold)
 
-    def _apply_decision(self, decision: TradeDecision, df):
-        today = decision.timestamp
-        self._cycle_counter += 1
-        current_side = self.pos_mgr.current_side()
-
-        # Phase 6: Store prediction metadata for attribution at close
+    def _store_prediction_context(self, decision: TradeDecision) -> None:
         self._last_label = decision.label
         self._last_confidence = decision.confidence
         self._last_prob_long = decision.prob_long
@@ -335,7 +329,7 @@ class AssetEngine:
         self._entry_archetype = decision.archetype
         self._entry_pressure = None  # set by EntryOptimizer if available
 
-        # Phase 6: Track MAE/MFE extremes while position is open
+    def _track_open_trade_extremes(self, df: pd.DataFrame) -> None:
         if self.pos_mgr.has_position() and self._current_trade_id:
             try:
                 high_val = float(df["high"].iloc[-1])
@@ -346,6 +340,9 @@ class AssetEngine:
                     )
             except (KeyError, IndexError, ValueError, TypeError):
                 pass
+
+    @staticmethod
+    def _decision_side(decision: TradeDecision) -> PositionSide | None:
         new_side = (
             PositionSide.LONG
             if decision.signal == SignalType.BUY
@@ -353,15 +350,17 @@ class AssetEngine:
             if decision.signal == SignalType.SELL
             else None
         )
+        return new_side
 
-        # Minimum confidence gate — skip low-confidence entries
+    def _apply_min_confidence_gate(self, decision: TradeDecision, new_side: PositionSide | None) -> PositionSide | None:
         min_conf = self.config.get("min_confidence", 0.0)
         if new_side and decision.confidence < min_conf:
             logger.debug("%s: skipping trade, confidence %.1f%% < min %.1f%%", self.name, decision.confidence, min_conf)
-            new_side = None
+            return None
+        return new_side
 
-        # Meta-label advisory (sizing handles suppression via _meta_size_multiplier)
-        if (
+    def _log_meta_label_advisory(self, new_side: PositionSide | None) -> None:
+        if not (
             new_side
             and self._meta_label_model is not None
             and self.config.get("meta_labeling", {}).get("enabled", False)
@@ -369,22 +368,56 @@ class AssetEngine:
             and self._last_meta_proba is not None
             and self._last_meta_proba < self._meta_label_model.threshold
         ):
-            logger.info(
-                "%s: meta-label below threshold (p(TP>SL)=%.2f < %.2f) — sizing will suppress",
-                self.name,
-                self._last_meta_proba,
-                self._meta_label_model.threshold,
-            )
-            # new_side remains set; _meta_size_multiplier returns 0.0
-            # which flows through _composite_size_scalar → zero notional
+            return
+        logger.info(
+            "%s: meta-label below threshold (p(TP>SL)=%.2f < %.2f) — sizing will suppress",
+            self.name,
+            self._last_meta_proba,
+            self._meta_label_model.threshold,
+        )
 
-        # Regime bar counter (used by conviction flip gate)
+    def _update_regime_bar_counter(self) -> None:
         current_regime = getattr(self, "_current_regime", "neutral")
         if current_regime != self._last_regime_label:
             self._regime_bar_counter = 1
             self._last_regime_label = current_regime
         else:
             self._regime_bar_counter += 1
+
+    def _record_signal_history(self, decision: TradeDecision) -> None:
+        self.prob_history.append(
+            {
+                "date": decision.timestamp,
+                "prob_long": round(decision.prob_long * 100, 2),
+                "prob_short": round(decision.prob_short * 100, 2),
+                "signal": decision.signal,
+                "confidence": decision.confidence,
+                "close_price": decision.close_price,
+            }
+        )
+        MAX_PROB_HISTORY = 1000
+        if len(self.prob_history) > MAX_PROB_HISTORY:
+            self.prob_history = self.prob_history[-MAX_PROB_HISTORY:]
+        self._log_confidence_buckets()
+
+    def _apply_decision(self, decision: TradeDecision, df):
+        today = decision.timestamp
+        self._cycle_counter += 1
+        current_side = self.pos_mgr.current_side()
+
+        # Phase 6: Store prediction metadata for attribution at close
+        self._store_prediction_context(decision)
+        self._track_open_trade_extremes(df)
+        new_side = self._decision_side(decision)
+
+        # Minimum confidence gate — skip low-confidence entries
+        new_side = self._apply_min_confidence_gate(decision, new_side)
+
+        # Meta-label advisory (sizing handles suppression via _meta_size_multiplier)
+        self._log_meta_label_advisory(new_side)
+
+        # Regime bar counter (used by conviction flip gate)
+        self._update_regime_bar_counter()
 
         # Conviction gate — only flip if regime is decisive and model is uncertain
         flip_allowed = True
@@ -412,93 +445,12 @@ class AssetEngine:
                     new_side = None
 
                 if new_side:
-                    # 1. Gather Phase 1-3 Artifacts
-                    structure = self._structure_detector.detect(df)
-                    entry_action = self._entry_optimizer.evaluate(
-                        decision.signal, decision.archetype, structure, self.config.get("entry_optimization", {})
-                    )
-
-                    tp_geo = None
-                    deferred_entry = None
-
-                    if entry_action == EntryAction.ENTER:
-                        vol = self._tb_vol(df["close"]) if hasattr(self, "_tb_vol") else 0.01
-                        state = self.validity_sm.current_state.value if self.validity_sm else "YELLOW"
-                        curr_sl_mult, _, _ = compute_effective_multipliers(
-                            base_sl=self.sl_mult,
-                            base_tp=self.tp_mult,
-                            validity_state=state,
-                            regime_geometry=self.regime_geometry,
-                            narrative_sl_mult=self.governance._narrative_sl_mult,
-                            liquidity_sl_mult=self.governance._liquidity_sl_mult,
-                            narrative_size_scalar=self.governance._narrative_size_scalar,
-                            liquidity_size_scalar=self.governance._liquidity_size_scalar,
-                        )
-                        sl_dist = decision.close_price * vol * curr_sl_mult
-
-                        from paper_trading.entry.tp_compiler import compute_take_profit
-
-                        tp_geo = compute_take_profit(
-                            decision.close_price, sl_dist, state, decision.archetype, structure
-                        )
-
-                    elif entry_action == EntryAction.DEFER:
-                        from paper_trading.entry.deferred_entry import DeferredEntry
-
-                        deferred_entry = DeferredEntry.from_decision(
-                            decision, max_bars=self.config.get("entry_defer_max_bars", 5)
-                        )
-
-                    # 2. Unified Policy Routing (Phase 4)
-                    policy_dec = self._execution_policy.handle(
-                        entry_action, decision, decision.archetype, structure, tp_geo=tp_geo, deferred=deferred_entry
-                    )
-                    self._last_policy_hash = str(
-                        hash(
-                            (
-                                policy_dec.action,
-                                policy_dec.archetype,
-                                policy_dec.reason,
-                                str(policy_dec.entry_plan),
-                                str(policy_dec.exit_plan),
-                            )
-                        )
-                    )[:12]
-
-                    # 3. Execute Policy Action
-                    if policy_dec.action == EntryAction.ENTER:
-                        logger.info(f"{self.name}: POLICY APPROVED ENTER ({policy_dec.reason})")
-                        # Pass exit_plan to _open_position
-                        self._open_position(new_side, decision.close_price, today, df, tp_geo=policy_dec.exit_plan)
-                        if self.position is not None:
-                            self.position["confidence"] = decision.confidence
-                            self.position["policy_reason"] = policy_dec.reason
-
-                    elif policy_dec.action == EntryAction.DEFER:
-                        if policy_dec.entry_plan:
-                            self._pending_entries[new_side.value] = policy_dec.entry_plan
-                            logger.info(f"{self.name}: POLICY APPROVED DEFER ({policy_dec.reason})")
-
-                    else:
-                        logger.info(f"{self.name}: POLICY APPROVED SKIP ({policy_dec.reason})")
+                    self._entry.handle_immediate_entry_policy(new_side, decision, df)
 
         # Bar-by-bar polling for deferred entries
         self._poll_pending_entries(df)
 
-        self.prob_history.append(
-            {
-                "date": today,
-                "prob_long": round(decision.prob_long * 100, 2),
-                "prob_short": round(decision.prob_short * 100, 2),
-                "signal": decision.signal,
-                "confidence": decision.confidence,
-                "close_price": decision.close_price,
-            }
-        )
-        MAX_PROB_HISTORY = 1000
-        if len(self.prob_history) > MAX_PROB_HISTORY:
-            self.prob_history = self.prob_history[-MAX_PROB_HISTORY:]
-        self._log_confidence_buckets()
+        self._record_signal_history(decision)
 
     def _poll_pending_entries(self, df: pd.DataFrame) -> None:
         self._entry.poll_pending_entries(df)
