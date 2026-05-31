@@ -82,6 +82,33 @@ def _cache_path(ticker: str) -> str:
     return _STORE.cache_path(ticker)
 
 
+def _check_data_quality(df: pd.DataFrame, ticker: str) -> None:
+    if df.empty:
+        return
+
+    last_ts = df.index[-1]
+    if hasattr(last_ts, "tzinfo") and last_ts.tzinfo is None:
+        last_ts = last_ts.tz_localize("UTC")
+    now = pd.Timestamp.now(tz="UTC")
+    stale_days = (now - last_ts).days
+    if stale_days > 4:
+        logger.warning(
+            "DATA QUALITY [%s]: last bar is %d days old (last=%s) — serving stale cache",
+            ticker,
+            stale_days,
+            last_ts.date(),
+        )
+
+    nan_mask = df["Close"].isna()
+    consecutive_nans = nan_mask.groupby((~nan_mask).cumsum()).sum().max()
+    if consecutive_nans >= 3:
+        logger.warning(
+            "DATA QUALITY [%s]: %d consecutive NaN closes",
+            ticker,
+            int(consecutive_nans),
+        )
+
+
 def safe_download(ticker: str, **kwargs) -> pd.DataFrame:
     cache_key = f"download:{ticker}:{hash(frozenset(kwargs.items()))}"
     cached = _cache_get(cache_key)
@@ -93,6 +120,7 @@ def safe_download(ticker: str, **kwargs) -> pd.DataFrame:
             _rate_limit()
             df = yf.download(ticker, **kwargs)
             if not df.empty:
+                _check_data_quality(df, ticker)
                 _cache_set(cache_key, df, "download")
                 _STORE.save_cache(ticker, df)
                 return df
@@ -104,6 +132,7 @@ def safe_download(ticker: str, **kwargs) -> pd.DataFrame:
     logger.error(f"{ticker} failed after 3 attempts — using cached data")
     df = _STORE.load_cache(ticker)
     if df is not None:
+        _check_data_quality(df, ticker)
         logger.info(f"{ticker} using cached data from {_STORE.cache_path(ticker)}")
         return df
     logger.error(f"{ticker} no cached data available")

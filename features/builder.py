@@ -196,4 +196,4 @@ def compute_inference_features(
 def model_path(ticker: str) -> str:
     contract = FEATURE_REGISTRY[ticker]
     base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    return os.path.join(base, "paper_trading", "models", f"{contract.name}_model.pkl")
+    return os.path.join(base, "paper_trading", "models", f"{contract.name}_model.json")

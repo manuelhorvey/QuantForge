@@ -1,7 +1,8 @@
 #!/usr/bin/env zsh
-# QuantForge Paper Trading Monitor
+# QuantForge Paper Trading Monitor — production entry point.
 # Pulls LIVE market data from yfinance. Serves dashboard.
 # Usage: ./monitor_all  |  Ctrl+C to stop.
+# Equivalent: python main.py
 
 set -e
 cd "$(dirname "$0")"

@@ -253,10 +253,12 @@ Used for:
 Each asset runs an independent binary XGBoost model.
 
 ```text
-Objective: binary:logistic
-Trees:     300
-Depth:     2
-LR:        0.02
+Objective:       binary:logistic
+Trees:           300
+Depth:           2
+LR:              0.02
+Serialization:   XGBoost native .json (not pickle)
+Checksummed:     cold_state.pkl via SHA-256
 ```
 
 No shared multi-asset model exists.
@@ -440,10 +442,12 @@ cd quantforge
 python -m venv .venv
 source .venv/bin/activate
 
-pip install -r requirements.txt
+make deps            # pin + install locked dependencies
+# or: pip install -r requirements.lock
 
 # Start engine + dashboard
 ./monitor_all
+# or: python main.py
 ```
 
 Dashboard:
@@ -472,7 +476,15 @@ http://localhost:5000
 | `scripts/score_tickers.py`             | Asset scoring               |
 | `scripts/generate_promotion_report.py` | Portfolio report generation |
 | `scripts/train_all_assets.py`          | Full retraining             |
+| `scripts/generate_snapshot.py`         | Regenerate BASELINE_SNAPSHOT |
 | `benchmarks/microbenchmark.py`         | Runtime benchmarking        |
+
+| Make target       | Purpose                     |
+| ----------------- | --------------------------- |
+| `make deps`       | Pin + install locked deps   |
+| `make test`       | Run test suite              |
+| `make snapshot`   | Regenerate BASELINE_SNAPSHOT |
+| `make lint`       | Compile-check key modules   |
 
 ---
 
@@ -487,6 +499,11 @@ walkforward/
 shared/
 monitoring/
 docs/
+requirements.in        # Runtime dependency bounds (source of truth)
+requirements.lock      # Pinned dependencies with hashes (commit this)
+requirements-dev.in    # Dev dependency bounds
+requirements-dev.lock  # Pinned dev dependencies
+BASELINE_SNAPSHOT.md   # Auto-generated config snapshot (make snapshot)
 ```
 
 ## Key Components
@@ -517,7 +534,7 @@ paper_trading/
 # Known Constraints
 
 * Paper trading only
-* Yahoo Finance data dependency
+* Yahoo Finance data dependency with automated quality monitoring (stale-data + NaN gap detection)
 * No live brokerage integration
 * Ensemble system disabled by default
 * Some FX crosses may produce incomplete first-cycle bars
@@ -526,6 +543,17 @@ paper_trading/
 ---
 
 # Roadmap
+
+## Completed (May 2026)
+
+* Dependency pinning (`requirements.lock` with hashes)
+* XGBoost native model serialization (`.json`, no pickle)
+* SHA-256 checksum verification on cold state snapshots
+* Data-quality gate on yfinance pipeline (staleness + NaN detection)
+* Auto-generated baselines (`make snapshot`)
+* Fix `main.py` entry point dispatcher
+
+## Planned
 
 * Deterministic full-day replay reconstruction
 * Event-sequence validation tooling

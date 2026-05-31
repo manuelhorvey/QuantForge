@@ -8,12 +8,16 @@ Operational procedures for the paper trading system. This document is for the pe
 
 | Item | Value |
 |------|-------|
-| Start command | `./monitor_all` |
+| Start command | `./monitor_all` or `python main.py` |
 | Dashboard URL | `http://127.0.0.1:5000` |
 | Config file | `configs/paper_trading.yaml` |
 | State file (JSON) | `data/live/state.json` |
 | State store (SQLite) | `data/live/state.db` (5 tables: trades, attribution, shadow_trades, confidence_buckets, equity_history) |
-| Model files | `paper_trading/models/*.json` |
+| Model files | `paper_trading/models/*.json` (XGBoost native, not pickle) |
+| Model serialization | `xgb.XGBClassifier.save_model/load_model` with `.json` format |
+| Cold state checksum | `cold_state.pkl` verified via SHA-256 `.sha256` sidecar |
+| Data quality | Automated stale-data (>4d) and NaN-gap (≥3 consecutive) warnings in logs |
+| Dependencies | Pinned via `requirements.lock` with hashes; regenerate with `make deps` |
 | Logs | stdout (redirect to file as needed) |
 | Refresh interval | 300s / 5 min (configurable via `QUANTFORGE_REFRESH_INTERVAL` env var) |
 | Weekend behavior | Auto-pauses Fri 17:00 ET — Sun 17:00 ET; core assets skipped, BTC satellite-only polling via `_run_satellite_only()` |
@@ -528,13 +532,17 @@ If yfinance returns empty or stale data for any ticker:
 
 **Symptoms:**
 - `ERROR - No live data for BTC-USD` in logs
+- `DATA QUALITY [TICKER]: last bar is N days old` in logs (automated staleness detection, fires when >4 days since last bar)
+- `DATA QUALITY [TICKER]: N consecutive NaN closes` in logs (automated gap detection, fires when ≥3 consecutive NaN closes)
 - Dashboard shows stale prices (>24h old)
 - Missing signals for that asset
+
+**Early detection:** The data quality gate logs warnings on every `safe_download()` call, both live and cache-fallback paths. Staleness warnings do not halt the engine — they are diagnostic. Investigate if they persist for more than one refresh cycle.
 
 **Response:**
 1. Verify yfinance availability: `python -c "import yfinance as yf; d=yf.download('BTC-USD',period='5d'); print(d.empty)"`
 2. Check internet connectivity
-3. If yfinance is down, the engine will continue running but cannot generate new signals
+3. If yfinance is down, the engine will continue running using cached data but cannot generate new signals
 4. If the outage exceeds one trading day, consider whether to halt
 
 ---
@@ -758,9 +766,16 @@ Project Root/
 │   ├── ops/                      # Data fetcher, diagnostics, tracer
 │   └── models/                   # Per-asset XGBoost model files
 ├── scripts/                      # Backtesting, training, scoring, migrations
+│   └── generate_snapshot.py      # Regenerates BASELINE_SNAPSHOT.md from config + contract
 ├── shared/                       # Pluggable strategy interfaces, execution config
 ├── monitoring/                   # PSI drift, validity state machine
-└── monitor_all                   # Entry point script
+├── requirements.in               # Runtime dependency bounds (source of truth)
+├── requirements.lock             # Pinned dependencies with hashes
+├── requirements-dev.in           # Dev dependency bounds
+├── requirements-dev.lock         # Pinned dev dependencies
+├── BASELINE_SNAPSHOT.md          # Auto-generated config snapshot (make snapshot)
+├── monitor_all                   # Entry point script (zsh)
+└── main.py                       # Entry point script (python)
 ```
 
 ## Appendix: Troubleshooting

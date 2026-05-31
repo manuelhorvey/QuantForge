@@ -1,4 +1,4 @@
-import logging, os, sys, pickle
+import logging, os, sys
 import pandas as pd
 import xgboost as xgb
 import yfinance as yf
@@ -57,8 +57,8 @@ def train_one(ticker, macro, ref, force=False):
     contract = FEATURE_REGISTRY[ticker]
     mp = model_path(ticker)
     if os.path.exists(mp) and not force:
-        with open(mp, 'rb') as f:
-            model = pickle.load(f)
+        model = xgb.XGBClassifier()
+        model.load_model(mp)
         logger.info('  %s: loaded cached model', ticker)
         return model, None
 
@@ -100,8 +100,7 @@ def train_one(ticker, macro, ref, force=False):
     acc, ll = evaluate_model(model, X_train.iloc[split:], y_train.iloc[split:])
     logger.info('  %s: val acc=%.4f logloss=%.4f', ticker, acc, ll)
 
-    with open(mp, 'wb') as f:
-        pickle.dump(model, f)
+    model.save_model(mp)
     return model, {"accuracy": acc, "logloss": ll, "n_train": len(X_train), "n_test": len(X_train) - split}
 
 

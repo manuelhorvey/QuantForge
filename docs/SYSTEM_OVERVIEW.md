@@ -373,6 +373,7 @@ Persistent state is stored in SQLite WAL mode.
 * deterministic recovery support
 * periodic WAL checkpointing
 * backward-compatible JSON snapshots
+* SHA-256 checksummed cold state (tamper detection via `.sha256` sidecar)
 
 ---
 
@@ -469,8 +470,10 @@ Emergency portfolio circuit breakers activate when halt ratios exceed configured
 | Walk-forward screening    | `python scripts/walk_forward_backtest.py`     |
 | Score tickers             | `python scripts/score_tickers.py`             |
 | Generate promotion report | `python scripts/generate_promotion_report.py` |
-| Start engine + dashboard  | `./monitor_all`                               |
+| Start engine + dashboard  | `./monitor_all` or `python main.py`           |
 | Retrain all assets        | `python scripts/train_all_assets.py`          |
+| Regenerate baseline       | `make snapshot`                               |
+| Pin + install deps        | `make deps`                                   |
 | Run microbenchmark        | `python benchmarks/microbenchmark.py`         |
 | Run tests                 | `pytest tests/ -q --tb=short`                 |
 
@@ -485,7 +488,7 @@ http://127.0.0.1:5000
 # Known Constraints
 
 * Paper trading only
-* Yahoo Finance dependency
+* Yahoo Finance dependency (with automated quality monitoring: stale-data + NaN gap detection)
 * No live brokerage integration
 * Ensemble disabled by default
 * Some FX crosses may produce incomplete first-cycle bars

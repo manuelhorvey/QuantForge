@@ -7,8 +7,10 @@ and model state reconstruction.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
+import pathlib
 import pickle
 from dataclasses import asdict, dataclass, field
 
@@ -137,16 +139,31 @@ class SimulationStore:
         logger.debug("snapshot captured: %s, %d assets", ts, len(asset_snapshots))
 
         # Persist cold state (model paths, etc.)
+        # TODO: migrate from pickle to structured format (msgpack/json)
         if cold_state is not None:
             try:
                 with open(self.cold_state_path, "wb") as f:
                     pickle.dump(cold_state, f)
+                digest = hashlib.sha256(pathlib.Path(self.cold_state_path).read_bytes()).hexdigest()
+                pathlib.Path(self.cold_state_path + ".sha256").write_text(digest)
             except Exception as e:
                 logger.warning("failed to persist cold state: %s", e)
 
     def load_cold_state(self) -> dict | None:
         if not os.path.exists(self.cold_state_path):
             return None
+
+        # Verify SHA-256 checksum if available
+        sha_path = pathlib.Path(self.cold_state_path + ".sha256")
+        if sha_path.exists():
+            expected = sha_path.read_text().strip()
+            actual = hashlib.sha256(pathlib.Path(self.cold_state_path).read_bytes()).hexdigest()
+            if expected != actual:
+                logger.error("cold_state.pkl checksum mismatch — possible tampering or corruption")
+                return None
+        else:
+            logger.warning("cold_state.pkl has no checksum file — skipping verification (first run after upgrade?)")
+
         try:
             with open(self.cold_state_path, "rb") as f:
                 return pickle.load(f)

@@ -1,11 +1,15 @@
-.PHONY: install install-dev test lint clean run
+.PHONY: install install-dev deps test lint clean run snapshot
 
 install:
-	pip install -r requirements.txt
+	pip install -r requirements.lock
 
 install-dev:
-	pip install -r requirements.txt
-	pip install pytest pytest-cov
+	pip install -r requirements.lock
+	pip install -r requirements-dev.lock
+
+deps:
+	pip-compile requirements.in --generate-hashes -o requirements.lock
+	pip install -r requirements.lock
 
 test:
 	python -m pytest tests/ -v $(ARGS)
@@ -19,6 +23,9 @@ lint:
 
 run:
 	PYTHONPATH=$$PYTHONPATH:. python -m paper_trading.ops.monitor
+
+snapshot:
+	python scripts/generate_snapshot.py
 
 clean:
 	find . -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true

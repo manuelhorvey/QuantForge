@@ -1,4 +1,11 @@
-# LIVE SYSTEM BASELINE SNAPSHOT
+# BASELINE SNAPSHOT — V1 (LEGACY)
+
+**This snapshot captures the pre-refactor system (2026-05-19) and is retained for historical reference only.**
+**It is NOT a current representation of the live system.** Key differences from the current system include:
+- Portfolio: 6 assets (vs 15 in current) with different allocations
+- Model type: `multi:softprob` with 3 classes (vs `binary:logistic` in current)
+- Different halt thresholds (prob_drift: 0.15 vs 0.25)
+- Position sizing uses vol_scalar (vs equal-risk weights in current)
 
 DO NOT EDIT. Generated for regression testing before any refactoring.
 Date: 2026-05-19
