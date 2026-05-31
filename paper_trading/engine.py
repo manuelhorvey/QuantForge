@@ -19,6 +19,7 @@ from paper_trading.config_manager import get_config
 from paper_trading.entry.decision import PositionIntent, PositionSide
 from paper_trading.execution.bridge import ExecutionBridge
 from paper_trading.execution.paper_broker import PaperBroker
+from paper_trading.governance.multipliers import compute_effective_multipliers
 from paper_trading.governance.risk import reset as _reset_risk_governance
 
 # Re-exported from child modules for backward compatibility
@@ -122,12 +123,11 @@ class PaperTradingEngine:
         # Rebalance target day: 0 = Monday (weekly narrative sync)
         self._rebalance_dow: int = 0
 
-        # Performance benchmark state
         self._cycle_times: list[float] = []
         self._cycle_times_maxlen = 1000
-        self._cached_mtm_total: float | None = None
-        self._cached_mtm_cycle: int = 0
         self._cycle_count: int = 0
+        self._mtm_cache_value: float | None = None
+        self._mtm_cache_cycle: int = -1
 
         # Fault-isolated actor orchestrator (Phase 5)
         self._orchestrator = EngineOrchestrator(
@@ -315,31 +315,24 @@ class PaperTradingEngine:
                 logger.error("%s: training FAILED - %s", name, e)
 
     def _compute_mtm_total(self) -> float:
-        """Compute total portfolio MTM with cycle-level caching.
-
-        Invalidated once per run_once() cycle to avoid redundant O(N)
-        iterations over all assets.
-        """
-        if not hasattr(self, "_cached_mtm_total"):
-            self._cached_mtm_total = None
-            self._cached_mtm_cycle = 0
+        if not hasattr(self, "_cycle_count"):
             self._cycle_count = 0
-        if self._cached_mtm_total is not None and self._cached_mtm_cycle == self._cycle_count:
-            return self._cached_mtm_total
+            self._mtm_cache_value = None
+            self._mtm_cache_cycle = -1
+        elif not hasattr(self, "_mtm_cache_value"):
+            self._mtm_cache_value = None
+            self._mtm_cache_cycle = -1
+        if self._mtm_cache_value is not None and self._mtm_cache_cycle == self._cycle_count:
+            return self._mtm_cache_value
         mtm = sum(a.mtm_value for a in self.assets.values())
         if self.satellite is not None:
             mtm += self.satellite.current_value
-        self._cached_mtm_total = mtm
-        self._cached_mtm_cycle = self._cycle_count
+        self._mtm_cache_value = mtm
+        self._mtm_cache_cycle = self._cycle_count
         return mtm
 
     def run_once(self):
         _t0 = time.perf_counter()
-        if not hasattr(self, "_cycle_count"):
-            self._cycle_count = 0
-            self._cached_mtm_total = None
-            self._cached_mtm_cycle = 0
-            self._cycle_times = []
         self._cycle_count += 1
 
         if is_market_closed():
@@ -577,7 +570,6 @@ class PaperTradingEngine:
                     "bars": 0,
                 }
                 self.state_store.append_trade(trade)
-                self.state_store.write_trade_outcomes_cache()
                 self.state_store.write_analytics_snapshot()
                 sat.trade_log.append(trade)
 
@@ -687,9 +679,15 @@ class PaperTradingEngine:
             if col not in self.assets:
                 continue
             asset = self.assets[col]
-            combined_size = max(
-                asset.governance._narrative_size_scalar * asset.governance._liquidity_size_scalar,
-                AssetEngine._MIN_SIZE_SCALAR,
+            _, _, combined_size = compute_effective_multipliers(
+                base_sl=asset.sl_mult,
+                base_tp=asset.tp_mult,
+                validity_state=asset.validity_sm.current_state.value if asset.validity_sm else "YELLOW",
+                regime_geometry=asset.regime_geometry,
+                narrative_sl_mult=asset.governance._narrative_sl_mult,
+                liquidity_sl_mult=asset.governance._liquidity_sl_mult,
+                narrative_size_scalar=asset.governance._narrative_size_scalar,
+                liquidity_size_scalar=asset.governance._liquidity_size_scalar,
             )
             vol_scale = 1.0 / combined_size if combined_size > 0 else 1.0
             adjusted[col] = adjusted[col] * vol_scale

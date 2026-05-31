@@ -18,6 +18,7 @@ from paper_trading.config_manager import get_config
 from paper_trading.entry.decision import EntryAction, PositionIntent, PositionSide, SignalType, TradeDecision
 from paper_trading.entry.deferred_entry import DeferredEntryStatus
 from paper_trading.governance.asset import AssetGovernance
+from paper_trading.governance.multipliers import compute_effective_multipliers
 from paper_trading.governance.regime import RegimeClassifier
 from paper_trading.governance.risk import record_trade_outcome as _record_exit_outcome
 from paper_trading.inference.pipeline import AssetInferencePipeline
@@ -256,14 +257,22 @@ class AssetEngine:
         return min_size + t * (1.0 - min_size)
 
     def _composite_size_scalar(self, extra_scalar: float = 1.0) -> float:
+        _, _, effective_size = compute_effective_multipliers(
+            base_sl=self.sl_mult,
+            base_tp=self.tp_mult,
+            validity_state=self.validity_sm.current_state.value if self.validity_sm else "YELLOW",
+            regime_geometry=self.regime_geometry,
+            narrative_sl_mult=self.governance._narrative_sl_mult,
+            liquidity_sl_mult=self.governance._liquidity_sl_mult,
+            narrative_size_scalar=self.governance._narrative_size_scalar,
+            liquidity_size_scalar=self.governance._liquidity_size_scalar,
+        )
         return (
             self.pos_mgr.position_size
             * self.pos_mgr.exposure_multiplier
             * extra_scalar
             * self._meta_size_multiplier()
-            * max(
-                self.governance._narrative_size_scalar * self.governance._liquidity_size_scalar, self._MIN_SIZE_SCALAR
-            )
+            * effective_size
         )
 
     def _compute_notional(self, extra_scalar: float = 1.0) -> float:
@@ -324,17 +333,17 @@ class AssetEngine:
             logger.warning("%s: skipped entry — invalid price=%s or vol=%s", self.name, entry_price, vol)
             return
 
-        # Regime-conditional geometry selection (multipliers on base sl_mult/tp_mult)
         state = self.validity_sm.current_state.value if self.validity_sm else "YELLOW"
-        geom = self.regime_geometry.get(state, {"sl_mult": 1.0, "tp_mult": 1.0})
-
-        sl_mult = (
-            self.sl_mult
-            * geom.get("sl_mult", 1.0)
-            * self.governance._narrative_sl_mult
-            * self.governance._liquidity_sl_mult
+        sl_mult, tp_mult, _ = compute_effective_multipliers(
+            base_sl=self.sl_mult,
+            base_tp=self.tp_mult,
+            validity_state=state,
+            regime_geometry=self.regime_geometry,
+            narrative_sl_mult=self.governance._narrative_sl_mult,
+            liquidity_sl_mult=self.governance._liquidity_sl_mult,
+            narrative_size_scalar=self.governance._narrative_size_scalar,
+            liquidity_size_scalar=self.governance._liquidity_size_scalar,
         )
-        tp_mult = self.tp_mult * geom.get("tp_mult", 1.0)
 
         fill_price = entry_price
         entry_slippage_bps = 0.0
@@ -582,7 +591,6 @@ class AssetEngine:
         self.trade_log = list(self.pos_mgr.trade_log)
         self._save_trade_journal(trade)
         if self.state_store is not None:
-            self.state_store.write_trade_outcomes_cache()
             self.state_store.write_analytics_snapshot()
         _record_exit_outcome(self.name, reason)
 
@@ -764,17 +772,17 @@ class AssetEngine:
                     deferred_entry = None
 
                     if entry_action == EntryAction.ENTER:
-                        # Pre-calculate SL distance for TP compiler
-                        # We use a simplified vol-based estimate here; _open_position will do the final physics.
                         vol = self._tb_vol(df["close"]) if hasattr(self, "_tb_vol") else 0.01
-                        # Use SL mult from config
                         state = self.validity_sm.current_state.value if self.validity_sm else "YELLOW"
-                        geom = self.regime_geometry.get(state, {"sl_mult": 1.0, "tp_mult": 1.0})
-                        curr_sl_mult = (
-                            self.sl_mult
-                            * geom.get("sl_mult", 1.0)
-                            * self.governance._narrative_sl_mult
-                            * self.governance._liquidity_sl_mult
+                        curr_sl_mult, _, _ = compute_effective_multipliers(
+                            base_sl=self.sl_mult,
+                            base_tp=self.tp_mult,
+                            validity_state=state,
+                            regime_geometry=self.regime_geometry,
+                            narrative_sl_mult=self.governance._narrative_sl_mult,
+                            liquidity_sl_mult=self.governance._liquidity_sl_mult,
+                            narrative_size_scalar=self.governance._narrative_size_scalar,
+                            liquidity_size_scalar=self.governance._liquidity_size_scalar,
                         )
                         sl_dist = decision.close_price * vol * curr_sl_mult
 
@@ -868,15 +876,17 @@ class AssetEngine:
 
             tp_geo = None
             if entry_action == EntryAction.ENTER:
-                # Pre-calculate SL distance for triggered entry
                 vol = self._tb_vol(df["close"] if isinstance(df, pd.DataFrame) and "close" in df.columns else df)
                 state = self.validity_sm.current_state.value if self.validity_sm else "YELLOW"
-                geom = self.regime_geometry.get(state, {"sl_mult": 1.0, "tp_mult": 1.0})
-                curr_sl_mult = (
-                    self.sl_mult
-                    * geom.get("sl_mult", 1.0)
-                    * self.governance._narrative_sl_mult
-                    * self.governance._liquidity_sl_mult
+                curr_sl_mult, _, _ = compute_effective_multipliers(
+                    base_sl=self.sl_mult,
+                    base_tp=self.tp_mult,
+                    validity_state=state,
+                    regime_geometry=self.regime_geometry,
+                    narrative_sl_mult=self.governance._narrative_sl_mult,
+                    liquidity_sl_mult=self.governance._liquidity_sl_mult,
+                    narrative_size_scalar=self.governance._narrative_size_scalar,
+                    liquidity_size_scalar=self.governance._liquidity_size_scalar,
                 )
                 sl_dist = float(df["close"].iloc[-1]) * vol * curr_sl_mult
 
@@ -1080,11 +1090,17 @@ class AssetEngine:
             for k, v in sorted(archetype_stats.items())
         }
 
-        # Current regime-based geometry (multipliers applied to base)
         state = self.validity_sm.current_state.value if self.validity_sm else "YELLOW"
-        geom = self.regime_geometry.get(state, {"sl_mult": 1.0, "tp_mult": 1.0})
-        current_sl = self.sl_mult * geom.get("sl_mult", 1.0)
-        current_tp = self.tp_mult * geom.get("tp_mult", 1.0)
+        current_sl, current_tp, _ = compute_effective_multipliers(
+            base_sl=self.sl_mult,
+            base_tp=self.tp_mult,
+            validity_state=state,
+            regime_geometry=self.regime_geometry,
+            narrative_sl_mult=self.governance._narrative_sl_mult,
+            liquidity_sl_mult=self.governance._liquidity_sl_mult,
+            narrative_size_scalar=self.governance._narrative_size_scalar,
+            liquidity_size_scalar=self.governance._liquidity_size_scalar,
+        )
 
         meta_inference = None
         if self._meta_label_model is not None and self._last_meta_proba is not None:

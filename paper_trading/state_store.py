@@ -342,22 +342,26 @@ class StateStore:
         except Exception:
             return pd.DataFrame(columns=columns)
 
-    def read_trade_outcomes(self) -> dict | None:
-        if not os.path.exists(self.trade_outcomes_path):
-            return None
-        try:
-            with open(self.trade_outcomes_path) as f:
-                return json.load(f)
-        except Exception:
-            return None
-
     def write_trade_outcomes_cache(self) -> None:
-        """Read all trades from SQLite, compute aggregates, cache to JSON."""
+        self.read_trade_outcomes()
+
+    def read_trade_outcomes(self) -> dict | None:
+        now = time.monotonic()
+        if hasattr(self, "_trade_outcomes_cache_ts") and now - self._trade_outcomes_cache_ts < 30.0:
+            if hasattr(self, "_trade_outcomes_cache") and self._trade_outcomes_cache is not None:
+                return self._trade_outcomes_cache
+        result = self._compute_trade_outcomes()
+        if result is not None:
+            self._trade_outcomes_cache = result
+            self._trade_outcomes_cache_ts = now
+        return result
+
+    def _compute_trade_outcomes(self) -> dict | None:
         try:
             with self._connect() as conn:
                 rows = conn.execute("SELECT * FROM trades").fetchall()
                 if not rows:
-                    return
+                    return None
                 df = pd.DataFrame([dict(r) for r in rows])
 
             reason_col = "reason" if "reason" in df.columns else "exit_reason"
@@ -422,8 +426,10 @@ class StateStore:
 
             with open(self.trade_outcomes_path, "w") as f:
                 json.dump(payload, f, indent=2)
-        except Exception as e:
-            logger.warning("Failed to write trade outcomes cache: %s", e)
+            return payload
+        except Exception:
+            logger.exception("Failed to compute trade outcomes")
+            return None
 
     # ── Attribution (SQLite) ───────────────────────────────────────
 

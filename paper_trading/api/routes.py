@@ -15,6 +15,7 @@ from paper_trading.api.common import (
     get_vol_baselines,
 )
 from paper_trading.config_manager import get_config
+from paper_trading.governance.multipliers import compute_governance_multipliers
 from paper_trading.governance.health import compute_all as _compute_health_all
 from paper_trading.governance.health import get_latest as _get_health_latest
 from paper_trading.governance.risk import get_latest as _get_risk_latest
@@ -91,11 +92,11 @@ def handle_trades(path: str, query: dict) -> str:
     offset = max(0, int(query.get("offset", 0)))
     trades = _STORE.read_trades(limit + offset)
 
-    seen = set()
-    deduped = []
+    seen: set[tuple] = set()
+    deduped: list[dict] = []
 
-    def _sig(t):
-        return (
+    for t in trades:
+        key = (
             t.get("asset"),
             t.get("entry_date"),
             t.get("exit_date"),
@@ -103,36 +104,30 @@ def handle_trades(path: str, query: dict) -> str:
             round(t.get("entry", 0), 4),
             round(t.get("exit", 0), 4),
         )
-
-    for t in trades:
-        s = _sig(t)
-        if s not in seen:
-            seen.add(s)
+        if key not in seen:
+            seen.add(key)
             deduped.append(t)
 
     if len(deduped) < limit + offset:
         snapshot = _STORE.load_snapshot()
         if snapshot and snapshot.assets:
             for aname, adata in snapshot.assets.items():
-                metrics = adata.get("metrics") or {}
-                trade_log = metrics.get("trade_log") or []
-                for t in trade_log:
-                    if t.get("exit_date") is None:
+                for t in (adata.get("metrics") or {}).get("trade_log") or []:
+                    exit_date = t.get("exit_date")
+                    if exit_date is None:
                         continue
-                    s = _sig(t)
-                    if s not in seen:
-                        seen.add(s)
+                    key = (
+                        t.get("asset"),
+                        t.get("entry_date"),
+                        exit_date,
+                        t.get("reason"),
+                        round(t.get("entry", 0), 4),
+                        round(t.get("exit", 0), 4),
+                    )
+                    if key not in seen:
+                        seen.add(key)
                         deduped.append(t)
-            deduped = sorted(deduped, key=lambda x: x.get("exit_date", ""), reverse=True)
-
-    seen2 = set()
-    final = []
-    for t in deduped:
-        k = (t.get("asset"), t.get("entry_date"), t.get("exit_date"), t.get("reason"))
-        if k not in seen2:
-            seen2.add(k)
-            final.append(t)
-    deduped = final
+            deduped.sort(key=lambda x: x.get("exit_date", ""), reverse=True)
 
     data = json.dumps(deduped[offset : offset + limit], default=str)
     cache_set(path, data)
@@ -274,29 +269,25 @@ def handle_governance(path: str, query: dict) -> str:
     governance = {}
     if snapshot and snapshot.assets:
         for name, asset in sorted(snapshot.assets.items()):
-            regime_sl = 1.0
-            regime_size = 1.0
             validity = (asset.get("validity_state") or "YELLOW").upper()
-            rg = (asset.get("regime_geometry") or {}).get(validity, {})
-            regime_sl = rg.get("sl_mult", 1.0)
-            regime_size = rg.get("tp_mult", 1.0)
-            narr_sl = asset.get("narrative_sl_mult", 1.0)
-            narr_size = asset.get("narrative_size_scalar", 1.0)
-            liq_sl = asset.get("liquidity_sl_mult", 1.0)
-            liq_size = asset.get("liquidity_size_scalar", 1.0)
-            combined_sl = regime_sl * narr_sl * liq_sl
-            raw_size = regime_size * narr_size * liq_size
-            combined_size = max(raw_size, 0.30)
+            regime_sl, combined_sl, regime_size, combined_size, floor_active = compute_governance_multipliers(
+                validity_state=validity,
+                regime_geometry=asset.get("regime_geometry") or {},
+                narrative_sl_mult=asset.get("narrative_sl_mult", 1.0),
+                liquidity_sl_mult=asset.get("liquidity_sl_mult", 1.0),
+                narrative_size_scalar=asset.get("narrative_size_scalar", 1.0),
+                liquidity_size_scalar=asset.get("liquidity_size_scalar", 1.0),
+            )
             governance[name] = {
                 "regime_sl_mult": regime_sl,
                 "regime_size_scalar": regime_size,
-                "narrative_sl_mult": narr_sl,
-                "narrative_size_scalar": narr_size,
-                "liquidity_sl_mult": liq_sl,
-                "liquidity_size_scalar": liq_size,
+                "narrative_sl_mult": asset.get("narrative_sl_mult", 1.0),
+                "narrative_size_scalar": asset.get("narrative_size_scalar", 1.0),
+                "liquidity_sl_mult": asset.get("liquidity_sl_mult", 1.0),
+                "liquidity_size_scalar": asset.get("liquidity_size_scalar", 1.0),
                 "combined_sl_mult": round(combined_sl, 4),
                 "combined_size_scalar": round(combined_size, 4),
-                "floor_active": combined_size == 0.30,
+                "floor_active": floor_active,
                 "validity_state": validity,
                 "narrative_regime": asset.get("narrative_regime"),
                 "narrative_stale": asset.get("narrative_stale", False),
