@@ -778,6 +778,7 @@ Project Root/
 | Dashboard shows CLSD / "weekend — no refresh" | Normal — market is closed | Engine resumes automatically Sun 17:00 ET |
 | "Market closed — skipping refresh" in logs | Normal — engine is paused for weekend | No action needed; data is stale but preserved |
 | "entry gate blocking" in logs | Normal — cooldown or same-day stop-out lock active after SL | Indicates `_can_enter()` is working; no action unless persists > 24h |
+| "flip blocked by conviction gate" in logs | Normal — regime conviction gate suppressed a flip | Check the reason string: `regime_margin_below_threshold` (low conviction), `regime_not_stable` (regime just flipped), `model_aligned` (model confident, bypass). If `regime_not_stable` dominates, the regime classifier is noisier than calibration sample — consider increasing `min_bars_in_regime`. If blocked flips are > 70% of attempted flips, the market may be ranging (see regime bias note in config). |
 | Clustered SL sequence (6+ same side, same day) | Deferred entry bypassing cooldown (pre-fix) | Should no longer occur after `_can_enter()` gate — file issue if seen |
 | State API `market_closed: true` | Engine correctly detected weekend | N/A — server-driven indicator |
 | Dashboard polling slower than usual | Intended — hooks reduce refetch rate 4-20x when markets closed | Saves bandwidth; restore normal rate on market open |

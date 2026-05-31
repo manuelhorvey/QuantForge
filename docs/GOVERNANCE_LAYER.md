@@ -1,9 +1,9 @@
 # QuantForge — Risk & Governance Layer
 
-Seven independent governance mechanisms operating at different frequencies and granularities.
+Nine independent governance mechanisms operating at different frequencies and granularities.
 
 | Layer | Frequency | Scope | Effect |
-|---|---|---|---|---|
+|---|---|---|---|
 | Validity state machine | Per tick | Per asset | Exposure 0–100% |
 | Feature stability | Per retrain | Per asset | Validity penalty |
 | Meta-labeling (XGBoost) | Per signal | Per asset | Continuous size scalar [0–1] |
@@ -12,6 +12,7 @@ Seven independent governance mechanisms operating at different frequencies and g
 | Macro narrative | Weekly | Global | SL width, position size |
 | Liquidity regime | Per signal | Per asset | SL width, size, halt |
 | PSI drift | Per cycle | Per asset | Validity penalty, halt at 3+ SEVERE |
+| Regime conviction flip gate | Per flip | Per asset | Blocks signal flips when regime is decisive but model is uncertain |
 
 ## 1. Validity State Machine
 
@@ -117,6 +118,28 @@ Automated distribution shift detection per feature per asset:
 - **Penalty accumulation**: PSI penalty is additive with feature stability penalty (both are separate terms in `update_validity()`) — worst-wins at each penalty type, summed across types
 - **Dashboard**: `PSIDriftCard.tsx` — per-asset table with color-coded feature rows, trend arrows, classification badges, worst-classification summary, collapsible halted section
 - **Endpoint**: `GET /psi.json` (30s cache)
+
+## 9. Regime Conviction Flip Gate (Per-Flip)
+
+A pre-close gate that suppresses signal flips when the market structure has clearly shifted but the model is lagging — deferring to the regime signal.
+
+- **Core** (`paper_trading/governance/conviction_gate.py`):
+  - `RegimeRow` TypedDict stores per-bar regime probabilities
+  - `evaluate_regime_conviction_gate()` — AND-gate with five exit paths
+- **AND condition**: only allow flip when ALL of:
+  - `regime_margin = abs(P_trend - P_range) ≥ threshold`
+  - `model_confidence ≤ confidence_threshold` (model is uncertain)
+  - `bars_in_current_regime ≥ min_bars_in_regime` (regime is stable)
+- **Pass-through paths** (flip allowed without AND check):
+  - `volatile_bypass` — structural shock override (`P_volatile == 1.0`) is unambiguous
+  - `model_aligned` — model is already confident in the flip direction
+  - `no_regime_data` — classifier hasn't run yet (cold start)
+- **Placement**: evaluated in `asset_engine.py:387-392` **before** position close — if the gate blocks, the position stays open and no flip cooldown is set, avoiding the flat-limbo edge case
+- **Integration**: cooldown (`min_flip_interval_bars: 3`) and conviction gate are independent filters at different points: cooldown blocks re-entry after an executed flip; conviction gate prevents the flip from executing at all
+- **Calibration**: threshold (`regime_margin_threshold: 0.35`) empirically derived from 394 flip events across 9 dashboard assets (`oos_predictions.parquet`). Surviving flips at 0.35 show 53.6% win rate and 1.43 profit factor; blocked flips show 45.9% WR and 0.87 PF (noise correctly filtered)
+- **Regime bias in calibration sample**: 62.8% trend, 33.8% range, 3.3% volatile — in a ranging market the gate will block more aggressively, which is correct behavior
+- **Config**: `configs/paper_trading.yaml` → `optimizations.regime_conviction_flip_gate` (enabled by default)
+- **Monitoring**: each blocked flip logs `"flip blocked by conviction gate — <reason>"` — grep for the reason distribution after a few days
 
 ## Multiplicative Governance Chain
 
