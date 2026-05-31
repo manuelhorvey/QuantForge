@@ -20,7 +20,6 @@ from paper_trading.engine import (
     flatten,
     norm_index,
 )
-from paper_trading.config_manager import EngineConfig, get_config
 from paper_trading.portfolio_builder import build_paper_portfolio
 
 

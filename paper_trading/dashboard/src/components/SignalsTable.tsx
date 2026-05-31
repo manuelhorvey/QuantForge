@@ -37,6 +37,7 @@ export default function SignalsTable() {
   const rows = useMemo(() => {
     if (!data?.assets) return []
     return Object.entries(data.assets)
+      .filter(([name]) => name in (data.portfolio?.allocations ?? {}))
       .filter(([name]) => name.toLowerCase().includes(search.toLowerCase()))
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([name, asset]) => {

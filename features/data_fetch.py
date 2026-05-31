@@ -3,7 +3,6 @@ import threading
 import time
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 logger = logging.getLogger("quantforge.data_fetch")
@@ -13,7 +12,31 @@ logger = logging.getLogger("quantforge.data_fetch")
 _FETCH_PERIOD = "2y"
 _FETCH_WARMUP_BUFFER = 500
 
-_MACRO_TICKERS = ["DX-Y.NYB", "^VIX", "^GSPC", "CL=F", "^TNX"]
+_MACRO_TICKERS = ["DX-Y.NYB", "^VIX", "^GSPC", "CL=F", "^TNX", "^FVX", "^TYX", "^IRX"]
+
+# Currency -> benchmark yield ticker mapping.
+# US Treasury yields at different maturities serve as proxies for
+# structurally similar yield levels in other developed economies.
+# ^TNX (10Y) = moderate yield (USD, GBP, CAD)
+# ^FVX  (5Y) = lower yield  (EUR)
+# ^TYX (30Y) = higher yield (AUD, NZD)
+# ^IRX (3M)  = near-zero     (JPY, CHF)
+CURRENCY_YIELD_TICKERS: dict[str, str] = {
+    "USD": "^TNX",
+    "EUR": "^FVX",
+    "GBP": "^TNX",
+    "JPY": "^IRX",
+    "CHF": "^IRX",
+    "AUD": "^TYX",
+    "NZD": "^TYX",
+    "CAD": "^TNX",
+}
+
+# Assets that have no meaningful interest rate differential (crypto, commodities)
+_ZERO_RATE_ASSETS: set[str] = {"BTC", "GC", "CL", "ES", "NQ", "IWM", "VIX", "DJI"}
+
+# Known major currency codes — built from CURRENCY_YIELD_TICKERS keys
+_KNOWN_CURRENCIES: set[str] = set(CURRENCY_YIELD_TICKERS.keys())
 
 
 class _TTLCache:
@@ -103,9 +126,11 @@ def _fetch_macro_batch() -> dict[str, pd.Series]:
             logger.debug("macro ticker %s not in batch — fetching individually", ticker)
             result[ticker] = _fetch_single_series(ticker)
 
-    # Special handling: TNX yield as decimal
-    if "^TNX" in result:
-        result["^TNX"] = result["^TNX"] / 100.0
+    # Normalise all yield tickers from percentage to decimal
+    _yield_tickers = {"^TNX", "^FVX", "^TYX", "^IRX"}
+    for yt in _yield_tickers:
+        if yt in result and not result[yt].empty:
+            result[yt] = result[yt] / 100.0
 
     _macro_cache.set("macro_batch", result)
     logger.debug("macro batch: %d tickers fetched", len(result))
@@ -188,11 +213,31 @@ def fetch_asset_data(
     wti = wti.reindex(common).ffill()
     tnx = tnx.reindex(common).ffill()
 
-    _rng = np.random.default_rng(42)
-    rate_diffs = pd.DataFrame(
-        {col: tnx * float(_rng.uniform(0.5, 1.5)) for col in [asset_name]},
-        index=common,
-    )
+    # ── Real rate differentials —───────────────────────────────────
+    # Parse asset name into base/quote currencies for FX pairs.
+    # For non-FX assets (BTC, GC, etc.) rate_diff = 0.
+    asset_upper = asset_name.upper()
+    base_ccy: str | None = None
+    quote_ccy: str | None = None
+    if (
+        asset_upper not in _ZERO_RATE_ASSETS
+        and len(asset_upper) == 6
+        and asset_upper[:3] in _KNOWN_CURRENCIES
+        and asset_upper[3:] in _KNOWN_CURRENCIES
+    ):
+        base_ccy = asset_upper[:3]
+        quote_ccy = asset_upper[3:]
+
+    if base_ccy is not None and quote_ccy is not None:
+        base_ticker = CURRENCY_YIELD_TICKERS[base_ccy]
+        quote_ticker = CURRENCY_YIELD_TICKERS[quote_ccy]
+        base_yield = macro.get(base_ticker, tnx).reindex(common).ffill()
+        quote_yield = macro.get(quote_ticker, tnx).reindex(common).ffill()
+        rate_diff_series = base_yield - quote_yield
+    else:
+        rate_diff_series = pd.Series(0.0, index=common)
+
+    rate_diffs = pd.DataFrame({asset_name: rate_diff_series}, index=common)
 
     commodities = wti.to_frame("WTI")
 

@@ -73,6 +73,11 @@ satellite:
     sl_mult: 0.58
     tp_mult: 1.51
 assets:
+  BTCUSD:
+    ticker: BTC-USD
+    allocation: 0.065
+    sl_mult: 3.0
+    tp_mult: 2.5
   EURGBP:
     ticker: EURGBP=X
     allocation: 0.065

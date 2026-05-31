@@ -36,6 +36,18 @@ def handle_state(path: str, query: dict) -> str:
         status["market_closed"] = is_market_closed()
         if "last_update" not in status or status["last_update"] is None:
             status["last_update"] = state.get("timestamp", "")
+        # Patch: merge allocations from config for assets present in snapshot
+        # but missing from portfolio.allocations (e.g. after adding a new
+        # asset to config without re-saving state).
+        assets = state.get("assets") or {}
+        portfolio = state.get("portfolio") or {}
+        if isinstance(portfolio, dict) and isinstance(assets, dict):
+            allocs = portfolio.setdefault("allocations", {})
+            cfg = get_config()
+            pf = build_paper_portfolio(cfg.halt)
+            for name in assets:
+                if name not in allocs and name in pf:
+                    allocs[name] = pf[name]["alloc"]
         data = json.dumps(state, indent=2, default=str)
     else:
         cfg = get_config()

@@ -19,6 +19,7 @@ from paper_trading.config_manager import get_config
 from paper_trading.entry.decision import PositionIntent, PositionSide
 from paper_trading.execution.bridge import ExecutionBridge
 from paper_trading.execution.paper_broker import PaperBroker
+from paper_trading.governance.risk import reset as _reset_risk_governance
 
 # Re-exported from child modules for backward compatibility
 from paper_trading.ops.data_fetcher import (  # noqa: F401
@@ -90,6 +91,10 @@ class PaperTradingEngine:
         self.portfolio_peak_value: float | None = None
         self._wal = wal_writer or WalWriter(BASE, source="engine")
 
+        # Reset global risk governance state to prevent stale data from
+        # a previous session leaking into the new run.
+        _reset_risk_governance()
+
         snapshot = self.state_store.load_snapshot()
         if snapshot is not None and snapshot.engine_status:
             self.start_date = datetime.fromisoformat(
@@ -113,6 +118,9 @@ class PaperTradingEngine:
         self._sim_store = SimulationStore(BASE)
         self._rebalance_last_day: datetime | None = None
         self._rebalance_weights: dict[str, float] = {}
+
+        # Rebalance target day: 0 = Monday (weekly narrative sync)
+        self._rebalance_dow: int = 0
 
         # Performance benchmark state
         self._cycle_times: list[float] = []
@@ -624,13 +632,16 @@ class PaperTradingEngine:
         Rebalance once per week on Monday (same cadence as narrative refresh),
         but only if there are enough assets with price data.
         """
-        want = getattr(self, "_rebalance_dow", None)
-        if want is None:
-            self._rebalance_dow = datetime.now(tz=ET).weekday()
-        if self._rebalance_last_day is None or self._rebalance_last_day != datetime.now(tz=ET).date():
-            self._rebalance_last_day = datetime.now(tz=ET).date()
-            return True
-        return False
+        today = datetime.now(tz=ET).date()
+        today_dow = today.weekday()
+        # Only rebalance on the configured day-of-week (default Monday=0)
+        if today_dow != self._rebalance_dow:
+            return False
+        # Only rebalance once per day (prevents intra-day duplicate triggers)
+        if self._rebalance_last_day == today:
+            return False
+        self._rebalance_last_day = today
+        return True
 
     def _collect_daily_returns(self, window: int = 252) -> pd.DataFrame:
         """Collect daily returns for all assets that have price data.

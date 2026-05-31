@@ -1,11 +1,15 @@
+import logging
 import threading
 from collections import deque
 from datetime import datetime
 
 from paper_trading.governance.drift import get_shadow_intelligence
 
+logger = logging.getLogger("quantforge.risk")
+
 _lock = threading.Lock()
 _cache: dict = {}
+_MAX_CACHE_SIZE = 500
 
 # Per-asset SL hit rate tracker
 _sl_hit_rates: dict[str, deque] = {}
@@ -25,6 +29,15 @@ FLAG_THRESHOLD = 0.3
 SL_HIT_RATE_WINDOW = 20  # last N trades to evaluate
 SL_HIT_RATE_ALERT = 0.40  # alert if SL hit rate exceeds 40%
 SL_HIT_RATE_CRITICAL = 0.55  # halt trading if SL hit rate exceeds 55%
+
+
+def reset() -> None:
+    """Clear all cached state. Call on engine initialisation to prevent
+    stale data from a previous session leaking into a new run."""
+    with _lock:
+        _cache.clear()
+    with _sl_hit_rate_lock:
+        _sl_hit_rates.clear()
 
 
 def record_trade_outcome(asset: str, reason: str) -> None:
@@ -122,6 +135,9 @@ def evaluate(asset: str) -> dict:
 
         with _lock:
             _cache[asset] = signal
+            if len(_cache) > _MAX_CACHE_SIZE:
+                _cache.clear()
+                logger.warning("risk cache exceeded %d entries — clearing", _MAX_CACHE_SIZE)
 
         return signal
     except Exception:

@@ -869,7 +869,7 @@ class AssetEngine:
             tp_geo = None
             if entry_action == EntryAction.ENTER:
                 # Pre-calculate SL distance for triggered entry
-                vol = self._tb_vol(df)
+                vol = self._tb_vol(df["close"] if isinstance(df, pd.DataFrame) and "close" in df.columns else df)
                 state = self.validity_sm.current_state.value if self.validity_sm else "YELLOW"
                 geom = self.regime_geometry.get(state, {"sl_mult": 1.0, "tp_mult": 1.0})
                 curr_sl_mult = (

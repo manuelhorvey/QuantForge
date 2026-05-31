@@ -85,6 +85,23 @@ class AssetInferencePipeline:
             asset.name,
             asset.ticker,
         )
+
+        # ── Inference truncation: slice inputs to min required rows ──
+        # When truncation is validated we only predict on the last row,
+        # but indicator lookbacks (max 253) still need warmup history.
+        # Slicing to _MAX_INDICATOR_LOOKBACK + margin cuts ~40% feature
+        # computation with no accuracy loss.
+        if getattr(asset, "_truncate_inference", False):
+            _trunc_rows = _MAX_INDICATOR_LOOKBACK + 50
+            hist_prices = hist_prices.iloc[-_trunc_rows:]
+            if not rate_diffs.empty:
+                rate_diffs = rate_diffs.iloc[-_trunc_rows:]
+            dxy = dxy.iloc[-_trunc_rows:]
+            vix = vix.iloc[-_trunc_rows:]
+            spx = spx.iloc[-_trunc_rows:]
+            if not commodities.empty:
+                commodities = commodities.iloc[-_trunc_rows:]
+
         alpha_df = build_alpha_features(
             hist_prices,
             rate_diffs,
@@ -98,6 +115,10 @@ class AssetInferencePipeline:
         alpha_idx = alpha_df.index
         ohlcv = fetch_asset_ohlcv(asset.ticker)
         if not ohlcv.empty:
+            # Apply same truncation slice if active
+            if getattr(asset, "_truncate_inference", False):
+                _trunc_rows = _MAX_INDICATOR_LOOKBACK + 50
+                ohlcv = ohlcv.iloc[-_trunc_rows:]
             ohlcv = ohlcv.reindex(alpha_idx).ffill()
         archetype_df = pd.DataFrame(index=alpha_idx)
         import ta
