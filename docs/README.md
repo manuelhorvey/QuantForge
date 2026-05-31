@@ -28,7 +28,7 @@ Project documentation for the QuantForge cross-sectional factor ranking and pape
 
 ### Historical Research Archives
 
-Prior system documentation is archived at `archive/research_system_v1/`.
+Prior system documentation is archived at `docs/archive/research_system_v1/`.
 
 | Document | Description |
 |---|---|

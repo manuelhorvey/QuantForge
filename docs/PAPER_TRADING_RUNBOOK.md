@@ -27,25 +27,27 @@ Operational procedures for the paper trading system. This document is for the pe
 
 ### Assets
 
-**Core portfolio (13 assets promoted from walk-forward screening):**
+**Core portfolio (15 assets promoted from walk-forward screening):**
 
-All assets use equal-risk allocation (7.7% each), `sl_mult=2.0`, `tp_mult=1.5` (except BTCUSD: `sl_mult=3.0`, `tp_mult=2.5`).
+All assets use risk-parity allocation (6.5–7.8% each), `sl_mult=2.0`, `tp_mult=1.5` (except BTCUSD, ES, NQ: see below).
 
-| Asset | Ticker | sl_mult | tp_mult |
-|---|---|---|---|
-| BTCUSD | BTC-USD | 3.0 | 2.5 |
-| EURGBP | EURGBP=X | 2.0 | 1.5 |
-| GC | GC=F | 2.0 | 1.5 |
-| NZDCHF | NZDCHF=X | 2.0 | 1.5 |
-| CHFJPY | CHFJPY=X | 2.0 | 1.5 |
-| CADJPY | CADJPY=X | 2.0 | 1.5 |
-| USDCHF | USDCHF=X | 2.0 | 1.5 |
-| EURJPY | EURJPY=X | 2.0 | 1.5 |
-| EURCAD | EURCAD=X | 2.0 | 1.5 |
-| AUDCHF | AUDCHF=X | 2.0 | 1.5 |
-| USDJPY | USDJPY=X | 2.0 | 1.5 |
-| USDCAD | USDCAD=X | 2.0 | 1.5 |
-| GBPCHF | GBPCHF=X | 2.0 | 1.5 |
+| Asset | Ticker | Allocation | sl_mult | tp_mult |
+|---|---|---|---|---|
+| BTCUSD | BTC-USD | 6.5% | 3.0 | 2.5 |
+| EURGBP | EURGBP=X | 6.5% | 2.0 | 1.5 |
+| GC | GC=F | 6.5% | 2.0 | 1.5 |
+| NZDCHF | NZDCHF=X | 6.5% | 2.0 | 1.5 |
+| CHFJPY | CHFJPY=X | 6.5% | 2.0 | 1.5 |
+| CADJPY | CADJPY=X | 6.5% | 2.0 | 1.5 |
+| USDCHF | USDCHF=X | 6.5% | 2.0 | 1.5 |
+| EURJPY | EURJPY=X | 6.5% | 2.0 | 1.5 |
+| EURCAD | EURCAD=X | 6.5% | 2.0 | 1.5 |
+| AUDCHF | AUDCHF=X | 6.5% | 2.0 | 1.5 |
+| USDJPY | USDJPY=X | 6.5% | 2.0 | 1.5 |
+| USDCAD | USDCAD=X | 6.5% | 2.0 | 1.5 |
+| GBPCHF | GBPCHF=X | 6.5% | 2.0 | 1.5 |
+| ES | ES=F | 7.7% | 2.0 | 2.5 |
+| NQ | NQ=F | 7.8% | 2.0 | 2.5 |
 
 **BTC satellite bucket:** 5% AUM cap, vol target 40%, drawdown limit 25%, macro-gated entry (VIX, DXY, vol z-score, portfolio returns, crisis regime). Managed by `paper_trading/satellite/engine.py:HighVolSatellite`.
 
@@ -53,7 +55,7 @@ All assets use equal-risk allocation (7.7% each), `sl_mult=2.0`, `tp_mult=1.5` (
 
 **Meta-Confidence as Size Scalar:** The XGBoost-based `MetaLabelModel` produces a continuous probability. Below `threshold` (0.55 for most assets), trade notional is 0. Above threshold, `_meta_size_multiplier()` maps [threshold, 1.0] → [min_size, 1.0] linearly. Meta-confidence never modifies TP geometry, trailing, or scale-out schedules.
 
-**Scale-Out Strategy:** For assets with scale-out enabled (AUDJPY, CHFJPY, EURAUD, EURCAD, GBPCAD, USDJPY), profit-taking is split into 4 equal tiers (25% at 0.25× / 0.50× / 0.75× / 1.00× of original TP multiplier). Stop-loss moves to breakeven after Tier 1 fills (`activate_breakeven_after: 0`). See `ScaleOutEngine` in `paper_trading/scale_out.py`.
+**Scale-Out Strategy:** Profit-taking is split into configurable tiers via `ScaleOutEngine` in `paper_trading/position/scale_out.py`. Tier profiles are generated dynamically by `entry/tp_compiler.py:_generate_scale_out_profile()` based on archetype and convexity — typically 4 equal tiers (25% at 0.25× / 0.50× / 0.75× / 1.00× of original TP multiplier). Stop-loss moves to breakeven after Tier 1 fills. See `ScaleOutEngine` in `paper_trading/position/scale_out.py`.
 
 **Dashboard features:** Per-asset scale-out tier progress visualization (filled vs pending tiers shown as color-coded blocks in AssetCard). SL/TP hit rate gauge bars (GREEN/YELLOW/RED thresholds) in the Trade Outcomes table. PSI Drift panel with per-feature distribution shift scores, trend arrows, and color-coded classification badges. **Satellite card** shows entry price, stop price, target price when position active; SL/TP show `—` when flat; last exit reason (SL_HIT/TP_HIT/GATE_CLOSED) is displayed after each exit.
 
@@ -141,9 +143,9 @@ config:
 ```
 
 The script:
-1. Loads cached model pickles from `paper_trading/models/`
+1. Loads cached models from `paper_trading/models/`
 2. Downloads fresh OHLCV data via yfinance
-3. Downloads FRED macro data (rate_diff, yields, VIX, DXY)
+3. Downloads macro data (DXY, VIX, SPX, WTI, TNX) via yfinance
 4. Computes features
 5. Runs inference on all assets
 6. Opens/closes positions based on signal vs current position
@@ -184,14 +186,19 @@ curl http://127.0.0.1:5000/ping
 
 After startup (Mon–Fri during market hours), verify log output shows:
 ```
-EURAUD: BUY conf=XX% @ $XX.XX
+BTCUSD: BUY conf=XX% @ $XX.XX
+EURGBP: SELL conf=XX% @ $XX.XX
 GC: SELL conf=XX% @ $XX.XX
-AUDJPY: BUY conf=XX% @ $XX.XX
-CHFJPY: FLAT conf=XX% @ $XX.XX
+NZDCHF: FLAT conf=XX% @ $XX.XX
+CHFJPY: BUY conf=XX% @ $XX.XX
+CADJPY: FLAT conf=XX% @ $XX.XX
+USDCHF: SELL conf=XX% @ $XX.XX
+EURJPY: BUY conf=XX% @ $XX.XX
 EURCAD: SELL conf=XX% @ $XX.XX
-GBPCAD: BUY conf=XX% @ $XX.XX
-USDCAD: FLAT conf=XX% @ $XX.XX
+AUDCHF: FLAT conf=XX% @ $XX.XX
 USDJPY: SELL conf=XX% @ $XX.XX
+USDCAD: FLAT conf=XX% @ $XX.XX
+GBPCHF: BUY conf=XX% @ $XX.XX
 BTC satellite: gate=OPEN/CLOSED, position=ACTIVE/FLAT, value=XXXX
 Portfolio: $XXXXX (XX%)
 ```
@@ -244,14 +251,19 @@ for name, a in s['assets'].items():
 
 | Asset | Label | BUY/SELL Ratio | Mean Confidence |
 |-------|-------|----------------|-----------------|
-| EURAUD | tb20 | ~1:1 | 55-75% |
-| GC | fwd60 | ~1:1 | 55-75% |
-| AUDJPY | tb20 | ~1:1 | 55-75% |
+| BTCUSD | tb20 | ~1:1 | 55-75% |
+| EURGBP | tb20 | ~1:1 | 55-75% |
+| GC | tb20 | ~1:1 | 55-75% |
+| NZDCHF | tb20 | ~1:1 | 55-75% |
 | CHFJPY | tb20 | ~1:1 | 55-75% |
+| CADJPY | tb20 | ~1:1 | 55-75% |
+| USDCHF | tb20 | ~1:1 | 55-75% |
+| EURJPY | tb20 | ~1:1 | 55-75% |
 | EURCAD | tb20 | ~1:1 | 55-75% |
-| GBPCAD | tb20 | ~1:1 | 55-75% |
-| USDCAD | tb20 | ~1:1 | 55-75% |
+| AUDCHF | tb20 | ~1:1 | 55-75% |
 | USDJPY | tb20 | ~1:1 | 55-75% |
+| USDCAD | tb20 | ~1:1 | 55-75% |
+| GBPCHF | tb20 | ~1:1 | 55-75% |
 
 ### Narrative Check (Monday Morning)
 
@@ -320,10 +332,10 @@ curl http://127.0.0.1:5000/psi.json | python3 -m json.tool
 
 The first week of each year, verify the annual retrain ran:
 ```
-ls -la paper_trading/models/*.pkl
+ls -la paper_trading/models/*.json
 ```
 
-Check the pickle modification dates are within the expected retrain window.
+Check the model file modification dates are within the expected retrain window.
 
 If retrain failed:
 ```bash
@@ -475,7 +487,7 @@ Real-time liquidity regime computed from daily OHLCV volume and price data on ev
 **Dashboard indicators:**
 - **LIQ THIN** (yellow badge) — one or more assets in THIN regime
 - **LIQ STRSD** (red badge) — one or more assets in STRESSED regime (halted)
-- Hover tooltip shows per-asset breakdown: `EURAUD: THIN sl=1.15x size=0.85x`
+- Hover tooltip shows per-asset breakdown: `EURCAD: THIN sl=1.15x size=0.85x`
 
 **Response:**
 - THIN regime: No action required. Monitor for progression to STRESSED.
@@ -515,12 +527,12 @@ curl http://127.0.0.1:5000/psi.json | python3 -m json.tool
 If yfinance returns empty or stale data for any ticker:
 
 **Symptoms:**
-- `ERROR - No live data for XLF` in logs
+- `ERROR - No live data for BTC-USD` in logs
 - Dashboard shows stale prices (>24h old)
 - Missing signals for that asset
 
 **Response:**
-1. Verify yfinance availability: `python -c "import yfinance as yf; d=yf.download('XLF',period='5d'); print(d.empty)"`
+1. Verify yfinance availability: `python -c "import yfinance as yf; d=yf.download('BTC-USD',period='5d'); print(d.empty)"`
 2. Check internet connectivity
 3. If yfinance is down, the engine will continue running but cannot generate new signals
 4. If the outage exceeds one trading day, consider whether to halt
@@ -626,10 +638,10 @@ Items to build after paper trading confirms the system works.
 
 | Item | Description | Depends On |
 |------|-------------|------------|
-| AUDJPY — RESOLVED | Added to live portfolio (5/5 WF windows, Sharpe 2.62). Correlated with NZDJPY (r=0.87) but diversifies JPY carry exposure at 6% weight. | — |
+| AUDJPY — RESOLVED (historical) | Added to prior portfolio iteration (5/5 WF windows, Sharpe 2.62). Correlated with NZDJPY (r=0.87) but diversifies JPY carry exposure. | — |
 | Weekly timeframe models | Lower frequency for macro-only signals | Feature engineering |
 | Meta-labeling filter | Second-stage trade filter to reduce trade count | More training data |
-| Sector rotation extension | Apply driver atlas to other equity sectors | Paper trading results |
+| Sector rotation extension | Apply driver atlas to ES/NQ equity index sectors | Paper trading results |
 | Regime classifier V2 | Reduce volatility gate false positives | More regime diversity in data |
 
 ### P2 — Future Research
@@ -637,7 +649,7 @@ Items to build after paper trading confirms the system works.
 | Item | Description |
 |------|-------------|
 | Intraday models | 1-hour bars for FX (requires COT + tick data) |
-| Options overlay | Covered call/cash-secured put on XLF positions |
+| Options overlay | Covered call/cash-secured put on ES/NQ equity-index positions |
 | Crypto expansion | ETH, SOL with momentum_crypto driver cluster |
 | Cross-asset feature transfer | Transfer learning between driver clusters |
 | LLM-based sentiment | Macro news sentiment as feature for FX |
@@ -646,7 +658,7 @@ Items to build after paper trading confirms the system works.
 
 ## 6. Execution Physics and Sizing (Hardening)
 
-Live paper trading applies **spread + impact** on entries and exits via `ExecutionBridge` (`paper_trading/execution_bridge.py`). Config is in `configs/paper_trading.yaml`:
+Live paper trading applies **spread + impact** on entries and exits via `ExecutionBridge` (`paper_trading/execution/bridge.py`). Config is in `configs/paper_trading.yaml`:
 
 ```yaml
 execution_defaults:
@@ -656,7 +668,7 @@ execution_defaults:
   impact_coeff: 0.1
 
 assets:
-  EURAUD:
+  EURCAD:
     regime_sizing: true
     execution_config:
       base_spread_bps: 1.5
@@ -681,7 +693,7 @@ assets:
 
 **Decision payload** may include `macro_weight` when adaptive macro is active.
 
-**Research / validation:** see `docs/HARDENING_ROADMAP.md` for extended history, lead-lag, and pytest targets.
+**Research / validation:** see `docs/archive/research_system_v1/HARDENING_ROADMAP.md` for extended history, lead-lag, and pytest targets.
 
 ---
 
@@ -712,7 +724,7 @@ Project Root/
 │   │   └── attribution/          # Per-asset attribution parquet files
 │   ├── raw/historical_extended/  # 2000+ OHLCV (after backfill)
 │   └── processed/
-│       ├── macro_factors.parquet # FRED macro data
+│       ├── macro_factors.parquet # Macro data (yfinance-derived)
 │       └── walkforward_summary.csv  # 30-asset walk-forward ranking
 ├── benchmarks/                   # Hot-path microbenchmark
 │   ├── microbenchmark.py         # CLI: cold/warm cycles, sweep, profile
@@ -757,8 +769,8 @@ Project Root/
 |---------|-------------|-------|
 | Dashboard not loading | Port 5000 in use | `fuser 5000/tcp` |
 | Stale prices | yfinance rate limited | `python -c "import yfinance as yf; d=yf.download('BTC-USD',period='1d'); print(d)"` |
-| Model pickle missing | First run or retrain failed | `ls -la paper_trading/models/` |
-| All assets showing FLAT with low conf | Macro data stale | Check `data/processed/macro_factors.parquet` modification date |
+| Model file missing | First run or retrain failed | `ls -la paper_trading/models/*.json` |
+| All assets showing FLAT with low conf | Macro data stale | Check `data/live/cache/` modification dates |
 | Portfolio value not changing | Process not running | `ps aux | grep monitor.py` |
 | BTC drawdown > 15% | Normal for BTC (limit is -15%) | Let it run unless RED state persists > 5 days |
 | JPY cross entering RED state | VIX spike or yield spread inversion | Check VIX level and US-JP 10y spread |

@@ -78,11 +78,11 @@ Computed inline in `paper_trading/inference/pipeline.py:_generate_and_apply()` v
 ### Sources
 | Source | Data | Frequency |
 |---|---|---|
-| `yfinance` | Daily OHLCV for all assets + macro (DXY=VNYSB, VIX=^VIX, SPX=^GSPC, WTI=CL=F, TNX=^TNX) | Daily bars |
+| `yfinance` | Daily OHLCV for all assets + macro (DXY=DX-Y.NYB, VIX=^VIX, SPX=^GSPC, WTI=CL=F, TNX=^TNX) | Daily bars |
 | FRED | Not used in production pipeline | — |
 
 ### Ingestion rules
-- `fetch_live(ticker)` — 250 days (TZ-aware → normalized to UTC date via `pipeline.py:51-56`)
+- `fetch_live(ticker)` — 500 days, truncated to 250d for XGBoost (TZ-aware → normalized to UTC date via `pipeline.py:51-56`)
 - `fetch_asset_data(name, ticker)` — 10y close + macro (TZ-naive date index)
 - `fetch_asset_ohlcv(ticker)` — 10y full OHLCV (TZ-naive date index, 0.5s rate-limited)
 - All date indices are `datetime64[ns]` at daily resolution (no intraday)
@@ -158,22 +158,24 @@ df.index = pd.to_datetime(df.index.tz_convert("UTC").date)
 **Builder:** `paper_trading/portfolio_builder.py:build_paper_portfolio()`
 **Source:** `configs/paper_trading.yaml`
 
-### Current assets (13 promoted)
-| Asset | Ticker | sl_mult | tp_mult |
-|---|---|---|---|
-| BTCUSD | BTC-USD | 3.0 | 2.5 |
-| EURGBP | EURGBP=X | 2.0 | 1.5 |
-| GC | GC=F | 2.0 | 1.5 |
-| NZDCHF | NZDCHF=X | 2.0 | 1.5 |
-| CHFJPY | CHFJPY=X | 2.0 | 1.5 |
-| CADJPY | CADJPY=X | 2.0 | 1.5 |
-| USDCHF | USDCHF=X | 2.0 | 1.5 |
-| EURJPY | EURJPY=X | 2.0 | 1.5 |
-| EURCAD | EURCAD=X | 2.0 | 1.5 |
-| AUDCHF | AUDCHF=X | 2.0 | 1.5 |
-| USDJPY | USDJPY=X | 2.0 | 1.5 |
-| USDCAD | USDCAD=X | 2.0 | 1.5 |
-| GBPCHF | GBPCHF=X | 2.0 | 1.5 |
+### Current assets (15 promoted)
+| Asset | Ticker | Allocation | sl_mult | tp_mult |
+|---|---|---|---|---|
+| BTCUSD | BTC-USD | 6.5% | 3.0 | 2.5 |
+| EURGBP | EURGBP=X | 6.5% | 2.0 | 1.5 |
+| GC | GC=F | 6.5% | 2.0 | 1.5 |
+| NZDCHF | NZDCHF=X | 6.5% | 2.0 | 1.5 |
+| CHFJPY | CHFJPY=X | 6.5% | 2.0 | 1.5 |
+| CADJPY | CADJPY=X | 6.5% | 2.0 | 1.5 |
+| USDCHF | USDCHF=X | 6.5% | 2.0 | 1.5 |
+| EURJPY | EURJPY=X | 6.5% | 2.0 | 1.5 |
+| EURCAD | EURCAD=X | 6.5% | 2.0 | 1.5 |
+| AUDCHF | AUDCHF=X | 6.5% | 2.0 | 1.5 |
+| USDJPY | USDJPY=X | 6.5% | 2.0 | 1.5 |
+| USDCAD | USDCAD=X | 6.5% | 2.0 | 1.5 |
+| GBPCHF | GBPCHF=X | 6.5% | 2.0 | 1.5 |
+| ES | ES=F | 7.7% | 2.0 | 2.5 |
+| NQ | NQ=F | 7.8% | 2.0 | 2.5 |
 
 ### BTC satellite
 - 5% AUM cap, vol target 40%, drawdown limit 25%

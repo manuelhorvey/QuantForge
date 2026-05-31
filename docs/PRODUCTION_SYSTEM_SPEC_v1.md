@@ -16,8 +16,8 @@ It is NOT a directional prediction system. It does NOT attempt to forecast price
 
 1. **Screening output**: Composite scores + promotion classifications (GREEN/YELLOW/RED) for 30+ tickers
 2. **Per-asset models**: Binary XGBoost classifiers, one per promoted asset
-3. **Live signals**: BUY/SELL/FLAT decisions every 5 minutes for 13 assets
-4. **Portfolio allocation**: Equal-risk weighted long/short basket with governance overlay
+3. **Live signals**: BUY/SELL/FLAT decisions every 5 minutes for 15 assets
+4. **Portfolio allocation**: Risk-parity weighted long/short basket with governance overlay
 5. **Execution traces**: Full attribution records (prediction, execution, exit, friction) per trade
 
 ### What the system does NOT do
@@ -94,7 +94,7 @@ It is NOT a directional prediction system. It does NOT attempt to forecast price
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                    PORTFOLIO LAYER                                       │
 │                                                                         │
-│  13 assets, equal-risk weights (7.7% each)                              │
+│  15 assets, risk-parity weights (6.5–7.8% each)                        │
 │  + BTC satellite (5% AUM cap, macro gate)                               │
 │  SQLite state store (WAL mode): trades, attribution, equity_history     │
 │  PaperBroker → StateStore → state.json + state.db → dashboard           │
@@ -280,23 +280,25 @@ Computed from OHLCV feature vector (no model inference):
 
 ### 6.1 Current Composition
 
-**13 assets** promoted from 30-ticker walk-forward screening, all equal-risk weighted (7.7% each):
+**15 assets** promoted from 30-ticker walk-forward screening, risk-parity weighted:
 
-| Asset | Ticker | sl_mult | tp_mult | GREEN score |
-|---|---|---|---|---|
-| BTCUSD | BTC-USD | 3.0 | 2.5 | 80.9 |
-| EURGBP | EURGBP=X | 2.0 | 1.5 | 69.0 |
-| GC | GC=F | 2.0 | 1.5 | 66.7 |
-| NZDCHF | NZDCHF=X | 2.0 | 1.5 | 70.0 |
-| CHFJPY | CHFJPY=X | 2.0 | 1.5 | YELLOW |
-| CADJPY | CADJPY=X | 2.0 | 1.5 | YELLOW |
-| USDCHF | USDCHF=X | 2.0 | 1.5 | YELLOW |
-| EURJPY | EURJPY=X | 2.0 | 1.5 | YELLOW |
-| EURCAD | EURCAD=X | 2.0 | 1.5 | YELLOW |
-| AUDCHF | AUDCHF=X | 2.0 | 1.5 | YELLOW |
-| USDJPY | USDJPY=X | 2.0 | 1.5 | YELLOW |
-| USDCAD | USDCAD=X | 2.0 | 1.5 | YELLOW |
-| GBPCHF | GBPCHF=X | 2.0 | 1.5 | YELLOW |
+| Asset | Ticker | Allocation | sl_mult | tp_mult | Score |
+|---|---|---|---|---|---|
+| BTCUSD | BTC-USD | 6.5% | 3.0 | 2.5 | 80.9 |
+| EURGBP | EURGBP=X | 6.5% | 2.0 | 1.5 | 69.0 |
+| GC | GC=F | 6.5% | 2.0 | 1.5 | 66.7 |
+| NZDCHF | NZDCHF=X | 6.5% | 2.0 | 1.5 | 70.0 |
+| CHFJPY | CHFJPY=X | 6.5% | 2.0 | 1.5 | YELLOW |
+| CADJPY | CADJPY=X | 6.5% | 2.0 | 1.5 | YELLOW |
+| USDCHF | USDCHF=X | 6.5% | 2.0 | 1.5 | YELLOW |
+| EURJPY | EURJPY=X | 6.5% | 2.0 | 1.5 | YELLOW |
+| EURCAD | EURCAD=X | 6.5% | 2.0 | 1.5 | YELLOW |
+| AUDCHF | AUDCHF=X | 6.5% | 2.0 | 1.5 | YELLOW |
+| USDJPY | USDJPY=X | 6.5% | 2.0 | 1.5 | YELLOW |
+| USDCAD | USDCAD=X | 6.5% | 2.0 | 1.5 | YELLOW |
+| GBPCHF | GBPCHF=X | 6.5% | 2.0 | 1.5 | YELLOW |
+| ES | ES=F | 7.7% | 2.0 | 2.5 | 76.9 |
+| NQ | NQ=F | 7.8% | 2.0 | 2.5 | 67.9 |
 
 **BTC satellite**: 5% AUM cap, vol target 40%, macro-gated entry via `HighVolSatellite`.
 
@@ -371,7 +373,7 @@ In-memory TTL cache per download type:
 
 | Path | Role |
 |---|---|
-| `configs/paper_trading.yaml` | Production config (13 assets, params) |
+| `configs/paper_trading.yaml` | Production config (15 assets, params) |
 | `features/alpha_features.py` | Alpha feature factory |
 | `features/data_fetch.py` | YFinance data ingestion |
 | `features/labels.py` | Triple-barrier labeling |
@@ -403,7 +405,7 @@ In-memory TTL cache per download type:
 2. **Yahoo Finance single source** — all data via yfinance, including macro
 3. **FX cross price NaN on first cycle** — incomplete daily bar; resolves after next cycle with full bar
 4. **Ensemble disabled** — `ensemble.enabled: false` in config; experimental feature
-5. **16/30 tickers RED** — not promoted; reflects weak IC for most FX pairs
+5. **15/30 tickers RED** — not promoted; reflects weak IC for most FX pairs
 6. **No FRED** — macro derived from yfinance tickers only; no FRED API dependency in production
 7. **JPY/CHF cross TZ issue** — fixed via UTC normalization in pipeline
 8. **Attribution table schema gap** — `attribution` table in SQLite lacks friction columns (`friction_fill_qty_ratio`, `friction_gap_fill`, `friction_partial_fill`, `friction_latency_bars`) that exist in `trades` table. Frontend uses nullish defaults (`??`) as workaround.

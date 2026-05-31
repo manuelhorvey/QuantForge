@@ -83,7 +83,7 @@ Architecture, component responsibilities, and data flow for the QuantForge cross
 
 | Component | File | Role |
 |---|---|---|
-| `PaperTradingEngine` | `engine.py` | Top-level orchestrator: manages 13 AssetEngine instances + BTC satellite; `run_once()` cycle every 300s |
+| `PaperTradingEngine` | `engine.py` | Top-level orchestrator: manages 15 AssetEngine instances + BTC satellite; `run_once()` cycle every 300s |
 | `AssetEngine` | `asset_engine.py` | Per-asset lifecycle: inference, position management, governance, halt conditions |
 | `AssetInferencePipeline` | `inference/pipeline.py` | Live inference: OHLCV fetch → alpha features → XGBoost → archetype → decision. Inference truncation (500d → 250d) with behavioral validation. Model hot-swap re-validation on object identity change. |
 | `AssetTrainingPipeline` | `inference/training.py` | On-demand training: yfinance → alpha features → binary XGBoost → model save |
@@ -187,7 +187,7 @@ graph LR
 
 `configs/paper_trading.yaml` defines:
 - Capital, position size, rebalance frequency
-- 13 assets with ticker, allocation, sl_mult, tp_mult
+- 15 assets with ticker, allocation, sl_mult, tp_mult
 - Ensemble config (disabled by default)
 - Meta-labeling config
 - Narrative governance config

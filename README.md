@@ -18,42 +18,44 @@ QuantForge operates as a **factor-style allocation system**: 30+ tickers are scr
 ```
 ┌─────────────┐    ┌──────────────┐    ┌────────────┐    ┌─────────────────┐
 │ Screening   │───▶│ Promotion    │───▶│ Live       │───▶│ Portfolio       │
-│ 30 tickers  │    │ GREEN/YELLOW │    │ Inference  │    │ 13 assets       │
+│ 30 tickers  │    │ GREEN/YELLOW │    │ Inference  │    │ 15 assets       │
 │ walk-fwd    │    │ RED          │    │ binary XGB │    │ equal-risk wts  │
 └─────────────┘    └──────────────┘    └────────────┘    └─────────────────┘
 ```
 
 | Layer | Description |
 |---|---|---|
-| **Screening** | 30 tickers via walk-forward (3y window, 1y step, 5 folds, per-asset pt_sl) |
+| **Screening** | 30 tickers via walk-forward (3y window, 1y step, 5 folds, per-asset pt_sl) 15 promoted |
 | **Scoring** | Composite score: IC + hit rate + consistency + bidirectionality |
 | **Feature Engineering** | Alpha features: vol-adjusted carry, multi-horizon momentum, z-score reversion, vol regime, DOW + cross-asset (DXY/VIX/SPX/WTI mom). Macro tickers batched into single `yf.download` with TTL cache (300s). |
 | **Models** | Binary XGBoost (binary:logistic, 300 trees, depth=2, lr=0.02) per asset |
 | **Archetype Classification** | 5 pure-feature market structure archetypes from OHLCV (EMA spread, ADX, RSI, BB z-score) |
 | **Inference** | Vectorized triple-barrier (`sliding_window_view` + broadcast + argmax). Async diagnostics via daemon consumer thread. Inference truncation with behavioral validation (500d → 250d for hot path). Model hot-swap re-validation on object identity change. |
-| **Execution** | EntryOptimizer → ExecutionPolicy → PositionManager with 7-layer governance. All 13 assets run in parallel via `ThreadPoolExecutor(max_workers=8)`. |
+| **Execution** | EntryOptimizer → ExecutionPolicy → PositionManager with 7-layer governance. All 15 assets run in parallel via `ThreadPoolExecutor(max_workers=8)`. |
 | **State** | SQLite-backed state store (WAL mode, 5 tables, O(1) append) with periodic WAL checkpoint. Legacy JSON snapshots preserved for backward compatibility. |
 | **Monitoring** | PSI drift, feature stability, narrative governance, liquidity regime, validity state machine |
 
 ## Current Portfolio
 
-**13 live assets** promoted from 30-ticker screening (equal-risk allocation, 7.7% each):
+**15 live assets** promoted from 30-ticker screening (risk-parity allocation):
 
-| Asset | Ticker | sl_mult | tp_mult | Walk-forward score | Walk-forward IC |
-|---|---|---|---|---|---|
-| BTCUSD | BTC-USD | 3.0 | 2.5 | 80.9 / 100 | 0.2264 |
-| EURGBP | EURGBP=X | 2.0 | 1.5 | 69.0 / 100 | 0.1104 |
-| GC | GC=F | 2.0 | 1.5 | 66.7 / 100 | 0.1270 |
-| NZDCHF | NZDCHF=X | 2.0 | 1.5 | 70.0 / 100 | 0.1080 |
-| CHFJPY | CHFJPY=X | 2.0 | 1.5 | YELLOW | — |
-| CADJPY | CADJPY=X | 2.0 | 1.5 | YELLOW | — |
-| USDCHF | USDCHF=X | 2.0 | 1.5 | YELLOW | — |
-| EURJPY | EURJPY=X | 2.0 | 1.5 | YELLOW | — |
-| EURCAD | EURCAD=X | 2.0 | 1.5 | YELLOW | — |
-| AUDCHF | AUDCHF=X | 2.0 | 1.5 | YELLOW | — |
-| USDJPY | USDJPY=X | 2.0 | 1.5 | YELLOW | — |
-| USDCAD | USDCAD=X | 2.0 | 1.5 | YELLOW | — |
-| GBPCHF | GBPCHF=X | 2.0 | 1.5 | YELLOW | — |
+| Asset | Ticker | Allocation | sl_mult | tp_mult | Walk-forward score | Walk-forward IC |
+|---|---|---|---|---|---|---|
+| BTCUSD | BTC-USD | 6.5% | 3.0 | 2.5 | 80.9 / 100 | 0.2264 |
+| EURGBP | EURGBP=X | 6.5% | 2.0 | 1.5 | 69.0 / 100 | 0.1104 |
+| GC | GC=F | 6.5% | 2.0 | 1.5 | 66.7 / 100 | 0.1270 |
+| NZDCHF | NZDCHF=X | 6.5% | 2.0 | 1.5 | 70.0 / 100 | 0.1080 |
+| CHFJPY | CHFJPY=X | 6.5% | 2.0 | 1.5 | YELLOW | — |
+| CADJPY | CADJPY=X | 6.5% | 2.0 | 1.5 | YELLOW | — |
+| USDCHF | USDCHF=X | 6.5% | 2.0 | 1.5 | YELLOW | — |
+| EURJPY | EURJPY=X | 6.5% | 2.0 | 1.5 | YELLOW | — |
+| EURCAD | EURCAD=X | 6.5% | 2.0 | 1.5 | YELLOW | — |
+| AUDCHF | AUDCHF=X | 6.5% | 2.0 | 1.5 | YELLOW | — |
+| USDJPY | USDJPY=X | 6.5% | 2.0 | 1.5 | YELLOW | — |
+| USDCAD | USDCAD=X | 6.5% | 2.0 | 1.5 | YELLOW | — |
+| GBPCHF | GBPCHF=X | 6.5% | 2.0 | 1.5 | YELLOW | — |
+| ES | ES=F | 7.7% | 2.0 | 2.5 | 76.9 / 100 | 0.1273 |
+| NQ | NQ=F | 7.8% | 2.0 | 2.5 | 67.9 / 100 | 0.0932 |
 
 **BTC satellite:** 5% AUM cap, vol target 40%, macro-gated entry (VIX, DXY, vol z-score, portfolio returns, crisis regime), managed by `HighVolSatellite`.
 
@@ -114,7 +116,7 @@ All data normalized to TZ-naive date index. No FRED data — macro derived from 
 ### Execution Pipeline
 
 ```
-TradeDecision (13 assets in parallel via EngineOrchestrator) 
+TradeDecision (15 assets in parallel via EngineOrchestrator) 
     → EntryOptimizer → ExecutionPolicyLayer → _can_enter() gate
     → _open_position() → PositionManager (SL/TP/scale-out) → Attribution
     → HealthMonitor tracks per-asset HEALTHY/DEGRADED/HALTED
@@ -128,7 +130,6 @@ Seven-layer governance: validity state machine, feature stability, meta-labeling
 git clone https://github.com/user/quantforge.git && cd quantforge
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-export FRED_API_KEY=your_key
 # Start engine + dashboard:
 ./monitor_all
 # Dashboard: http://localhost:5000
@@ -138,8 +139,7 @@ export FRED_API_KEY=your_key
 
 | Var | Required | Purpose |
 |---|---|---|
-| `FRED_API_KEY` | Yes | Macro data (yields, VIX, DXY) |
-| `OPENCODE_ZEN_API_KEY` | No | Weekly LLM narrative extraction |
+| `OPENCODE_ZEN_API_KEY` | No | Weekly LLM narrative extraction (Claude API) |
 | `PYTHONPATH` | Yes | `PYTHONPATH=.` |
 | `QUANTFORGE_REFRESH_INTERVAL` | No | Engine loop interval (default 300s) |
 
@@ -177,7 +177,7 @@ export FRED_API_KEY=your_key
 - Per-asset pt_sl — `tp_mult`/`sl_mult` from config, applied at label time and runtime
 - Inference truncation symmetry — training uses 5y data; live inference fetches 500d, truncates to 250d for XGB
 - SQLite state store — all persistent state in single WAL-mode database
-- Parallel asset isolation — 13 AssetEngine instances execute independently via ThreadPoolExecutor
+- Parallel asset isolation — 15 AssetEngine instances execute independently via ThreadPoolExecutor
 
 ## Project Structure
 
@@ -229,7 +229,7 @@ monitoring/            # PSI drift, validity state machine
 - Data limited to Yahoo Finance (no FRED in production)
 - JPY/CHF crosses may show NaN prices on first cycle (incomplete daily bar)
 - Ensemble system disabled by default (`ensemble.enabled: false` in config)
-- 16 of 30 screened tickers classified RED (not promoted)
+- 15 of 30 screened tickers classified RED (not promoted)
 
 ## License
 
