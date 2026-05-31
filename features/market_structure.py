@@ -85,13 +85,11 @@ class MarketStructureDetector:
 
 if __name__ == "__main__":
     # Test with dummy data
-    data = pd.DataFrame(
-        {
-            "close": np.linspace(100, 105, 100) + np.random.normal(0, 0.1, 100),
-            "high": np.linspace(101, 106, 100),
-            "low": np.linspace(99, 104, 100),
-        }
-    )
+    data = pd.DataFrame({
+        "close": np.linspace(100, 105, 100) + np.random.normal(0, 0.1, 100),
+        "high": np.linspace(101, 106, 100),
+        "low": np.linspace(99, 104, 100),
+    })
     detector = MarketStructureDetector(window=50)
     state = detector.detect(data)
     print("Market Structure State:")

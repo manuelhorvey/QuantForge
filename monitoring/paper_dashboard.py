@@ -68,9 +68,12 @@ def check_halts(state, hist):
             try:
                 days_since = (datetime.now() - datetime.strptime(last_signal, "%Y-%m-%d")).days
                 if days_since > early_warn:
-                    flags.append(
-                        {"asset": name, "type": "drought_warning", "current": days_since, "warning_at": early_warn}
-                    )
+                    flags.append({
+                        "asset": name,
+                        "type": "drought_warning",
+                        "current": days_since,
+                        "warning_at": early_warn,
+                    })
             except ValueError:
                 pass
 

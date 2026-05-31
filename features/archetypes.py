@@ -68,14 +68,12 @@ class ArchetypeClassifier:
 
 if __name__ == "__main__":
     # Quick test with dummy data
-    data = pd.DataFrame(
-        {
-            "adx": [30.0, 15.0, 40.0, 10.0],
-            "rsi": [50.0, 80.0, 50.0, 50.0],
-            "bb_zscore": [1.8, 2.2, 2.5, 0.5],
-            "ema_spread": [0.02, 0.001, 0.03, 0.0001],
-        }
-    )
+    data = pd.DataFrame({
+        "adx": [30.0, 15.0, 40.0, 10.0],
+        "rsi": [50.0, 80.0, 50.0, 50.0],
+        "bb_zscore": [1.8, 2.2, 2.5, 0.5],
+        "ema_spread": [0.02, 0.001, 0.03, 0.0001],
+    })
 
     classifier = ArchetypeClassifier()
     tagged = classifier.tag_dataframe(data)

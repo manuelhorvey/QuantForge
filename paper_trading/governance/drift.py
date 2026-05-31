@@ -102,22 +102,18 @@ def compute_model_drift(
     if baseline is None:
         baseline = {}
 
-    current_hist = np.array(
-        [
-            _histogram(short),
-            _histogram(neutral),
-            _histogram(long_),
-        ]
-    )
+    current_hist = np.array([
+        _histogram(short),
+        _histogram(neutral),
+        _histogram(long_),
+    ])
 
     baseline_proba = baseline.get("model_proba_distribution", {})
-    baseline_hist = np.array(
-        [
-            _histogram(baseline_proba.get("short", [])),
-            _histogram(baseline_proba.get("neutral", [])),
-            _histogram(baseline_proba.get("long", [])),
-        ]
-    )
+    baseline_hist = np.array([
+        _histogram(baseline_proba.get("short", [])),
+        _histogram(baseline_proba.get("neutral", [])),
+        _histogram(baseline_proba.get("long", [])),
+    ])
 
     if baseline_hist.sum() == 0:
         return {"score": 0.0, "kl_divergence": 0.0, "event_count": len(short), "status": "no_baseline"}

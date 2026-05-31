@@ -112,15 +112,13 @@ class EntryService:
     @staticmethod
     def _policy_hash(policy_dec) -> str:
         return str(
-            hash(
-                (
-                    policy_dec.action,
-                    policy_dec.archetype,
-                    policy_dec.reason,
-                    str(policy_dec.entry_plan),
-                    str(policy_dec.exit_plan),
-                )
-            )
+            hash((
+                policy_dec.action,
+                policy_dec.archetype,
+                policy_dec.reason,
+                str(policy_dec.entry_plan),
+                str(policy_dec.exit_plan),
+            ))
         )[:12]
 
     def _route_policy(self, entry_action, decision: TradeDecision, structure, tp_geo=None, deferred=None):

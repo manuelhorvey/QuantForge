@@ -44,12 +44,10 @@ def get_cluster_summary(returns: pd.DataFrame, cluster_labels: dict[str, int]) -
         cluster_returns = returns[members]
         intra_corr = cluster_returns.corr().values
         mean_intra_corr = (intra_corr.sum() - len(members)) / (len(members) * (len(members) - 1))
-        summary.append(
-            {
-                "cluster": cluster_id,
-                "n_assets": len(members),
-                "members": members,
-                "mean_intra_correlation": mean_intra_corr,
-            }
-        )
+        summary.append({
+            "cluster": cluster_id,
+            "n_assets": len(members),
+            "members": members,
+            "mean_intra_correlation": mean_intra_corr,
+        })
     return pd.DataFrame(summary)

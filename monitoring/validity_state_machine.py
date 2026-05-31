@@ -354,12 +354,10 @@ if __name__ == "__main__":
 
     # Create DataFrame
     dates = pd.date_range(start="2020-01-01", periods=periods, freq="D")
-    df = pd.DataFrame(
-        {
-            "window": dates,
-            "validity": validity_scores,
-        }
-    )
+    df = pd.DataFrame({
+        "window": dates,
+        "validity": validity_scores,
+    })
 
     # Run state machine
     sm = ValidityStateMachine(

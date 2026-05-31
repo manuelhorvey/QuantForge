@@ -85,7 +85,8 @@ def generate_regime_features(df: pd.DataFrame) -> pd.DataFrame:
     # Session Volatility Profile
     df["hourly_vol"] = returns.rolling(window=24).std()
     df["session_vol_profile"] = (
-        df.groupby(df.index.hour)["hourly_vol"]
+        df
+        .groupby(df.index.hour)["hourly_vol"]
         .transform(lambda x: x / x.rolling(window=20, min_periods=5).mean())
         .fillna(1.0)
     )

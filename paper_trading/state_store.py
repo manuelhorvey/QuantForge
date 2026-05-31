@@ -177,18 +177,16 @@ class _TradeStore:
                 total_loss = float((-group[ret_col].clip(upper=0)).sum())
                 avg_r = float(group[r_col].mean()) if r_col and r_col in group else 0.0
 
-                by_asset.append(
-                    {
-                        "asset": asset_name,
-                        "n_trades": n,
-                        "tp_rate": round(tp / n, 4) if n > 0 else 0.0,
-                        "sl_rate": round(sl / n, 4) if n > 0 else 0.0,
-                        "signal_flip_rate": round(flip / n, 4) if n > 0 else 0.0,
-                        "avg_r": round(avg_r, 4),
-                        "win_rate": round(wins / n, 4) if n > 0 else 0.0,
-                        "profit_factor": round(total_profit / total_loss, 4) if total_loss > 0 else None,
-                    }
-                )
+                by_asset.append({
+                    "asset": asset_name,
+                    "n_trades": n,
+                    "tp_rate": round(tp / n, 4) if n > 0 else 0.0,
+                    "sl_rate": round(sl / n, 4) if n > 0 else 0.0,
+                    "signal_flip_rate": round(flip / n, 4) if n > 0 else 0.0,
+                    "avg_r": round(avg_r, 4),
+                    "win_rate": round(wins / n, 4) if n > 0 else 0.0,
+                    "profit_factor": round(total_profit / total_loss, 4) if total_loss > 0 else None,
+                })
 
             n_total = len(df)
             tp_total = int((df[reason_col] == "tp").sum())

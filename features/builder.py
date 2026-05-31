@@ -54,7 +54,8 @@ def compute_label(df: pd.DataFrame, contract: FeatureContract) -> pd.Series:
     if contract.label_type == "fwd60":
         ret = df["close"].pct_change(contract.label_params["window"]).shift(-contract.label_params["window"])
         return (
-            ret.apply(
+            ret
+            .apply(
                 lambda x: (
                     2
                     if x > contract.label_params["threshold"]

@@ -112,13 +112,11 @@ def analyze_feature_impact(
             perturbed_proba = model.predict_proba(perturbed)
             perturbed_conf = float(perturbed_proba[0, baseline_class])
             impact = baseline_conf - perturbed_conf
-            impacts.append(
-                {
-                    "feature": feat,
-                    "impact": round(impact, 6),
-                    "direction": "increases" if impact > 0 else "decreases",
-                }
-            )
+            impacts.append({
+                "feature": feat,
+                "impact": round(impact, 6),
+                "direction": "increases" if impact > 0 else "decreases",
+            })
 
         impacts.sort(key=lambda x: abs(x["impact"]), reverse=True)
         return impacts[:5]
