@@ -86,6 +86,10 @@ def _check_data_quality(df: pd.DataFrame, ticker: str) -> None:
     if df.empty:
         return
 
+    # yfinance returns MultiIndex columns even for single tickers.
+    # Grab the first column as a Series for quality checks.
+    close: pd.Series = df.iloc[:, 0]
+
     last_ts = df.index[-1]
     if hasattr(last_ts, "tzinfo") and last_ts.tzinfo is None:
         last_ts = last_ts.tz_localize("UTC")
@@ -99,7 +103,7 @@ def _check_data_quality(df: pd.DataFrame, ticker: str) -> None:
             last_ts.date(),
         )
 
-    nan_mask = df["Close"].isna()
+    nan_mask = close.isna()
     consecutive_nans = nan_mask.groupby((~nan_mask).cumsum()).sum().max()
     if consecutive_nans >= 3:
         logger.warning(
