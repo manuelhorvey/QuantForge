@@ -385,14 +385,16 @@ class AssetEngine:
             self._regime_bar_counter += 1
 
     def _record_signal_history(self, decision: TradeDecision) -> None:
-        self.prob_history.append({
-            "date": decision.timestamp,
-            "prob_long": round(decision.prob_long * 100, 2),
-            "prob_short": round(decision.prob_short * 100, 2),
-            "signal": decision.signal,
-            "confidence": decision.confidence,
-            "close_price": decision.close_price,
-        })
+        self.prob_history.append(
+            {
+                "date": decision.timestamp,
+                "prob_long": round(decision.prob_long * 100, 2),
+                "prob_short": round(decision.prob_short * 100, 2),
+                "signal": decision.signal,
+                "confidence": decision.confidence,
+                "close_price": decision.close_price,
+            }
+        )
         MAX_PROB_HISTORY = 1000
         if len(self.prob_history) > MAX_PROB_HISTORY:
             self.prob_history = self.prob_history[-MAX_PROB_HISTORY:]

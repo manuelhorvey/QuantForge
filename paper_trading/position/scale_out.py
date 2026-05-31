@@ -109,30 +109,36 @@ class ScaleOutEngine:
             tier.pnl_realized = tier_pnl
             plan.remaining_fraction -= tier.fraction
 
-            fills.append({
-                "fraction": tier.fraction,
-                "fill_price": current_price,
-                "pnl": tier_pnl,
-                "reason": f"scale_out_tier_{_tier_index(plan, tier) + 1}",
-            })
+            fills.append(
+                {
+                    "fraction": tier.fraction,
+                    "fill_price": current_price,
+                    "pnl": tier_pnl,
+                    "reason": f"scale_out_tier_{_tier_index(plan, tier) + 1}",
+                }
+            )
 
         # Activate breakeven on the remainder
         n_filled = sum(1 for t in plan.tiers if t.filled)
         if n_filled > self.activate_breakeven_after and not plan.breakeven_activated and plan.remaining_fraction > 0:
             plan.breakeven_activated = True
             plan.breakeven_price = plan.entry_price
-            fills.append({
-                "fraction": 0.0,
-                "reason": "breakeven_stop_activated",
-                "breakeven_price": plan.entry_price,
-            })
+            fills.append(
+                {
+                    "fraction": 0.0,
+                    "reason": "breakeven_stop_activated",
+                    "breakeven_price": plan.entry_price,
+                }
+            )
 
         # Activate trailing on the remainder after a configurable tier index
         if self.trailing_after_tier is not None and plan.remaining_fraction > 0 and n_filled > self.trailing_after_tier:
-            fills.append({
-                "fraction": 0.0,
-                "reason": "trailing_activated",
-            })
+            fills.append(
+                {
+                    "fraction": 0.0,
+                    "reason": "trailing_activated",
+                }
+            )
 
         return fills
 

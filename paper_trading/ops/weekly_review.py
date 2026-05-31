@@ -104,16 +104,18 @@ def _per_asset_metrics(df: pd.DataFrame) -> list[dict]:
     rows = []
     for asset, group in df.groupby("asset"):
         m = _compute_trade_metrics(group)
-        rows.append({
-            "asset": asset,
-            "n_trades": m["n_trades"],
-            "win_rate": m["win_rate"],
-            "tp_rate": m["tp_rate"],
-            "sl_rate": m["sl_rate"],
-            "avg_r": m["avg_r"],
-            "profit_factor": m["profit_factor"],
-            "pnl": m["total_pnl"],
-        })
+        rows.append(
+            {
+                "asset": asset,
+                "n_trades": m["n_trades"],
+                "win_rate": m["win_rate"],
+                "tp_rate": m["tp_rate"],
+                "sl_rate": m["sl_rate"],
+                "avg_r": m["avg_r"],
+                "profit_factor": m["profit_factor"],
+                "pnl": m["total_pnl"],
+            }
+        )
     return rows
 
 
@@ -170,12 +172,14 @@ def _regime_correlation(df: pd.DataFrame, state: dict) -> list[dict]:
         n = len(rows)
         wins = sum(1 for r in rows if r.get("return", 0) is not None and float(r.get("return", 0)) > 0)
         sl_count = sum(1 for r in rows if str(r.get("reason", "")).lower() == "sl")
-        results.append({
-            "regime": regime,
-            "n_trades": n,
-            "win_rate": round(_safe_div(wins, n) or 0.0, 4),
-            "sl_rate": round(_safe_div(sl_count, n) or 0.0, 4),
-        })
+        results.append(
+            {
+                "regime": regime,
+                "n_trades": n,
+                "win_rate": round(_safe_div(wins, n) or 0.0, 4),
+                "sl_rate": round(_safe_div(sl_count, n) or 0.0, 4),
+            }
+        )
     return results
 
 

@@ -97,28 +97,30 @@ class SimulationStore:
             cash_buffer=cash_buffer,
             satellite_value=satellite_value,
         )
-        rows.append({
-            "_meta": "portfolio",
-            "asset": "__portfolio__",
-            "timestamp": ps.timestamp,
-            "portfolio_value": ps.portfolio_value,
-            "total_return": ps.total_return,
-            "cash_buffer": ps.cash_buffer,
-            "satellite_value": ps.satellite_value,
-            "current_value": 0.0,
-            "peak_value": 0.0,
-            "initial_capital": 0.0,
-            "position_side": None,
-            "position_entry": None,
-            "position_sl": None,
-            "position_tp": None,
-            "position_entry_date": None,
-            "position_vol": None,
-            "n_trades": 0,
-            "n_signals": 0,
-            "trade_log": [],
-            "prob_history": [],
-        })
+        rows.append(
+            {
+                "_meta": "portfolio",
+                "asset": "__portfolio__",
+                "timestamp": ps.timestamp,
+                "portfolio_value": ps.portfolio_value,
+                "total_return": ps.total_return,
+                "cash_buffer": ps.cash_buffer,
+                "satellite_value": ps.satellite_value,
+                "current_value": 0.0,
+                "peak_value": 0.0,
+                "initial_capital": 0.0,
+                "position_side": None,
+                "position_entry": None,
+                "position_sl": None,
+                "position_tp": None,
+                "position_entry_date": None,
+                "position_vol": None,
+                "n_trades": 0,
+                "n_signals": 0,
+                "trade_log": [],
+                "prob_history": [],
+            }
+        )
 
         df = pd.DataFrame(rows)
         if os.path.exists(self.snapshot_path) and os.path.getsize(self.snapshot_path) > 0:

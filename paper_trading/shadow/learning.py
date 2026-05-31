@@ -265,11 +265,13 @@ def _save_compiled(asset: str, report: dict) -> None:
             for key in ["learning_profile", "latent_patterns", "shadow_insights"]:
                 existing[key] = report.get(key, existing.get(key, {} if key != "latent_patterns" else []))
             history = existing.get("history", [])
-            history.append({
-                "timestamp": report["timestamp"],
-                "event_count": report["event_count"],
-                "learning_profile": report["learning_profile"],
-            })
+            history.append(
+                {
+                    "timestamp": report["timestamp"],
+                    "event_count": report["event_count"],
+                    "learning_profile": report["learning_profile"],
+                }
+            )
             if len(history) > 180:
                 history = history[-180:]
             existing["history"] = history

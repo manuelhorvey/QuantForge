@@ -241,12 +241,14 @@ class AssetPnlController:
         asset.current_value = asset.pos_mgr.current_value
         asset.peak_value = asset.pos_mgr.peak_value
         if direction != 0:
-            asset.trades.append({
-                "date": last_bar,
-                "direction": direction,
-                "return": float(ret),
-                "pnl": float(pnl),
-            })
+            asset.trades.append(
+                {
+                    "date": last_bar,
+                    "direction": direction,
+                    "return": float(ret),
+                    "pnl": float(pnl),
+                }
+            )
 
     @property
     def mtm_value(self) -> float:

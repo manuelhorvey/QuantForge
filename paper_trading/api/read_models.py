@@ -158,13 +158,15 @@ class DashboardReadModels:
                         status = "amber"
                     else:
                         status = "red"
-                    regimes.append({
-                        "asset": name,
-                        "training_vol": training_vol,
-                        "current_vol": current_vol,
-                        "ratio": round(ratio, 4),
-                        "status": status,
-                    })
+                    regimes.append(
+                        {
+                            "asset": name,
+                            "training_vol": training_vol,
+                            "current_vol": current_vol,
+                            "ratio": round(ratio, 4),
+                            "status": status,
+                        }
+                    )
         return regimes
 
     def shadow_actions(self) -> dict:

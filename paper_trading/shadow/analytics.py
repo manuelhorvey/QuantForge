@@ -95,14 +95,16 @@ def compare_learning_profiles() -> dict:
             insights = compiled.get("shadow_insights", {})
             if compiled.get("event_count", 0) == 0:
                 continue
-            rankings.append({
-                "asset": asset,
-                "stability": profile.get("behavioral_stability", 0.0),
-                "drift_resilience": profile.get("drift_resilience", 0.0),
-                "risk_sensitivity": profile.get("risk_sensitivity", 0.0),
-                "execution_fragility": insights.get("execution_fragility_score", 0.0),
-                "dominant_failure_mode": insights.get("dominant_failure_mode", "unknown"),
-            })
+            rankings.append(
+                {
+                    "asset": asset,
+                    "stability": profile.get("behavioral_stability", 0.0),
+                    "drift_resilience": profile.get("drift_resilience", 0.0),
+                    "risk_sensitivity": profile.get("risk_sensitivity", 0.0),
+                    "execution_fragility": insights.get("execution_fragility_score", 0.0),
+                    "dominant_failure_mode": insights.get("dominant_failure_mode", "unknown"),
+                }
+            )
 
         rankings.sort(key=lambda r: r["stability"], reverse=True)
         return {"rankings": rankings}
