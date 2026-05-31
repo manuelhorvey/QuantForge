@@ -12,8 +12,7 @@ class PnLService(ABC):
         ret: float,
         position_size_fraction: float,
         pos_size: float,
-    ) -> float:
-        ...
+    ) -> float: ...
 
 
 class DefaultPnLService(PnLService):

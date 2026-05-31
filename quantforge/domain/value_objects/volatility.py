@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-import numpy as np
 import pandas as pd
 
 VOLATILITY_PRIMITIVE_VERSION = "1.0.0"

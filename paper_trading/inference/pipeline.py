@@ -11,6 +11,7 @@ import ta
 from features.regime_features import generate_regime_features
 from paper_trading.config_manager import get_config
 from paper_trading.entry.decision import SignalType, TradeDecision
+from paper_trading.governance.conviction_gate import RegimeRow
 from paper_trading.inference.async_diagnostics import (
     DiagnosticsSnapshot,
     get_diagnostics_queue,
@@ -236,11 +237,18 @@ class AssetInferencePipeline:
         if asset.config.get("regime_sizing"):
             regime_features_df = generate_regime_features(df)
             regime_results = asset.regime_classifier.classify(regime_features_df)
-            current_regime = regime_results["regime"].iloc[-1]
-            asset._current_regime = current_regime
-            pos_size = asset._sizing_strategy.compute(df["close"], sizing_cfg, regime=current_regime)
+            last_row = regime_results.iloc[-1]
+            asset._current_regime = last_row["regime"]
+            asset._last_regime_row = RegimeRow(
+                P_trend=float(last_row["P_trend"]),
+                P_range=float(last_row["P_range"]),
+                P_volatile=float(last_row["P_volatile"]),
+                regime_label=str(last_row["regime"]),
+            )
+            pos_size = asset._sizing_strategy.compute(df["close"], sizing_cfg, regime=asset._current_regime)
         else:
             asset._current_regime = "neutral"
+            asset._last_regime_row = None
             pos_size = asset._sizing_strategy.compute(df["close"], sizing_cfg)
 
         result = asset._signal_strategy.compute(proba, x.index, threshold, df["close"], pos_size)

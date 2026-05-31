@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 
 import pandas as pd
@@ -70,7 +70,11 @@ class TradeDecision:
 
     @property
     def direction(self) -> int:
-        return SignalType.from_label(self.label).direction if hasattr(SignalType.from_label(self.label), "direction") else 0
+        if self.signal == SignalType.BUY:
+            return 1
+        if self.signal == SignalType.SELL:
+            return -1
+        return 0
 
     @property
     def is_actionable(self) -> bool:

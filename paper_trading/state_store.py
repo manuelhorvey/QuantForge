@@ -347,9 +347,13 @@ class StateStore:
 
     def read_trade_outcomes(self) -> dict | None:
         now = time.monotonic()
-        if hasattr(self, "_trade_outcomes_cache_ts") and now - self._trade_outcomes_cache_ts < 30.0:
-            if hasattr(self, "_trade_outcomes_cache") and self._trade_outcomes_cache is not None:
-                return self._trade_outcomes_cache
+        if (
+            hasattr(self, "_trade_outcomes_cache_ts")
+            and now - self._trade_outcomes_cache_ts < 30.0
+            and hasattr(self, "_trade_outcomes_cache")
+            and self._trade_outcomes_cache is not None
+        ):
+            return self._trade_outcomes_cache
         result = self._compute_trade_outcomes()
         if result is not None:
             self._trade_outcomes_cache = result

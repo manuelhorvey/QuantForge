@@ -6,9 +6,8 @@ import pandas as pd
 import pytz
 
 from paper_trading.config_manager import get_config
-from paper_trading.entry.decision import PositionSide
 from paper_trading.ops.experiment_context import ExperimentContext
-from paper_trading.ops.simulation_snapshot import SimulationStore, build_asset_snapshot
+from paper_trading.ops.simulation_snapshot import build_asset_snapshot
 from paper_trading.state_store import EngineSnapshot
 
 logger = logging.getLogger("quantforge.engine_state_service")
@@ -146,6 +145,7 @@ class EngineStateService:
         engine = self.engine
         n = len(engine.assets) or 1
         from paper_trading.engine import ExecutionState
+
         exec_state = (
             ExecutionState.HALTED
             if any_halted
@@ -184,9 +184,8 @@ class EngineStateService:
 
         if engine.portfolio_peak_value is None or mtm_total > engine.portfolio_peak_value:
             engine.portfolio_peak_value = mtm_total
-        portfolio_dd = (
-            (mtm_total - engine.portfolio_peak_value) / engine.portfolio_peak_value if engine.portfolio_peak_value else 0.0
-        )
+        peak = engine.portfolio_peak_value
+        portfolio_dd = (mtm_total - peak) / peak if peak else 0.0
 
         return {
             "total_value": round(mtm_total, 2),

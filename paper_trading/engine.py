@@ -41,6 +41,8 @@ from paper_trading.services.engine_recovery_service import EngineRecoveryService
 from paper_trading.services.engine_satellite_service import EngineSatelliteService
 from paper_trading.services.engine_state_service import EngineStateService
 from paper_trading.state_store import _SKIP_JOURNAL, StateStore, sanitize  # noqa: F401
+from shared.execution_config import build_execution_configs
+from shared.registry import StrategyRegistry
 
 load_dotenv()
 
@@ -116,6 +118,7 @@ class PaperTradingEngine:
         self._satellite_svc.init_satellite()
         self._recovery.restore_positions(saved_positions)
         from paper_trading.ops.simulation_snapshot import SimulationStore
+
         self._sim_store = SimulationStore(BASE)
         self._rebalance_last_day: datetime | None = None
         self._rebalance_weights: dict[str, float] = {}
@@ -187,6 +190,7 @@ class PaperTradingEngine:
             }
             mod_path, cls_name = mod_map[name]
             import importlib
+
             mod = importlib.import_module(mod_path)
             svc = getattr(mod, cls_name)(self)
             object.__setattr__(self, name, svc)
@@ -202,7 +206,8 @@ class PaperTradingEngine:
             return None
         if name == "_sim_store":
             from paper_trading.ops.simulation_snapshot import SimulationStore
-            svc = SimulationStore(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+            svc = SimulationStore(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # noqa: F823
             object.__setattr__(self, name, svc)
             return svc
         if name == "_cycle_times":
@@ -225,6 +230,7 @@ class PaperTradingEngine:
             return None
         if name == "_narrative_api_key":
             import os
+
             key = os.environ.get("OPENCODE_ZEN_API_KEY", "")
             object.__setattr__(self, name, key)
             return key
@@ -299,6 +305,7 @@ class PaperTradingEngine:
             mtm += self.satellite.current_value
         self._mtm_cache_value = mtm
         self._mtm_cache_cycle = self._cycle_count
+
     def run_once(self):
         _t0 = time.perf_counter()
         self._cycle_count += 1
@@ -447,5 +454,3 @@ class PaperTradingEngine:
             )
 
         return results
-
-

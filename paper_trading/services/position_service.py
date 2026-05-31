@@ -1,7 +1,5 @@
 import logging
-from datetime import datetime
 
-import numpy as np
 import pandas as pd
 import pytz
 
@@ -152,6 +150,7 @@ class PositionService:
         if asset.state_store is not None:
             asset.state_store.write_analytics_snapshot()
         from paper_trading.governance.risk import record_trade_outcome as _record_exit_outcome
+
         _record_exit_outcome(asset.name, reason)
 
     def record_stop_out(self, side: str, exit_price: float) -> None:

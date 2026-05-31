@@ -17,8 +17,7 @@ class SignalService(ABC):
         threshold: float,
         close: pd.Series | None,
         position_size: float,
-    ) -> SignalResult:
-        ...
+    ) -> SignalResult: ...
 
 
 class FixedThresholdService(SignalService):

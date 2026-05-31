@@ -1,11 +1,10 @@
 import logging
-from datetime import datetime
 
 import numpy as np
 import pandas as pd
 import pytz
 
-from paper_trading.entry.decision import EntryAction, PositionIntent, PositionSide, SignalType
+from paper_trading.entry.decision import EntryAction, PositionIntent, PositionSide
 from paper_trading.entry.deferred_entry import DeferredEntryStatus
 from paper_trading.governance.multipliers import compute_effective_multipliers
 

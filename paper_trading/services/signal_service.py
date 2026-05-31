@@ -1,8 +1,5 @@
 import logging
 
-import numpy as np
-import pandas as pd
-
 from labels.meta_labels import MetaLabelModel
 
 logger = logging.getLogger("quantforge.signal_service")

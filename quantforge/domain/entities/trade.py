@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass, field
-from datetime import datetime
 
 from quantforge.domain.entities.position import PositionSide
 
@@ -41,6 +40,11 @@ class Trade:
     @classmethod
     def from_dict(cls, data: dict) -> Trade:
         side = PositionSide(data["side"]) if isinstance(data.get("side"), str) else data.get("side")
+
+        def _f(key: str) -> float | None:
+            v = data.get(key)
+            return float(v) if v is not None else None
+
         return cls(
             asset=data["asset"],
             side=side,
@@ -54,16 +58,16 @@ class Trade:
             total_pnl=float(data["total_pnl"]),
             realized_r=float(data["realized_r"]),
             bars=int(data["bars"]),
-            sl_price=float(data["sl_price"]) if data.get("sl_price") is not None else None,
-            tp_price=float(data["tp_price"]) if data.get("tp_price") is not None else None,
-            vol_at_entry=float(data["vol_at_entry"]) if data.get("vol_at_entry") is not None else None,
-            confidence_at_entry=float(data["confidence_at_entry"]) if data.get("confidence_at_entry") is not None else None,
+            sl_price=_f("sl_price"),
+            tp_price=_f("tp_price"),
+            vol_at_entry=_f("vol_at_entry"),
+            confidence_at_entry=_f("confidence_at_entry"),
             archetype_at_entry=str(data["archetype_at_entry"]) if data.get("archetype_at_entry") else None,
-            mae=float(data["mae"]) if data.get("mae") is not None else None,
-            mfe=float(data["mfe"]) if data.get("mfe") is not None else None,
-            entry_slippage_bps=float(data["entry_slippage_bps"]) if data.get("entry_slippage_bps") is not None else None,
-            exit_slippage_bps=float(data["exit_slippage_bps"]) if data.get("exit_slippage_bps") is not None else None,
-            fill_qty_ratio=float(data["fill_qty_ratio"]) if data.get("fill_qty_ratio") is not None else None,
+            mae=_f("mae"),
+            mfe=_f("mfe"),
+            entry_slippage_bps=_f("entry_slippage_bps"),
+            exit_slippage_bps=_f("exit_slippage_bps"),
+            fill_qty_ratio=_f("fill_qty_ratio"),
             gap_fill=bool(data["gap_fill"]) if data.get("gap_fill") is not None else None,
             partial_fill=bool(data["partial_fill"]) if data.get("partial_fill") is not None else None,
             latency_bars=int(data["latency_bars"]) if data.get("latency_bars") is not None else None,

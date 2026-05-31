@@ -43,6 +43,7 @@ class EngineSatelliteService:
 
         try:
             import paper_trading.engine as _eng
+
             btc_price_data = _eng.fetch_btc_price(engine.assets)
             if btc_price_data is None or btc_price_data.empty:
                 results["satellite"] = {"asset": "BTC", "error": "no BTC price data"}

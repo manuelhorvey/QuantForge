@@ -48,6 +48,12 @@ class EngineConfig:
             "sqlite_state": True,
             "vectorized_labels": True,
             "async_diagnostics": True,
+            "regime_conviction_flip_gate": {
+                "enabled": False,
+                "regime_margin_threshold": 0.35,
+                "confidence_threshold": 0.50,
+                "min_bars_in_regime": 3,
+            },
         }
     )
 

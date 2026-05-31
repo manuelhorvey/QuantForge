@@ -32,6 +32,16 @@ optimizations:
   sqlite_state: true
   vectorized_labels: true
   async_diagnostics: true
+  regime_conviction_flip_gate:
+    enabled: true
+    # Calibrated on 394 flips across 9 dashboard assets
+    # (data/sandbox/{asset}/oos_predictions.parquet).
+    # Regime bias in calibration sample: 62.8% trend, 33.8% range, 3.3% volatile.
+    # In a ranging market the gate will block more flips — that's correct,
+    # not a sign the threshold is wrong.
+    regime_margin_threshold: 0.35
+    confidence_threshold: 0.50
+    min_bars_in_regime: 3
 
 execution:
   governance:

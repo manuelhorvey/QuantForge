@@ -53,9 +53,7 @@ class MetricsService:
             conf = p["confidence"]
             bucket.setdefault(f"count_{int(conf / 10) * 10}_{int(conf / 10 + 1) * 10}", 0)
             bucket[f"count_{int(conf / 10) * 10}_{int(conf / 10 + 1) * 10}"] += 1
-        bucket["mean_conf"] = (
-            np.mean([p["confidence"] for p in asset.prob_history[-20:]]) if asset.prob_history else 0
-        )
+        bucket["mean_conf"] = np.mean([p["confidence"] for p in asset.prob_history[-20:]]) if asset.prob_history else 0
         bucket["n_signals"] = min(20, len(asset.prob_history))
         if asset.state_store is not None:
             asset.state_store.append_confidence_bucket(bucket)
@@ -82,9 +80,7 @@ class MetricsService:
         total_losses = abs(sum(t["pnl"] for t in asset.trade_log if t["pnl"] < 0))
         pf = total_profits / total_losses if total_losses > 0 else (float("inf") if total_profits > 0 else 0)
 
-        win_rate = (
-            len([t for t in asset.trade_log if t["pnl"] > 0]) / len(asset.trade_log) if asset.trade_log else 0
-        )
+        win_rate = len([t for t in asset.trade_log if t["pnl"] > 0]) / len(asset.trade_log) if asset.trade_log else 0
         sc = {"BUY": 0, "SELL": 0, "FLAT": 0}
         for p in asset.prob_history:
             sc[p["signal"]] = sc.get(p["signal"], 0) + 1
@@ -110,9 +106,7 @@ class MetricsService:
             }
 
         mtm_val = asset.mtm_value
-        mtm_return = (
-            (mtm_val - asset.initial_capital) / asset.initial_capital * 100 if asset.initial_capital > 0 else 0
-        )
+        mtm_return = (mtm_val - asset.initial_capital) / asset.initial_capital * 100 if asset.initial_capital > 0 else 0
 
         mean_pl = np.mean([p["prob_long"] for p in asset.prob_history]) if asset.prob_history else 0
         mean_pl = 0 if pd.isna(mean_pl) else mean_pl

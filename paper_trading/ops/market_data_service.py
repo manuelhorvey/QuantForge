@@ -18,14 +18,14 @@ import pandas as pd
 import yfinance as yf
 
 from paper_trading.ops.data_fetcher import (
-    fetch_realtime_price,
-    fetch_live,
+    _cache_get,
+    _cache_set,
+    _rate_limit,
     fetch_history,
+    fetch_live,
+    fetch_realtime_price,
     fetch_ref,
     safe_download,
-    _rate_limit,
-    _cache_set,
-    _cache_get,
 )
 
 logger = logging.getLogger("quantforge.market_data_service")

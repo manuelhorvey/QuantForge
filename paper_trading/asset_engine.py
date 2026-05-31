@@ -9,10 +9,11 @@ from monitoring.importance_tracker import ImportanceStore, StabilityResult
 from monitoring.psi_monitor import PSIMonitor, PSISnapshot
 from monitoring.validity_state_machine import ValidityStateMachine as _ValidityStateMachine
 from paper_trading.asset_pnl_controller import AssetPnlController
-from paper_trading.attribution.collector import AttributionCollector
+from paper_trading.attribution.collector import AttributionCollector, TradeAttributionRecord
 from paper_trading.config_manager import get_config
 from paper_trading.entry.decision import EntryAction, PositionSide, SignalType, TradeDecision
 from paper_trading.governance.asset import AssetGovernance
+from paper_trading.governance.conviction_gate import RegimeRow
 from paper_trading.governance.multipliers import compute_effective_multipliers
 from paper_trading.governance.regime import RegimeClassifier
 from paper_trading.inference.pipeline import AssetInferencePipeline
@@ -123,6 +124,9 @@ class AssetEngine:
         self._importance_store = ImportanceStore(base_dir)
         self._psi_monitor = PSIMonitor(base_dir)
         self.regime_classifier = RegimeClassifier()
+        self._last_regime_row: RegimeRow | None = None
+        self._regime_bar_counter: int = 0
+        self._last_regime_label: str | None = None
         if self.config.get("regime_sizing"):
             self._sizing_strategy.regime_aware = True
 
@@ -212,12 +216,14 @@ class AssetEngine:
             }
             mod_path, cls_name = mod_map[name]
             import importlib
+
             mod = importlib.import_module(mod_path)
             svc = getattr(mod, cls_name)(self)
             object.__setattr__(self, name, svc)
             return svc
         if name == "_market_data":
             from paper_trading.ops.market_data_service import get_market_data_service
+
             svc = get_market_data_service()
             object.__setattr__(self, name, svc)
             return svc
@@ -276,6 +282,21 @@ class AssetEngine:
 
     def _can_enter(self, side: str, price: float, context: dict | None = None) -> tuple[bool, str]:
         return self._entry.can_enter(side, price, context)
+
+    def _evaluate_flip_gate(self) -> tuple[bool, str]:
+        from paper_trading.governance.conviction_gate import evaluate_regime_conviction_gate
+
+        gate_cfg = self.config.get("optimizations", {}).get("regime_conviction_flip_gate", {})
+        if not gate_cfg.get("enabled", False):
+            return True, "gate_disabled"
+        return evaluate_regime_conviction_gate(
+            regime_row=self._last_regime_row,
+            model_confidence=getattr(self, "_last_confidence", 0.0),
+            bars_in_current_regime=self._regime_bar_counter,
+            regime_margin_threshold=gate_cfg.get("regime_margin_threshold", 0.35),
+            confidence_threshold=gate_cfg.get("confidence_threshold", 0.50),
+            min_bars_in_regime=gate_cfg.get("min_bars_in_regime", 3),
+        )
 
     def refresh_price(self):
         # 1. Try real-time price first
@@ -357,10 +378,25 @@ class AssetEngine:
             # new_side remains set; _meta_size_multiplier returns 0.0
             # which flows through _composite_size_scalar → zero notional
 
+        # Regime bar counter (used by conviction flip gate)
+        current_regime = getattr(self, "_current_regime", "neutral")
+        if current_regime != self._last_regime_label:
+            self._regime_bar_counter = 1
+            self._last_regime_label = current_regime
+        else:
+            self._regime_bar_counter += 1
+
+        # Conviction gate — only flip if regime is decisive and model is uncertain
+        flip_allowed = True
+        if new_side != current_side and self.pos_mgr.has_position():
+            flip_allowed, flip_reason = self._evaluate_flip_gate()
+            if not flip_allowed:
+                logger.info("%s: flip blocked by conviction gate — %s", self.name, flip_reason)
+
         if new_side != current_side:
-            if self.pos_mgr.has_position():
+            if self.pos_mgr.has_position() and flip_allowed:
                 self._close_position(decision.close_price, today, "signal_flip")
-            if new_side:
+            if new_side and flip_allowed:
                 ok, reason = self._can_enter(
                     new_side,
                     decision.close_price,
