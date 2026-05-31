@@ -491,42 +491,41 @@ http://localhost:5000
 # Repository Structure
 
 ```text
-features/
-paper_trading/
-benchmarks/
-scripts/
-walkforward/
-shared/
-monitoring/
-docs/
-requirements.in        # Runtime dependency bounds (source of truth)
+quantforge/            # Modular core (domain, application, infrastructure)
+paper_trading/         # Active paper trading engine and orchestration
+features/              # Alpha, archetype, and regime feature engineering
+models/                # Model definitions (hybrid ensemble, experts)
+labels/                # Triple-barrier and meta-label generation
+monitoring/            # PSI drift, validity state, and dashboarding
+risk/                  # Drawdown, exposure, and position sizing controls
+portfolio/             # Allocation and risk parity logic
+backtests/             # Walk-forward and adversarial validation scripts
+research/              # Execution surface and shadow cycle investigations
+configs/               # Asset and environment YAML configurations
+data/                  # Local data storage (raw, processed, research)
+scripts/               # Operational and utility scripts
+docs/                  # System documentation and ADRs
+tests/                 # Comprehensive test suite
 requirements.lock      # Pinned dependencies with hashes (commit this)
-requirements-dev.in    # Dev dependency bounds
-requirements-dev.lock  # Pinned dev dependencies
 BASELINE_SNAPSHOT.md   # Auto-generated config snapshot (make snapshot)
+LIVE_CONTRACT.md       # Immutable production system contract
 ```
 
 ## Key Components
 
 ```text
-features/
-    alpha_features.py
-    archetypes.py
-    labels.py
-    macro_narrative.py
-    liquidity_regime.py
+quantforge/            # New modular core (DDD architecture)
+    domain/            # Entities (Asset, Trade), Services (PnL, Volatility)
+    application/       # Use cases and ports
+    infrastructure/    # Persistence (SQLite), API, Broker adapters
 
-paper_trading/
-    engine.py
-    asset_engine.py
-    state_store.py
-    orchestrator/
-    inference/
-    execution/
-    governance/
-    position/
-    shadow/
-    satellite/
+paper_trading/         # Legacy engine (Active)
+    engine.py          # Orchestrator
+    asset_engine.py    # Per-asset isolation
+    state_store.py     # SQLite persistence
+    inference/         # Pipeline and training
+    execution/         # Policy and entry logic
+    governance/        # Risk layers
 ```
 
 ---
@@ -534,11 +533,10 @@ paper_trading/
 # Known Constraints
 
 * Paper trading only
-* Yahoo Finance data dependency with automated quality monitoring (stale-data + NaN gap detection)
+* Yahoo Finance data dependency with automated quality monitoring
 * No live brokerage integration
-* Ensemble system disabled by default
-* Some FX crosses may produce incomplete first-cycle bars
-* Macro data sourced entirely from Yahoo Finance
+* Ensemble system disabled by default in production (active research)
+* Macro data sourced primarily from Yahoo Finance tickers
 
 ---
 
@@ -552,9 +550,11 @@ paper_trading/
 * Data-quality gate on yfinance pipeline (staleness + NaN detection)
 * Auto-generated baselines (`make snapshot`)
 * Fix `main.py` entry point dispatcher
+* **Architectural Pivot:** Initiated `quantforge/` modular core with DDD principles
 
-## Planned
+## Planned (Q3-Q4 2026)
 
+* Graduate `quantforge/` core to primary engine
 * Deterministic full-day replay reconstruction
 * Event-sequence validation tooling
 * Extended execution quality analytics

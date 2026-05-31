@@ -17,14 +17,24 @@ Project documentation for the QuantForge cross-sectional factor ranking and pape
 
 | Stage | Module | Purpose |
 |---|---|---|
-| Screening | `scripts/walk_forward_backtest.py`, `score_tickers.py` | Multi-ticker walk-forward backtest, promotion scoring |
+| Screening | `scripts/walk_forward_backtest.py`, `scripts/score_tickers.py` | Multi-ticker walk-forward backtest, promotion scoring |
 | Training | `paper_trading/inference/training.py` | Binary XGBoost training with alpha features |
-| Inference | `paper_trading/inference/pipeline.py` | Live pipeline: OHLCV → alpha features → XGBoost → decision (inference truncation, async diagnostics) |
-| Async diagnostics | `paper_trading/inference/async_diagnostics.py` | DiagnosticsSnapshot + DiagnosticsQueue daemon thread (8 heavy imports deferred off hot path) |
+| Inference | `paper_trading/inference/pipeline.py` | Live pipeline: OHLCV → alpha features → XGBoost → decision |
+| Async diagnostics | `paper_trading/inference/async_diagnostics.py` | DiagnosticsSnapshot + DiagnosticsQueue daemon thread |
 | State store | `paper_trading/state_store.py` | SQLite-backed persistent state (WAL mode, 5 tables, O(1) append) |
-| Portfolio | `paper_trading/portfolio_builder.py` | 13-asset equal-risk portfolio from YAML config |
+| Portfolio | `paper_trading/portfolio_builder.py`, `portfolio/` | Asset allocation and risk parity logic |
 | Engine | `paper_trading/engine.py` | Paper trading orchestrator (300s cycle, parallel asset fetch) |
-| Benchmark | `benchmarks/microbenchmark.py` | Network-independent hot-path microbenchmark with synthetic mock data |
+
+### Modular Core (`quantforge/`)
+
+The system is transitioning to a Clean Architecture/DDD modular core.
+
+| Layer | Directory | Responsibility |
+|---|---|---|
+| Domain | `quantforge/domain/` | Entities (Asset, Trade, Signal), Value Objects, Domain Services |
+| Application | `quantforge/application/` | Use cases, DTOs, and Ports (interfaces) |
+| Infrastructure | `quantforge/infrastructure/` | Persistence (SQLite), API clients, Broker adapters, Monitoring |
+| Framework | `quantforge/framework/` | Base classes, decorators, and shared utilities |
 
 ### Historical Research Archives
 

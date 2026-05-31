@@ -30,6 +30,14 @@ All ADRs live in [`docs/adr/`](../docs/adr/) unless noted.
 | [ADR-015](../docs/adr/ADR-015-asset-specific-label-horizons.md) | Asset-Specific Label Horizons (fwd60) | Accepted |
 | [ADR-016](../docs/adr/ADR-016-gold-validation.md) | GC=F Validation with fwd60 | Accepted |
 | [ADR-017](../docs/adr/ADR-017-inference-lookahead-investigation.md) | Inference Lookahead Investigation | Accepted |
+| [ADR-018](../docs/adr/ADR-018-btc-satellite.md) | BTC Satellite | Accepted |
+| [ADR-019](../docs/adr/ADR-019-feature-importance-stability.md) | Feature Importance Stability | Accepted |
+| [ADR-020](../docs/adr/ADR-020-meta-labeling.md) | Meta-Labeling | Accepted |
+| [ADR-021](../docs/adr/ADR-021-simulation-snapshot.md) | Simulation Snapshot | Accepted |
+| [ADR-022](../docs/adr/ADR-022-macro-adaptive-weight.md) | Macro Adaptive Weight | Accepted |
+| [ADR-023](../docs/adr/ADR-023-fast-scale-out-calibration-scale.md) | Fast Scale-Out Calibration | Accepted |
+| [ADR-024](../docs/adr/ADR-024-macro-narrative-governance.md) | Macro Narrative Governance | Accepted |
+| [ADR-025](../docs/adr/ADR-025-liquidity-regime-model.md) | Liquidity Regime Model | Accepted |
 
 ## Template
 

@@ -22,11 +22,24 @@ The system prioritizes:
 
 over maximizing in-sample returns.
 
-The repository intentionally treats trading infrastructure as a distributed state-management problem rather than purely a signal-generation problem.
+The repository is transitioning from a unified script-based engine to a Clean Architecture/DDD modular core located in `quantforge/`. This treats trading infrastructure as a distributed state-management problem rather than purely a signal-generation problem.
 
 ---
 
-# High-Level Architecture
+# Software Architecture (The New Modular Core)
+
+The project is moving toward a decoupled, layered architecture in the `quantforge/` directory:
+
+1.  **Domain Layer (`quantforge/domain/`)**: Pure business logic and entities. No dependencies on external frameworks or databases. Contains `Asset`, `Trade`, `Signal`, and `Portfolio` entities.
+2.  **Application Layer (`quantforge/application/`)**: Use cases (e.g., `ExecuteTrade`, `RefreshSignal`) and input/output ports.
+3.  **Infrastructure Layer (`quantforge/infrastructure/`)**: Concrete implementations of ports. Database persistence (SQLite), API clients (yfinance), and broker adapters.
+4.  **Framework Layer (`quantforge/framework/`)**: Shared technical utilities and base classes.
+
+The legacy `paper_trading/` engine currently remains the primary execution path during the May-November 2026 paper trading evaluation period, while the `quantforge/` core is being graduated.
+
+---
+
+# High-Level Process Flow
 
 ```text id="z2l0cm"
 Research Universe
