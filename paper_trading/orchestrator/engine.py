@@ -18,6 +18,7 @@ Invariants:
 
 from __future__ import annotations
 
+import atexit
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -68,6 +69,11 @@ class EngineOrchestrator:
         self._emergency_halt: bool = False
         self._wal = wal_writer
         self._last_health: dict | None = None
+        self._pool = ThreadPoolExecutor(
+            max_workers=self._max_workers,
+            thread_name_prefix="qf-actor",
+        )
+        atexit.register(self.shutdown)
 
     def run_once(self, market_data: dict | None = None) -> dict[str, Any]:
         """Execute one orchestrator cycle.  Returns phased results dict.
@@ -103,15 +109,14 @@ class EngineOrchestrator:
                 return AssetResult.failed(name, "actor_halted", actor.metrics.cycle_id)
             return actor.run_cycle(market_data)
 
-        with ThreadPoolExecutor(max_workers=self._max_workers) as pool:
-            futures = {pool.submit(_run_actor, n, a): n for n, a in self._actors.items()}
-            for future in as_completed(futures):
-                name = futures[future]
-                try:
-                    asset_results[name] = future.result()
-                except Exception as e:
-                    logger.critical("%s actor threw uncaught exception: %s", name, e)
-                    asset_results[name] = AssetResult.failed(name, f"uncaught: {e}")
+        futures = {self._pool.submit(_run_actor, n, a): n for n, a in self._actors.items()}
+        for future in as_completed(futures):
+            name = futures[future]
+            try:
+                asset_results[name] = future.result()
+            except Exception as e:
+                logger.critical("%s actor threw uncaught exception: %s", name, e)
+                asset_results[name] = AssetResult.failed(name, f"uncaught: {e}")
 
         for name, result in asset_results.items():
             if result.success:
@@ -242,3 +247,8 @@ class EngineOrchestrator:
         for actor in self._actors.values():
             actor.reset()
         logger.warning("Emergency halt reset — all actors restored to GREEN")
+
+    def shutdown(self) -> None:
+        """Shut down the persistent thread pool (called on exit via atexit)."""
+        self._pool.shutdown(wait=False)
+        logger.debug("EngineOrchestrator thread pool shut down")

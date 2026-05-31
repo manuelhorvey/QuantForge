@@ -6,6 +6,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 import pytz
+import ta
 
 from features.regime_features import generate_regime_features
 from paper_trading.config_manager import get_config
@@ -121,7 +122,6 @@ class AssetInferencePipeline:
                 ohlcv = ohlcv.iloc[-_trunc_rows:]
             ohlcv = ohlcv.reindex(alpha_idx).ffill()
         archetype_df = pd.DataFrame(index=alpha_idx)
-        import ta
 
         if not ohlcv.empty:
             ema_20 = ta.trend.ema_indicator(ohlcv["close"], window=20)
@@ -334,7 +334,7 @@ class AssetInferencePipeline:
             halt_flags=asset.check_halt_conditions(),
         )
 
-        _shadow_signal_df = _w.compute_signals(proba, x.index, threshold)
+        _shadow_signal_df = _w.compute_signals(proba[-1:], x.index[-1:], threshold)
         _shadow_latest = _shadow_signal_df.iloc[-1]
         _shadow_stype, _shadow_conf, _shadow_conf_pct = _w.signal_type_and_confidence(
             int(_shadow_latest["signal"]),
@@ -370,7 +370,7 @@ class AssetInferencePipeline:
                 shadow_stype=_shadow_stype,
                 shadow_conf_pct=_shadow_conf_pct,
                 feature_row={k: float(v) for k, v in x.iloc[-1].items()},
-                close_prices=df["close"].ffill().tolist(),
+                close_prices=df["close"].ffill().iloc[-20:].tolist(),
                 timestamp=str(datetime.now(tz=ET).date()),
                 model=asset.model,
                 features=asset.features,
