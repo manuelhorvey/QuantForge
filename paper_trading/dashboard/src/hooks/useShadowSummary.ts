@@ -1,17 +1,8 @@
-import { useQuery } from '@tanstack/react-query'
+import { createApiQuery } from '../lib/api'
 import type { ShadowDivergenceSummary } from '../types/shadow'
 
-async function fetchShadowSummary(): Promise<ShadowDivergenceSummary> {
-  const res = await fetch('/shadow/summary.json')
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
-}
+const useShadowSummaryQuery = createApiQuery<ShadowDivergenceSummary>('/shadow/summary.json')
 
 export function useShadowSummary() {
-  return useQuery({
-    queryKey: ['shadowSummary'],
-    queryFn: fetchShadowSummary,
-    refetchInterval: 60_000,
-    staleTime: 50_000,
-  })
+  return useShadowSummaryQuery({ refetchInterval: 60_000, staleTime: 50_000 })
 }

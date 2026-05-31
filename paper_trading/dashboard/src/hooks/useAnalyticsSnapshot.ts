@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { createApiQuery } from '../lib/api'
 
 export interface AnalyticsSnapshot {
   overall: {
@@ -30,17 +30,8 @@ export interface AnalyticsSnapshot {
   }
 }
 
-async function fetchAnalyticsSnapshot(): Promise<AnalyticsSnapshot> {
-  const res = await fetch('/analytics/snapshot.json')
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
-}
+const useAnalyticsSnapshotQuery = createApiQuery<AnalyticsSnapshot>('/analytics/snapshot.json')
 
 export function useAnalyticsSnapshot() {
-  return useQuery({
-    queryKey: ['analyticsSnapshot'],
-    queryFn: fetchAnalyticsSnapshot,
-    refetchInterval: 30_000,
-    staleTime: 25_000,
-  })
+  return useAnalyticsSnapshotQuery({ refetchInterval: 30_000, staleTime: 25_000 })
 }

@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { createApiQuery } from '../lib/api'
 
 export interface ArchetypeStats {
   by_archetype: Record<string, {
@@ -14,17 +14,8 @@ export interface ArchetypeStats {
   }>
 }
 
-async function fetchArchetypeStats(): Promise<ArchetypeStats> {
-  const res = await fetch('/archetype/stats.json')
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
-}
+const useArchetypeStatsQuery = createApiQuery<ArchetypeStats>('/archetype/stats.json')
 
 export function useArchetypeStats() {
-  return useQuery({
-    queryKey: ['archetypeStats'],
-    queryFn: fetchArchetypeStats,
-    refetchInterval: 120_000,
-    staleTime: 100_000,
-  })
+  return useArchetypeStatsQuery({ refetchInterval: 120_000, staleTime: 100_000 })
 }

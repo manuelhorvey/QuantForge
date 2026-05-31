@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { createApiQuery } from '../lib/api'
 
 export interface AssetOutcome {
   asset: string
@@ -23,22 +23,12 @@ export interface TradeOutcomesData {
   by_asset: AssetOutcome[]
 }
 
-async function fetchTradeOutcomes(): Promise<TradeOutcomesData> {
-  const res = await fetch('/trade-outcomes.json')
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const json = await res.json()
-  return json as TradeOutcomesData
-}
+const useTradeOutcomesQuery = createApiQuery<TradeOutcomesData>('/trade-outcomes.json')
 
 export function useTradeOutcomes() {
-  const { data, isPending, isError } = useQuery({
-    queryKey: ['tradeOutcomes'],
-    queryFn: fetchTradeOutcomes,
+  const { data, isPending, isError } = useTradeOutcomesQuery({
     refetchInterval: 30_000,
     staleTime: 25_000,
   })
-
-  const outcomes = data ?? null
-
-  return { outcomes, isPending, isError }
+  return { outcomes: data ?? null, isPending, isError }
 }

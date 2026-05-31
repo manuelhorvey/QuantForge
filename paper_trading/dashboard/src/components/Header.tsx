@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Sun, Moon, RefreshCw, Calendar, Clock, TrendingUp, Pause } from 'lucide-react'
 import { usePortfolioState } from '../hooks/usePortfolioState'
 import { useSessionClock } from '../hooks/useSessionClock'
-import { useNarrative } from '../hooks/useNarrative'
+import { useNarrative, useConfirmNarrative } from '../hooks/useNarrative'
 import { useLiquidity } from '../hooks/useLiquidity'
-import { useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import ConnectionStatus from './ConnectionStatus'
 import {
@@ -17,7 +17,7 @@ import {
 function ConfirmButton() {
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const queryClient = useQueryClient()
+  const confirmNarrative = useConfirmNarrative()
   return (
     <div className="relative">
       <button
@@ -27,10 +27,7 @@ function ConfirmButton() {
           setConfirming(true)
           setError(null)
           try {
-            const resp = await fetch('/narrative/confirm', { method: 'POST' })
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-            await queryClient.invalidateQueries({ queryKey: ['narrative'] })
-            await queryClient.invalidateQueries({ queryKey: ['governance'] })
+            await confirmNarrative()
           } catch (e) {
             const msg = e instanceof Error ? e.message : 'Confirm failed'
             console.error('[Narrative] confirm error:', msg)
