@@ -1,4 +1,17 @@
-# LIVE SYSTEM BASELINE SNAPSHOT
+# LIVE SYSTEM BASELINE SNAPSHOT — V1 LEGACY
+
+> **⚠ ARCHIVED — Superseded by auto-generated `BASELINE_SNAPSHOT.md`**
+>
+> Key divergences from the current system:
+> - **Serialization:** pickle/`.pkl` → XGBoost native `.json` via `model.save_model()`
+> - **Model objective:** `multi:softprob` (3-class) → `binary:logistic` (HOLD class dropped)
+> - **Asset allocation:** 6 assets → 15 promoted assets (see `configs/paper_trading.yaml`)
+> - **Entry point:** `paper_trading/monitor.py:main()` → `paper_trading.ops.monitor:main()`
+> - **State persistence:** StateStore JSON → SQLite-backed (with JSON fallback)
+> - **Entry/position management:** Inline in engine → Service-layer decomposition
+> - **Feature builder:** `features/builder.py` → `features/alpha_features.py`
+> - **Label method:** `fwd60` (primary) → triple-barrier binary (HOLD dropped)
+> - **PSI monitoring, meta-labeling, shadow SL/TP:** Added post-v1
 
 DO NOT EDIT. Generated for regression testing before any refactoring.
 Date: 2026-05-19

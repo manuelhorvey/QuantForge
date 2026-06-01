@@ -2,7 +2,6 @@ import hashlib
 import json
 import logging
 import os
-import pickle
 import sys
 from datetime import datetime
 from typing import Optional
@@ -94,12 +93,13 @@ def fetch_history(ticker, years=15):
 
 def load_production_model(ticker: str):
     contract = FEATURE_REGISTRY[ticker]
-    path = os.path.join(BASE, "paper_trading", "models", f"{contract.name}_model.pkl")
+    path = os.path.join(BASE, "paper_trading", "models", f"{contract.name}_model.json")
     if not os.path.exists(path):
         logger.warning("  %s: no production model at %s", ticker, path)
         return None
-    with open(path, "rb") as f:
-        return pickle.load(f)
+    model = xgb.XGBClassifier()
+    model.load_model(path)
+    return model
 
 
 def sandbox_model_path(ticker: str, version: Optional[str] = None) -> str:

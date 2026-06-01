@@ -53,6 +53,32 @@ def _cache_set(key: str, value: pd.DataFrame | float | None, cache_type: str = "
     _IN_MEMORY_CACHE[key] = (value, time.monotonic() + ttl)
 
 
+def _check_data_quality(df: pd.DataFrame, ticker: str, source: str = "") -> None:
+    try:
+        if df.empty:
+            return
+        label = f"{ticker}[{source}]" if source else ticker
+
+        last_bar = df.index[-1]
+        now = datetime.now(tz=last_bar.tz) if hasattr(last_bar, "tz") and last_bar.tz is not None else datetime.now()
+        delta = now - last_bar
+        days_since = delta.days if hasattr(delta, "days") else delta.total_seconds() / 86400
+        if days_since > 4:
+            logger.warning("%s: stale data — last bar %s (%.0f days ago)", label, last_bar, days_since)
+
+        close_col = "close" if "close" in df.columns else ("Close" if "Close" in df.columns else None)
+        if close_col is not None:
+            close_s = df[close_col]
+            if isinstance(close_s, pd.DataFrame):
+                close_s = close_s.iloc[:, 0]
+            nan_streak = close_s.isna().astype(int).groupby(close_s.notna().cumsum()).cumsum()
+            max_consec_nan = nan_streak.max() if not nan_streak.empty else 0
+            if max_consec_nan >= 3:
+                logger.warning("%s: %d consecutive NaN closes detected", label, max_consec_nan)
+    except Exception as e:
+        logger.warning("%s: data quality check failed: %s", ticker, e)
+
+
 def flatten(df: pd.DataFrame) -> pd.DataFrame:
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = [c[0] for c in df.columns]
@@ -95,6 +121,7 @@ def safe_download(ticker: str, **kwargs) -> pd.DataFrame:
             if not df.empty:
                 _cache_set(cache_key, df, "download")
                 _STORE.save_cache(ticker, df)
+                _check_data_quality(df, ticker, source="live")
                 return df
             logger.warning(f"{ticker} empty response attempt {attempt}/3")
         except Exception as e:
@@ -105,6 +132,7 @@ def safe_download(ticker: str, **kwargs) -> pd.DataFrame:
     df = _STORE.load_cache(ticker)
     if df is not None:
         logger.info(f"{ticker} using cached data from {_STORE.cache_path(ticker)}")
+        _check_data_quality(df, ticker, source="cache")
         return df
     logger.error(f"{ticker} no cached data available")
     return pd.DataFrame()

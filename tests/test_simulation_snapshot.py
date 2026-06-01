@@ -273,7 +273,7 @@ class TestSimulationStore:
         assert not os.path.exists(store.snapshot_path)
 
     def test_cold_state_roundtrip(self, store):
-        cold = {"model_paths": {"TEST": "models/TEST_model.pkl"}, "schema": "1.0"}
+        cold = {"model_paths": {"TEST": "models/TEST_model.json"}, "schema": "1.0"}
         store.capture(
             portfolio_value=100.0,
             total_return=0.0,
@@ -283,4 +283,4 @@ class TestSimulationStore:
         )
         loaded = store.load_cold_state()
         assert loaded is not None
-        assert loaded["model_paths"]["TEST"] == "models/TEST_model.pkl"
+        assert loaded["model_paths"]["TEST"] == "models/TEST_model.json"

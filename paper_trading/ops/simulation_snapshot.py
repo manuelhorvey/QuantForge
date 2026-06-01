@@ -7,6 +7,7 @@ and model state reconstruction.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import pickle
@@ -19,6 +20,40 @@ logger = logging.getLogger("quantforge.simulation_snapshot")
 SNAPSHOT_DIR = "data/live/snapshots"
 SNAPSHOT_FILE = "simulation_history.parquet"
 COLD_STATE_FILE = "cold_state.pkl"
+CHECKSUM_EXT = ".sha256"
+
+
+def _write_checksum(path: str) -> None:
+    sha = hashlib.sha256()
+    with open(path, "rb") as f:
+        while True:
+            block = f.read(65536)
+            if not block:
+                break
+            sha.update(block)
+    checksum_path = path + CHECKSUM_EXT
+    with open(checksum_path, "w") as f:
+        f.write(sha.hexdigest())
+
+
+def _verify_checksum(path: str) -> bool:
+    checksum_path = path + CHECKSUM_EXT
+    if not os.path.exists(checksum_path):
+        logger.warning("no checksum sidecar at %s — tamper detection unavailable", checksum_path)
+        return True
+    sha = hashlib.sha256()
+    with open(path, "rb") as f:
+        while True:
+            block = f.read(65536)
+            if not block:
+                break
+            sha.update(block)
+    with open(checksum_path) as f:
+        expected = f.read().strip()
+    if sha.hexdigest() != expected:
+        logger.warning("cold_state.pkl checksum MISMATCH — possible tampering")
+        return False
+    return True
 
 
 @dataclass
@@ -138,12 +173,14 @@ class SimulationStore:
             try:
                 with open(self.cold_state_path, "wb") as f:
                     pickle.dump(cold_state, f)
+                _write_checksum(self.cold_state_path)
             except Exception as e:
                 logger.warning("failed to persist cold state: %s", e)
 
     def load_cold_state(self) -> dict | None:
         if not os.path.exists(self.cold_state_path):
             return None
+        _verify_checksum(self.cold_state_path)
         try:
             with open(self.cold_state_path, "rb") as f:
                 return pickle.load(f)

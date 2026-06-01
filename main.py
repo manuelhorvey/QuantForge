@@ -1,7 +1,4 @@
-from data.loaders import downloader
-
-def main():
-    print("QuantForge initialized successfully")
+from paper_trading.ops.monitor import main
 
 if __name__ == "__main__":
     main()

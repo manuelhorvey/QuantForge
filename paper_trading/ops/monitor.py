@@ -6,7 +6,7 @@ import threading
 import time
 import warnings
 
-import joblib
+import xgboost as xgb
 
 from paper_trading.engine import LOG_PATH, PaperTradingEngine  # noqa: E402
 from paper_trading.serve import serve  # noqa: E402
@@ -35,7 +35,8 @@ def main():
         if _shutdown.is_set():
             return
         if os.path.exists(asset.model_path):
-            asset.model = joblib.load(asset.model_path)
+            asset.model = xgb.XGBClassifier()
+            asset.model.load_model(asset.model_path)
             asset._trained = True
             logger.info("%s: loaded cached model", name)
         else:

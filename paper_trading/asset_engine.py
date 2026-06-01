@@ -85,7 +85,7 @@ class AssetEngine:
         self.last_signal_date = None
         self.trades = []
         self.prob_history = []
-        self.model_path = os.path.join(BASE, "paper_trading", "models", f"{contract.name}_model.pkl")
+        self.model_path = os.path.join(BASE, "paper_trading", "models", f"{contract.name}_model.json")
         self._trained = False
         self.position = None
         self.trade_log = []
