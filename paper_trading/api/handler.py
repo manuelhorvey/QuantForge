@@ -104,6 +104,21 @@ class Handler:
                     self._send_json(result)
                 return
 
+        idx_path = get_index_html()
+        try:
+            with open(idx_path, "rb") as f:
+                data = f.read()
+            ext = os.path.splitext(idx_path)[1]
+            ct = MIME_TYPES.get(ext, "text/html; charset=utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", ct)
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        except FileNotFoundError:
+            pass
+
         self.send_response(404)
         self.end_headers()
 
