@@ -274,7 +274,15 @@ def load_allocations(configs: dict | None = None) -> dict:
     config_path = os.path.join(PROJECT_ROOT, "configs", "paper_trading.yaml")
     with open(config_path) as f:
         cfg = yaml.safe_load(f)
-    allocs = {name: acfg["allocation"] for name, acfg in cfg["assets"].items()}
+    from features.registry import FEATURE_REGISTRY
+    allocs = {}
+    for name, acfg in cfg["assets"].items():
+        ticker = acfg.get("ticker", "")
+        if ticker in FEATURE_REGISTRY:
+            contract_name = FEATURE_REGISTRY[ticker].name
+        else:
+            contract_name = name
+        allocs[contract_name] = acfg["allocation"]
 
     if configs is not None:
         # Equal-allocation fallback for assets not in paper_trading.yaml

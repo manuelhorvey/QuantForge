@@ -23,6 +23,54 @@ DEFAULT_LEAD_LAG_EDGES: list[dict] = [
         "lag": 3,
         "column": "nzdjpy_lead_3",
     },
+    {
+        "target": "CADJPY=X",
+        "leader": "^DJI",
+        "lag": 1,
+        "column": "dji_lead_1",
+    },
+    {
+        "target": "USDCAD=X",
+        "leader": "^DJI",
+        "lag": 1,
+        "column": "dji_lead_1",
+    },
+    {
+        "target": "NZDJPY=X",
+        "leader": "^DJI",
+        "lag": 1,
+        "column": "dji_lead_1",
+    },
+    {
+        "target": "EURAUD=X",
+        "leader": "^DJI",
+        "lag": 1,
+        "column": "dji_lead_1",
+    },
+    {
+        "target": "AUDJPY=X",
+        "leader": "^DJI",
+        "lag": 1,
+        "column": "dji_lead_1",
+    },
+    {
+        "target": "GBPJPY=X",
+        "leader": "^DJI",
+        "lag": 1,
+        "column": "dji_lead_1",
+    },
+    {
+        "target": "USDJPY=X",
+        "leader": "GC=F",
+        "lag": 1,
+        "column": "gc_lead_1",
+    },
+    {
+        "target": "USDCHF=X",
+        "leader": "GC=F",
+        "lag": 1,
+        "column": "gc_lead_1",
+    },
 ]
 
 

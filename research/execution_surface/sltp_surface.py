@@ -33,17 +33,21 @@ GRID_RES = 50  # interpolation grid resolution
 
 # Current config values by asset name (from configs/paper_trading.yaml)
 CURRENT_CONFIG = {
-    'BTC': {'sl': 1.5, 'tp': 3.0},
-    'EURAUD': {'sl': 1.0, 'tp': 2.5},
-    'GC': {'sl': 1.2, 'tp': 4.0},
-    'NZDJPY': {'sl': 1.0, 'tp': 2.5},
-    'CADJPY': {'sl': 0.8, 'tp': 3.5},
-    'AUDJPY': {'sl': 1.0, 'tp': 2.5},
-    'USDCAD': {'sl': 1.0, 'tp': 2.5},
-    'GBPJPY': {'sl': 1.0, 'tp': 2.5},
-    'USDJPY': {'sl': 1.0, 'tp': 2.5},
-    'USDCHF': {'sl': 1.0, 'tp': 2.5},
-    'GBPUSD': {'sl': 1.0, 'tp': 2.5},
+    'BTC': {'sl': 0.76, 'tp': 3.48},
+    'EURGBP': {'sl': 0.52, 'tp': 1.88},
+    'GC': {'sl': 0.51, 'tp': 2.94},
+    'NZDCHF': {'sl': 0.53, 'tp': 1.80},
+    'CHFJPY': {'sl': 0.50, 'tp': 1.70},
+    'CADJPY': {'sl': 0.50, 'tp': 1.69},
+    'USDCHF': {'sl': 0.52, 'tp': 1.93},
+    'EURJPY': {'sl': 0.52, 'tp': 1.65},
+    'EURCAD': {'sl': 0.51, 'tp': 1.96},
+    'AUDCHF': {'sl': 0.51, 'tp': 1.92},
+    'USDJPY': {'sl': 0.51, 'tp': 2.02},
+    'USDCAD': {'sl': 0.51, 'tp': 2.03},
+    'GBPCHF': {'sl': 0.52, 'tp': 1.65},
+    'ES': {'sl': 0.50, 'tp': 4.69},
+    'NQ': {'sl': 2.97, 'tp': 4.38},
 }
 
 

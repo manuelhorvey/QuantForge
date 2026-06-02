@@ -143,8 +143,15 @@ def freeze_one(ticker, force=False):
                         name, ty, len(X_train), len(X_test))
             continue
 
-        model = xgb.XGBClassifier(**MODEL_PARAMS)
+        # Skip fold if not all 3 classes (short=0, neutral=1, long=2) are present
         split_idx = int(len(X_train) * 0.8)
+        train_classes = set(y_train.iloc[:split_idx].unique())
+        if train_classes != {0, 1, 2}:
+            logger.info('  %s %d: missing classes %s in training split, skipping',
+                        name, ty, {0, 1, 2} - train_classes)
+            continue
+
+        model = xgb.XGBClassifier(**MODEL_PARAMS)
         model.fit(
             X_train.iloc[:split_idx], y_train.iloc[:split_idx],
             eval_set=[(X_train.iloc[split_idx:], y_train.iloc[split_idx:])],
