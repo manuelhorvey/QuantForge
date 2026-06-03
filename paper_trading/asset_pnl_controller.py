@@ -68,9 +68,14 @@ class AssetPnlController:
             if hit:
                 last_bar = str(datetime.now(tz=ET).date())
 
-                logger.info(
-                    "%s: SL/TP HIT: %s at %s (Current: %s)", asset.name, hit[0].upper(), hit[1], asset.current_price
-                )
+                if asset.pos_mgr.position is not None:
+                    entry = asset.pos_mgr.position.entry_price
+                    side = asset.pos_mgr.position.side
+                    ret = (hit[1] / entry - 1) if side == "long" else (entry / hit[1] - 1)
+                    logger.info(
+                        "%s: SL/TP HIT: %s at %.4f (Current: %.4f, Entry: %.4f, Ret: %.4f%%, Side: %s)",
+                        asset.name, hit[0].upper(), hit[1], asset.current_price, entry, ret * 100, side,
+                    )
                 if asset.pos_mgr.position is not None:
                     asset._record_stop_out(asset.pos_mgr.position.side, hit[1])
                 # Close shadow position with live exit reason

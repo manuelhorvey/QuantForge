@@ -100,6 +100,14 @@ class EntryService:
         asset = self.asset
         data = df if df is not None else asset.price_data
         vol = self.tb_vol(data["close"])
+        logger.debug(
+            "%s tb_vol: vol=%.6f entry=%.4f close_last=%.4f close_min=%.4f close_max=%.4f close_len=%d",
+            asset.name, vol, entry_price,
+            data["close"].iloc[-1] if len(data["close"]) else 0,
+            data["close"].min() if len(data["close"]) else 0,
+            data["close"].max() if len(data["close"]) else 0,
+            len(data["close"]),
+        )
         if pd.isna(vol) or pd.isna(entry_price) or entry_price == 0:
             logger.warning("%s: skipped entry — invalid price=%s or vol=%s", asset.name, entry_price, vol)
             return

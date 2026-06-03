@@ -310,23 +310,30 @@ class PaperTradingEngine:
         if real_equity <= 0:
             return
 
-        internal_mtm = self._compute_mtm_total()
-        if internal_mtm <= 0:
+        # Use configured capital as the denominator, NOT internal_mtm
+        # (sum of per-asset allocations which exceeds 100% of capital).
+        # This keeps the ratio near 1.0 when MT5 equity ≈ config capital,
+        # preventing the false -21% display when allocations sum to >100%.
+        cfg_capital = self._engine_cfg.capital
+        if cfg_capital <= 0:
             return
 
-        ratio = real_equity / internal_mtm
+        ratio = real_equity / cfg_capital
         if abs(ratio - 1.0) < 0.001:
             return
 
         logger.info(
-            "Broker capital sync: real_equity=%.2f  internal_mtm=%.2f  ratio=%.4f",
+            "Broker capital sync: real_equity=%.2f  cfg_capital=%.2f  ratio=%.4f",
             real_equity,
-            internal_mtm,
+            cfg_capital,
             ratio,
         )
         for asset in self.assets.values():
             adjusted = asset.capital_base * ratio
-            asset.set_capital_base(adjusted)
+            asset.capital_base = adjusted
+            asset.current_value = adjusted
+            asset.pos_mgr.current_value = adjusted
+            asset.initial_capital = adjusted
         self._mtm_cache_value = None  # invalidate cache
 
     def _detect_crisis_regime(self) -> bool:

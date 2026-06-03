@@ -5,12 +5,18 @@ from typing import Any
 
 import pandas as pd
 
+from paper_trading.ops.data_fetcher import fetch_live as _provider_fetch_live
+
 logger = logging.getLogger("quantforge.data_fetch")
 
 # Fetch 500 trading days (~2 years) instead of 10 years.
 # Indicator max lookback is 253 bars; 500 provides 247-bar warmup margin.
 _FETCH_PERIOD = "2y"
 _FETCH_WARMUP_BUFFER = 500
+
+# Minimum history rows required for stable indicator computation.
+# Must be >= the largest lookback in alpha_features.py (_MAX_INDICATOR_LOOKBACK = 253).
+_MIN_HISTORY_ROWS = 253
 
 _MACRO_TICKERS = ["DX-Y.NYB", "^VIX", "^GSPC", "CL=F", "^TNX", "^FVX", "^TYX", "^IRX"]
 
@@ -178,10 +184,13 @@ def fetch_asset_data(
     asset_name: str,
     ticker: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series, pd.DataFrame]:
-    """Fetch asset + macro data from yfinance.
+    """Fetch asset OHLCV + macro data.
 
-    Macro tickers are batch-fetched once per cycle and cached.
-    Reduces 6 sequential HTTP calls to 2 (1 batch + 1 asset).
+    Per-asset close uses the MT5 data provider (when installed) via
+    data_fetcher.fetch_live(), falling back to yfinance automatically.
+    Macro tickers (DXY, VIX, SPX, WTI, TNX) are batch-fetched from yfinance
+    once per cycle and cached — these are slow-moving indices where the
+    T-1 staleness is acceptable.
 
     Returns (prices, rate_diffs, dxy, vix, spx, commodities).
     prices: DataFrame with 'close' column
@@ -189,8 +198,29 @@ def fetch_asset_data(
     dxy, vix, spx: Series
     commodities: DataFrame with 'WTI' column
     """
-    logger.info("  fetching %s (%s) from yfinance...", asset_name, ticker)
-    close = fetch_yf_series(ticker, f"{asset_name}_close")
+    # Per-asset close via MT5 provider (falls back to yfinance automatically).
+    # fetch_live returns US/Eastern index; normalise to UTC midnight to
+    # align with macro data from yfinance.
+    logger.info("  fetching %s (%s) ...", asset_name, ticker)
+    try:
+        raw = _provider_fetch_live(ticker, min_days=_FETCH_WARMUP_BUFFER)
+        if raw.empty:
+            raise ValueError("empty DataFrame")
+        close = raw["close"].copy()
+        close.index = _normalize_index(close.index)
+    except Exception as exc:
+        logger.debug(
+            "MT5 fetch_live failed for %s (%s): %s — falling back to yfinance",
+            asset_name, ticker, exc,
+        )
+        close = fetch_yf_series(ticker, f"{asset_name}_close")
+
+    if len(close) < _MIN_HISTORY_ROWS:
+        raise ValueError(
+            f"{asset_name} ({ticker}): insufficient history "
+            f"({len(close)} rows, need >= {_MIN_HISTORY_ROWS})"
+        )
+
     prices = close.to_frame("close")
 
     # Macro data is batch-fetched once per cycle and cached
@@ -204,7 +234,21 @@ def fetch_asset_data(
 
     common = close.index.intersection(dxy.index).intersection(vix.index).intersection(spx.index).intersection(wti.index)
     common = common.intersection(tnx.dropna().index)
-    logger.info("  aligned on %d business days", len(common))
+    logger.info(
+        "  aligned on %d business days (close range: %s..%s, common range: %s..%s)",
+        len(common),
+        close.index.min().date() if not close.empty else "?",
+        close.index.max().date() if not close.empty else "?",
+        common.min().date() if not common.empty else "?",
+        common.max().date() if not common.empty else "?",
+    )
+    if common.empty:
+        raise ValueError(
+            f"{asset_name} ({ticker}): no overlapping dates between asset close "
+            f"({close.index.min().date() if not close.empty else '?'}.."
+            f"{close.index.max().date() if not close.empty else '?'}) "
+            f"and macro data — possible stale/delayed macro update"
+        )
 
     prices = prices.loc[common].copy()
     dxy = dxy.reindex(common).ffill()
@@ -250,11 +294,25 @@ def fetch_asset_ohlcv(
 ) -> pd.DataFrame:
     """Fetch OHLCV data with UTC-normalized index.
 
+    Uses the MT5 data provider (when installed) via data_fetcher.fetch_live(),
+    falling back to yfinance automatically.
+
     Returns DataFrame with columns: open, high, low, close, volume.
     Index is DatetimeIndex with UTC timezone, normalized to midnight.
     Fetches 500 trading days (~2 years) instead of the legacy 10 years.
-    No hard-coded sleep — rate limiting is delegated to yfinance.
     """
+    try:
+        df = _provider_fetch_live(ticker, min_days=_FETCH_WARMUP_BUFFER)
+        if df.empty:
+            raise ValueError("empty DataFrame")
+        df.index = _normalize_index(df.index)
+        return df
+    except Exception as exc:
+        logger.debug(
+            "MT5 fetch_live failed for %s: %s — falling back to yfinance",
+            ticker, exc,
+        )
+
     period = period or _FETCH_PERIOD
     import yfinance as yf
 

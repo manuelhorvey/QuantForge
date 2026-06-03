@@ -63,7 +63,7 @@ class MetricsService:
         asset._position.ensure_position_synced()
         cv = asset.current_value if not pd.isna(asset.current_value) else asset.initial_capital
         pv = asset.peak_value if not pd.isna(asset.peak_value) else cv
-        dd = (cv - pv) / pv if pv > 0 else 0
+        dd = min(0, (cv - pv) / pv) if pv > 0 else 0
         total_return = (cv - asset.initial_capital) / asset.initial_capital if asset.initial_capital > 0 else 0
 
         monthly_pfs = []

@@ -109,7 +109,7 @@ assets:
   CHFJPY:
     ticker: CHFJPY=X
     allocation: 0.070
-    sl_mult: 0.50
+    sl_mult: 0.85
     tp_mult: 1.70
     regime_geometry:
       GREEN:
@@ -124,7 +124,7 @@ assets:
   CADJPY:
     ticker: CADJPY=X
     allocation: 0.070
-    sl_mult: 0.50
+    sl_mult: 0.85
     tp_mult: 1.69
     regime_geometry:
       GREEN:
@@ -139,7 +139,7 @@ assets:
   USDCHF:
     ticker: USDCHF=X
     allocation: 0.070
-    sl_mult: 0.52
+    sl_mult: 0.85
     tp_mult: 1.93
     regime_geometry:
       GREEN:
@@ -154,7 +154,7 @@ assets:
   EURCAD:
     ticker: EURCAD=X
     allocation: 0.070
-    sl_mult: 0.51
+    sl_mult: 0.85
     tp_mult: 1.96
     regime_geometry:
       GREEN:
@@ -169,12 +169,12 @@ assets:
   AUDCHF:
     ticker: AUDCHF=X
     allocation: 0.070
-    sl_mult: 0.51
+    sl_mult: 0.85
     tp_mult: 1.92
   USDJPY:
     ticker: USDJPY=X
     allocation: 0.070
-    sl_mult: 0.51
+    sl_mult: 0.85
     tp_mult: 2.02
     regime_geometry:
       GREEN:
@@ -189,7 +189,7 @@ assets:
   USDCAD:
     ticker: USDCAD=X
     allocation: 0.070
-    sl_mult: 0.51
+    sl_mult: 0.85
     tp_mult: 2.03
     regime_geometry:
       GREEN:
@@ -204,7 +204,7 @@ assets:
   GBPCHF:
     ticker: GBPCHF=X
     allocation: 0.070
-    sl_mult: 0.52
+    sl_mult: 0.85
     tp_mult: 1.65
   ES:
     ticker: ES=F
@@ -221,12 +221,12 @@ assets:
   AUDNZD:
     ticker: AUDNZD=X
     allocation: 0.070
-    sl_mult: 0.50
+    sl_mult: 0.85
     tp_mult: 1.50
   CADCHF:
     ticker: CADCHF=X
     allocation: 0.070
-    sl_mult: 0.50
+    sl_mult: 0.85
     tp_mult: 1.50
   CL:
     ticker: CL=F
@@ -236,17 +236,17 @@ assets:
   GBPCAD:
     ticker: GBPCAD=X
     allocation: 0.070
-    sl_mult: 0.50
+    sl_mult: 0.85
     tp_mult: 1.50
   GBPNZD:
     ticker: GBPNZD=X
     allocation: 0.070
-    sl_mult: 0.50
+    sl_mult: 0.85
     tp_mult: 1.50
   NZDCAD:
     ticker: NZDCAD=X
     allocation: 0.070
-    sl_mult: 0.50
+    sl_mult: 0.85
     tp_mult: 1.50
   ^DJI:
     ticker: ^DJI
