@@ -235,9 +235,6 @@ class PaperTradingEngine:
     def _detect_crisis_regime(self) -> bool:
         return self._rebalance.detect_crisis_regime()
 
-    def _compute_mtm_total(self) -> float:
-        return self._state.compute_mtm_total()
-
     def get_state(self) -> dict:
         return self._state.get_state()
 
@@ -304,6 +301,11 @@ class PaperTradingEngine:
 
         pd_limit = self._engine_cfg.portfolio_drawdown_limit
         results: dict[str, object] = {}
+
+        # ── Refresh prices for accurate MTM before drawdown check ──
+        for name, asset in self.assets.items():
+            asset.refresh_price()
+        self._mtm_cache_value = None  # invalidate MTM cache so it recomputes with fresh prices
 
         # ── Portfolio drawdown check (BEFORE any new trading) ────────
         mtm = self._compute_mtm_total()

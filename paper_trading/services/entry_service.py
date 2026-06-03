@@ -66,6 +66,18 @@ class EntryService:
 
     def can_enter(self, side, price, context=None) -> tuple[bool, str]:
         asset = self.asset
+
+        # Cross-side stop-out cooldown: blocks ALL entries after ANY SL hit
+        # Prevents the LONG→SL→SHORT→SL→LONG churn loop.
+        if asset._last_stop_out_date is not None:
+            cross_cooldown_hours = asset.config.get("stopout_cross_side_cooldown_hours", 1.0)
+            now = pd.Timestamp.now(tz="UTC")
+            elapsed_hours = (now - asset._last_stop_out_date).total_seconds() / 3600
+            if elapsed_hours < cross_cooldown_hours:
+                remaining = round(cross_cooldown_hours - elapsed_hours, 2)
+                return False, f"cross_side_stopout_cooldown_{remaining}h"
+
+        # Same-side day lock: prevents re-entering the stopped-out side for rest of day
         if asset._last_stop_out_date is not None and asset._last_stop_out_side == side:
             now = pd.Timestamp.now(tz="UTC")
             if asset._last_stop_out_date == now.normalize():

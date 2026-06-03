@@ -155,17 +155,22 @@ class PositionService:
 
     def record_stop_out(self, side: str, exit_price: float) -> None:
         asset = self.asset
-        if asset.pos_mgr.position is not None:
-            asset._last_stop_out_price = asset.pos_mgr.position.stop_loss
-        else:
-            asset._last_stop_out_price = None
 
-        if asset._regime_adjusted_entry and asset._last_stop_out_price is not None and asset._entry_price is not None:
-            sl_distance = abs(asset._last_stop_out_price - asset._entry_price)
-            price_beyond_sl = abs(exit_price - asset._last_stop_out_price)
+        # Compute SL price for churn filter check WITHOUT mutating state yet
+        sl_price = None
+        if asset.pos_mgr.position is not None:
+            sl_price = asset.pos_mgr.position.stop_loss
+
+        # Churn filter: if price barely moved beyond SL, skip recording entirely.
+        # Prevents noise-driven stop-outs from triggering cooldown/locks.
+        if asset._regime_adjusted_entry and sl_price is not None and asset._entry_price is not None:
+            sl_distance = abs(sl_price - asset._entry_price)
+            price_beyond_sl = abs(exit_price - sl_price)
             if sl_distance > 0 and (price_beyond_sl / sl_distance) < asset._churn_ratio_threshold:
                 return
 
+        # Atomically persist all stop-out metadata (only after churn filter passes)
+        asset._last_stop_out_price = sl_price
         asset._last_stop_out_side = side
         asset._last_stop_out_date = pd.Timestamp.now(tz="UTC").normalize()
         asset._cooldown_score = 1.0
