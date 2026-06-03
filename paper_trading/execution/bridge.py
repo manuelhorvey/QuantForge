@@ -185,6 +185,9 @@ class ExecutionBridge:
         ohlcv: pd.DataFrame | None = None,
     ) -> tuple[float, str]:
         """Place order through OrderManager; returns (fill_price, order_id)."""
+        if self._is_real_broker:
+            order_id = self.orders.submit_market_order(asset, side, quantity, fill_price=None)
+            return mid_price, order_id or ""
         fill, _, _ = self.fill_price(asset, side, quantity, mid_price, ohlcv)
         order_id = self.orders.submit_market_order(asset, side, quantity, fill_price=fill)
         return fill, order_id or ""

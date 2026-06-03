@@ -130,9 +130,16 @@ class EntryService:
             broker_side = "buy" if side == "long" else "sell"
             notional = self.compute_notional()
             qty = max(notional / entry_price, 1e-6)
-            fill_price, entry_slippage_bps, _ = asset.execution_bridge.fill_price(
-                asset.ticker, broker_side, qty, entry_price
-            )
+            if hasattr(asset.execution_bridge, '_is_real_broker') and asset.execution_bridge._is_real_broker:
+                fill_price, order_id = asset.execution_bridge.submit_market_order(
+                    asset.ticker, broker_side, qty, entry_price
+                )
+                if order_id:
+                    logger.info("%s: MT5 order submitted — ticket=%s", asset.name, order_id)
+            else:
+                fill_price, entry_slippage_bps, _ = asset.execution_bridge.fill_price(
+                    asset.ticker, broker_side, qty, entry_price
+                )
         asset._last_entry_slippage = entry_slippage_bps
 
         if asset.config.get("dynamic_sltp", {}).get("enabled", False):
