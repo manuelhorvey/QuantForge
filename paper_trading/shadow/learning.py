@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import threading
 from collections import Counter
@@ -7,6 +8,8 @@ from datetime import datetime
 import numpy as np
 
 from paper_trading.shadow.feedback import read_feedback
+
+logger = logging.getLogger("quantforge.shadow.learning")
 
 _lock = threading.Lock()
 
@@ -47,7 +50,8 @@ def compile_shadow_learning(
 
         _save_compiled(asset, compiled)
         return compiled
-    except Exception:
+    except Exception as e:
+        logger.warning("Shadow learning compilation failed for %s: %s: %s", asset, type(e).__name__, e)
         return _empty_report(asset)
 
 
@@ -277,10 +281,14 @@ def _save_compiled(asset: str, report: dict) -> None:
             existing["history"] = history
             existing["last_updated"] = report["timestamp"]
             existing["asset"] = asset
-            with open(path, "w") as f:
+            tmp = path + ".tmp"
+            with open(tmp, "w") as f:
                 json.dump(existing, f, indent=2, default=str)
-    except Exception:
-        pass
+            os.replace(tmp, path)
+    except OSError as e:
+        logger.error("Failed to save compiled learning for %s: %s", asset, e)
+    except TypeError as e:
+        logger.error("Non-serializable compiled learning for %s: %s", asset, e)
 
 
 def load_compiled(asset: str) -> dict | None:
@@ -290,7 +298,8 @@ def load_compiled(asset: str) -> dict | None:
             return None
         with open(path) as f:
             return json.load(f)
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to load compiled learning for %s: %s: %s", asset, type(e).__name__, e)
         return None
 
 

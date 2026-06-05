@@ -1,8 +1,11 @@
 import http.server
+import logging
 import socketserver
 from socketserver import ThreadingMixIn
 
 from paper_trading.api.handler import Handler
+
+logger = logging.getLogger("quantforge.serve")
 
 DEFAULT_PORT = 5000
 
@@ -25,5 +28,5 @@ def serve(port=DEFAULT_PORT, shutdown_event=None):
         while not (shutdown_event and shutdown_event.is_set()):
             httpd.handle_request()
     except KeyboardInterrupt:
-        pass
+        logger.info("Dashboard server shutting down (SIGINT)")
     httpd.server_close()

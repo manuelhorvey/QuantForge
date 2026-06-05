@@ -1,9 +1,12 @@
+import logging
 from collections import Counter
 
 import numpy as np
 
 from paper_trading.shadow.feedback import read_feedback
 from paper_trading.shadow.learning import compile_shadow_learning
+
+logger = logging.getLogger("quantforge.shadow.analytics")
 
 PAPER_PORTFOLIO = [
     "CADJPY",
@@ -79,7 +82,8 @@ def build_asset_learning_profile(asset: str, months: int = 3) -> dict | None:
             "risk_overreaction_rate": round(risk_overreaction_rate, 4),
             "shadow_action_utilization": action_utilization,
         }
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to build learning profile for %s: %s: %s", asset, type(e).__name__, e)
         return None
 
 
@@ -106,7 +110,8 @@ def compare_assets(months: int = 3) -> list:
             ],
             "profiles": profiles,
         }
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to compare assets: %s: %s", type(e).__name__, e)
         return {"stability_ranking": [], "profiles": []}
 
 
@@ -132,7 +137,8 @@ def compare_learning_profiles() -> dict:
 
         rankings.sort(key=lambda r: r["stability"], reverse=True)
         return {"rankings": rankings}
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to compare learning profiles: %s: %s", type(e).__name__, e)
         return {"rankings": []}
 
 
@@ -164,5 +170,6 @@ def detect_systemic_patterns() -> dict:
             "system_risk_signature": round(sys_risk, 4),
             "pattern_frequency": dict(all_patterns.most_common(5)),
         }
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to detect systemic patterns: %s: %s", type(e).__name__, e)
         return {"global_patterns": [], "system_risk_signature": 0.0, "pattern_frequency": {}}

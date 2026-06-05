@@ -1,4 +1,7 @@
+import logging
 from datetime import datetime
+
+logger = logging.getLogger("quantforge.shadow.actions")
 
 
 def compute_shadow_actions(
@@ -53,7 +56,8 @@ def compute_shadow_actions(
             },
             "recommended_guardrails": guardrails,
         }
-    except Exception:
+    except Exception as e:
+        logger.warning("Shadow actions failed for %s: %s: %s", asset, type(e).__name__, e)
         return _fallback("SHADOW_FAILURE")
 
 

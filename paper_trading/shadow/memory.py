@@ -1,10 +1,13 @@
 import json
+import logging
 import os
 import threading
 from collections import Counter
 from datetime import datetime, timedelta
 
 import numpy as np
+
+logger = logging.getLogger("quantforge.shadow.memory")
 
 _lock = threading.Lock()
 
@@ -23,8 +26,10 @@ def store_event(asset: str, event: dict) -> None:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with _lock, open(path, "a") as f:
             f.write(json.dumps(event, default=str) + "\n")
-    except Exception:
-        pass
+    except OSError as e:
+        logger.error("Failed to store shadow memory event for %s: %s", asset, e)
+    except TypeError as e:
+        logger.error("Non-serializable shadow memory event for %s: %s", asset, e)
 
 
 def read_events(asset: str, days: int = 90) -> list:
@@ -51,10 +56,12 @@ def read_events(asset: str, days: int = 90) -> list:
                         line = line.strip()
                         if line:
                             events.append(json.loads(line))
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to read shadow event file %s: %s: %s", fpath, type(e).__name__, e)
                 continue
         return events
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to read shadow events for %s: %s: %s", asset, type(e).__name__, e)
         return []
 
 
@@ -163,10 +170,14 @@ def save_baseline(asset: str, baseline: dict) -> None:
     try:
         os.makedirs(BASELINE_DIR, exist_ok=True)
         path = os.path.join(BASELINE_DIR, f"{asset}.json")
-        with open(path, "w") as f:
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
             json.dump(baseline, f, indent=2, default=str)
-    except Exception:
-        pass
+        os.replace(tmp, path)
+    except OSError as e:
+        logger.error("Failed to save shadow baseline for %s: %s", asset, e)
+    except TypeError as e:
+        logger.error("Non-serializable shadow baseline for %s: %s", asset, e)
 
 
 def load_baseline(asset: str) -> dict | None:
@@ -176,7 +187,8 @@ def load_baseline(asset: str) -> dict | None:
             return None
         with open(path) as f:
             return json.load(f)
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to load shadow baseline for %s: %s: %s", asset, type(e).__name__, e)
         return None
 
 

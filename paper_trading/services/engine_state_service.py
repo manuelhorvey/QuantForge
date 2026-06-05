@@ -111,7 +111,10 @@ class EngineStateService:
             if any_halted
             else (ExecutionState.PAUSED if (overall_validity / n) < 0.5 else ExecutionState.ACTIVE)
         )
-        tc = get_config().capital or sum(a.initial_capital for a in engine.assets.values())
+        # Use post-sync capital as baseline so dashboard returns match
+        # the actual capital used for sizing (not raw config which may
+        # diverge when MT5 broker equity is synced).
+        tc = sum(a.capital_base for a in engine.assets.values()) or get_config().capital or 1.0
 
         mtm_total = self.compute_mtm_total()
         cash_buffer = max(0, tc - mtm_total)

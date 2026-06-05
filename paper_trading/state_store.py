@@ -60,6 +60,14 @@ def sanitize(obj):
     return obj
 
 
+def _atomic_write_json(path: str, data: dict) -> None:
+    """Atomic JSON write using temp file + os.replace (atomic on POSIX)."""
+    tmp_path = path + ".tmp"
+    with open(tmp_path, "w") as f:
+        json.dump(data, f, indent=2, default=str)
+    os.replace(tmp_path, path)
+
+
 class StateStore:
     def __init__(self, base_dir: str, snapshot_cache_ttl: float = 1.0):
         self.base_dir = base_dir
@@ -428,8 +436,7 @@ class StateStore:
                 "updated_at": datetime.now(tz=ET).isoformat(),
             }
 
-            with open(self.trade_outcomes_path, "w") as f:
-                json.dump(payload, f, indent=2)
+            _atomic_write_json(self.trade_outcomes_path, payload)
             return payload
         except Exception:
             logger.exception("Failed to compute trade outcomes")
@@ -655,10 +662,9 @@ class StateStore:
 
         try:
             path = os.path.join(self.live_dir, "analytics_snapshot.json")
-            with open(path, "w") as f:
-                json.dump(snapshot, f, indent=2, default=str)
-        except Exception as e:
-            logger.warning("Failed to write analytics snapshot: %s", e)
+            _atomic_write_json(path, snapshot)
+        except OSError as e:
+            logger.error("Failed to write analytics snapshot: %s", e)
 
     def read_analytics_snapshot(self) -> dict | None:
         path = os.path.join(self.live_dir, "analytics_snapshot.json")

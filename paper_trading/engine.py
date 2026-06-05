@@ -322,18 +322,33 @@ class PaperTradingEngine:
         if abs(ratio - 1.0) < 0.001:
             return
 
-        logger.info(
-            "Broker capital sync: real_equity=%.2f  cfg_capital=%.2f  ratio=%.4f",
-            real_equity,
-            cfg_capital,
-            ratio,
-        )
+        if ratio < 0.5 or ratio > 2.0:
+            logger.warning(
+                "Broker capital sync: LARGE DISCREPANCY — real_equity=%.2f cfg_capital=%.2f ratio=%.4f. "
+                "All asset capital bases will be adjusted by this ratio. "
+                "Verify MT5 account equity matches config capital.",
+                real_equity,
+                cfg_capital,
+                ratio,
+            )
+        else:
+            logger.info(
+                "Broker capital sync: real_equity=%.2f  cfg_capital=%.2f  ratio=%.4f",
+                real_equity,
+                cfg_capital,
+                ratio,
+            )
+
         for asset in self.assets.values():
             adjusted = asset.capital_base * ratio
             asset.capital_base = adjusted
             asset.current_value = adjusted
             asset.pos_mgr.current_value = adjusted
             asset.initial_capital = adjusted
+            # Reset peak to current_value so per-asset drawdown doesn't
+            # show a false -95% from the capital baseline change.
+            asset.peak_value = adjusted
+            asset.pos_mgr.peak_value = adjusted
         self._mtm_cache_value = None  # invalidate cache
 
     def _detect_crisis_regime(self) -> bool:
@@ -406,6 +421,15 @@ class PaperTradingEngine:
         pd_limit = self._engine_cfg.portfolio_drawdown_limit
         results: dict[str, object] = {}
 
+        # ── Sync internal capital to real broker equity FIRST ──────────
+        # Runs before everything so that drawdown check, refresh, and
+        # sizing all see a consistent capital baseline.
+        self._sync_broker_capital()
+        # Reset peak after sync so drawdown is computed from the new
+        # capital baseline (prevents false -97% circuit breaker on fresh
+        # start when MT5 equity << config capital).
+        self.portfolio_peak_value = None
+
         # ── Refresh prices for accurate MTM before drawdown check ──
         for name, asset in self.assets.items():
             asset.refresh_price()
@@ -448,10 +472,6 @@ class PaperTradingEngine:
             )
             self.last_update = datetime.now(tz=ET)
             return results
-
-        # ── Sync internal capital to real broker equity ───────────────
-        # Runs before the orchestrator so entry sizing uses live equity.
-        self._sync_broker_capital()
 
         # ── Fault-isolated asset execution via orchestrator ──────────
         # Replaces Phases 1 (refresh+pnl), 3 (signal), 4 (validity).

@@ -17,8 +17,10 @@ def _append(line: dict) -> None:
         os.makedirs(os.path.dirname(TRACE_LOG_PATH), exist_ok=True)
         with _lock, open(TRACE_LOG_PATH, "a") as f:
             f.write(json.dumps(line, default=str) + "\n")
-    except Exception:
-        pass
+    except OSError as e:
+        _logger.error("Trace append failed: %s", e)
+    except TypeError as e:
+        _logger.warning("Non-serializable trace entry: %s", e)
 
 
 def trace_decision(

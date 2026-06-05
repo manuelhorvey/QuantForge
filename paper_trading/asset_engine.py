@@ -344,8 +344,8 @@ class AssetEngine:
                     self._attribution.update_trade_extremes(
                         self._current_trade_id, high_val, low_val, self._bars_at_entry
                     )
-            except (KeyError, IndexError, ValueError, TypeError):
-                pass
+            except (KeyError, IndexError, ValueError, TypeError) as e:
+                logger.debug("MAE/MFE tracking skipped for %s: %s", self.name, e)
         new_side = (
             PositionSide.LONG
             if decision.signal == SignalType.BUY

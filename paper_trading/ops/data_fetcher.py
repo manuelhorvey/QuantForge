@@ -31,21 +31,25 @@ _IN_MEMORY_TTL: dict[str, float] = {
 # All module-level fetch functions will use this instead of yfinance.
 _mt5_client: object | None = None
 _mt5_symbol_map: dict[str, str] = {}
+_mt5_client_lock = threading.Lock()
+_cache_lock = threading.Lock()
 
 
 def set_mt5_client(client: object, symbol_map: dict[str, str] | None = None) -> None:
     """Install an MT5 client as the data provider instead of yfinance."""
-    global _mt5_client, _mt5_symbol_map
-    _mt5_client = client
-    _mt5_symbol_map = symbol_map or {}
+    with _mt5_client_lock:
+        global _mt5_client, _mt5_symbol_map
+        _mt5_client = client
+        _mt5_symbol_map = symbol_map or {}
     logger.info("MT5 data provider installed — all data fetches will use MT5 bridge")
 
 
 def clear_mt5_client() -> None:
     """Revert to yfinance data provider."""
-    global _mt5_client, _mt5_symbol_map
-    _mt5_client = None
-    _mt5_symbol_map = {}
+    with _mt5_client_lock:
+        global _mt5_client, _mt5_symbol_map
+        _mt5_client = None
+        _mt5_symbol_map = {}
     logger.info("MT5 data provider removed — reverting to yfinance")
 
 
@@ -59,36 +63,43 @@ def _rate_limit() -> None:
 
 
 def _cache_get(key: str) -> pd.DataFrame | float | None:
-    entry = _IN_MEMORY_CACHE.get(key)
-    if entry is None:
-        return None
-    value, expiry = entry
-    if time.monotonic() > expiry:
-        del _IN_MEMORY_CACHE[key]
-        return None
+    with _cache_lock:
+        entry = _IN_MEMORY_CACHE.get(key)
+        if entry is None:
+            return None
+        value, expiry = entry
+        if time.monotonic() > expiry:
+            del _IN_MEMORY_CACHE[key]
+            return None
     return value
 
 
 def _cache_set(key: str, value: pd.DataFrame | float | None, cache_type: str = "download") -> None:
     ttl = _IN_MEMORY_TTL.get(cache_type, 60.0)
-    _IN_MEMORY_CACHE[key] = (value, time.monotonic() + ttl)
+    with _cache_lock:
+        _IN_MEMORY_CACHE[key] = (value, time.monotonic() + ttl)
+
+
+def _mt5_get_client() -> object | None:
+    """Thread-safe read of the global MT5 client."""
+    with _mt5_client_lock:
+        return _mt5_client
 
 
 def _mt5_ensure_connected() -> bool:
     """Ensure the global MT5 client is connected, reconnecting if needed."""
-    global _mt5_client
-    if _mt5_client is None:
+    client = _mt5_get_client()
+    if client is None:
         return False
     try:
-        return _mt5_client.ensure_connected()
+        return client.ensure_connected()
     except Exception:
         return False
 
 
 def _mt5_fetch_ohlcv(ticker: str, years: int = 2) -> pd.DataFrame:
     """Fetch OHLCV via MT5 client if installed."""
-    global _mt5_client
-    client = _mt5_client
+    client = _mt5_get_client()
     if client is None:
         return pd.DataFrame()
     if not _mt5_ensure_connected():
@@ -102,8 +113,7 @@ def _mt5_fetch_ohlcv(ticker: str, years: int = 2) -> pd.DataFrame:
 
 def _mt5_realtime_price(ticker: str) -> float | None:
     """Fetch realtime price via MT5 client if installed."""
-    global _mt5_client
-    client = _mt5_client
+    client = _mt5_get_client()
     if client is None:
         return None
     if not _mt5_ensure_connected():

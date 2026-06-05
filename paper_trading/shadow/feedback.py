@@ -1,7 +1,10 @@
 import json
+import logging
 import os
 import threading
 from datetime import datetime
+
+logger = logging.getLogger("quantforge.shadow.feedback")
 
 _lock = threading.Lock()
 
@@ -17,15 +20,25 @@ def record_shadow_feedback(
     risk: dict,
     action: dict,
 ) -> None:
-    try:
-        if not all([asset, drift, risk, action]):
-            return
+    if not asset or not isinstance(asset, str):
+        logger.warning("record_shadow_feedback: invalid asset=%r", asset)
+        return
+    if signal_data is None:
+        logger.warning("record_shadow_feedback: signal_data is None for %s", asset)
+        return
+    if drift is None:
+        logger.warning("record_shadow_feedback: drift is None for %s", asset)
+        return
+    if risk is None:
+        logger.warning("record_shadow_feedback: risk is None for %s", asset)
+        return
+    if action is None:
+        logger.warning("record_shadow_feedback: action is None for %s", asset)
+        return
 
-        scores = _compute_derived_metrics(signal_data, drift, risk, action)
-        event = _build_event(asset, signal_data, drift, risk, action, scores)
-        _store_event(asset, event)
-    except Exception:
-        pass
+    scores = _compute_derived_metrics(signal_data, drift, risk, action)
+    event = _build_event(asset, signal_data, drift, risk, action, scores)
+    _store_event(asset, event)
 
 
 def _compute_derived_metrics(
@@ -127,8 +140,10 @@ def _store_event(asset: str, event: dict) -> None:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with _lock, open(path, "a") as f:
             f.write(json.dumps(event, default=str) + "\n")
-    except Exception:
-        pass
+    except OSError as e:
+        logger.error("Failed to store shadow feedback for %s: %s", asset, e)
+    except TypeError as e:
+        logger.error("Non-serializable shadow feedback for %s: %s", asset, e)
 
 
 def read_feedback(asset: str, months: int = 3) -> list:
@@ -149,5 +164,6 @@ def read_feedback(asset: str, months: int = 3) -> list:
                     if line:
                         events.append(json.loads(line))
         return events
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to read shadow feedback for %s: %s: %s", asset, type(e).__name__, e)
         return []
