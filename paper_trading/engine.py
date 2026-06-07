@@ -423,13 +423,13 @@ class PaperTradingEngine:
         results: dict[str, object] = {}
 
         # ── Sync internal capital to real broker equity FIRST ──────────
-        # Runs before everything so that drawdown check, refresh, and
-        # sizing all see a consistent capital baseline.
-        self._sync_broker_capital()
+        # DISABLED: dashboard tracks independent paper P&L; MT5 orders
+        # route through the broker but don't overwrite internal capital.
+        # self._sync_broker_capital()
         # Reset peak after sync so drawdown is computed from the new
         # capital baseline (prevents false -97% circuit breaker on fresh
         # start when MT5 equity << config capital).
-        self.portfolio_peak_value = None
+        # self.portfolio_peak_value = None
 
         # ── Refresh prices for accurate MTM before drawdown check ──
         for name, asset in self.assets.items():
