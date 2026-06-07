@@ -22,6 +22,11 @@ NEW_ASSETS = [
     ("CADCHF", "CADCHF=X", {"sl": 1.0, "tp": 4.0}, 2),
     ("AUDUSD", "AUDUSD=X", {"sl": 1.5, "tp": 4.0}, 2),
     ("AUDNZD", "AUDNZD=X", {"sl": 2.0, "tp": 1.0}, 2),
+    # Remaining filter survivors 2026-06
+    ("EURCHF", "EURCHF=X", {"sl": 1.0, "tp": 3.0}, 4),
+    ("EURCAD", "EURCAD=X", {"sl": 1.0, "tp": 1.0}, 3),
+    ("EURNZD", "EURNZD=X", {"sl": 1.5, "tp": 2.5}, 3),
+    ("GBPCHF", "GBPCHF=X", {"sl": 1.0, "tp": 2.0}, 2),
 ]
 
 LABEL_THRESH = 0.002 / 0.15

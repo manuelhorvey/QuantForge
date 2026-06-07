@@ -42,6 +42,11 @@ SLTP_CFG = {
     "CADCHF": {"sl": 1.00, "tp": 4.00},
     "AUDUSD": {"sl": 1.50, "tp": 4.00},
     "AUDNZD": {"sl": 2.00, "tp": 1.00},
+    # New additions (remaining filter 2026-06)
+    "EURCHF": {"sl": 1.00, "tp": 3.00},
+    "EURCAD": {"sl": 1.00, "tp": 1.00},
+    "EURNZD": {"sl": 1.50, "tp": 2.50},
+    "GBPCHF": {"sl": 1.00, "tp": 2.00},
 }
 DASHBOARD_TICKERS = {
     "GC=F": "GC",
@@ -55,6 +60,9 @@ DASHBOARD_TICKERS = {
     "GBPAUD=X": "GBPAUD", "NZDCHF=X": "NZDCHF",
     "CADCHF=X": "CADCHF", "AUDUSD=X": "AUDUSD",
     "AUDNZD=X": "AUDNZD",
+    # New additions (remaining filter 2026-06)
+    "EURCHF=X": "EURCHF", "EURCAD=X": "EURCAD",
+    "EURNZD=X": "EURNZD", "GBPCHF=X": "GBPCHF",
 }
 MODEL_DEPTH = {
     "GC": 2, "USDCHF": 4,
@@ -66,6 +74,9 @@ MODEL_DEPTH = {
     "GBPAUD": 2, "NZDCHF": 2,
     "CADCHF": 2, "AUDUSD": 2,
     "AUDNZD": 2,
+    # New additions (remaining filter 2026-06)
+    "EURCHF": 4, "EURCAD": 3,
+    "EURNZD": 3, "GBPCHF": 2,
 }
 
 DEF_SL, DEF_TP = 1.0, 2.0
