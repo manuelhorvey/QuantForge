@@ -27,29 +27,27 @@ Operational procedures for the paper trading system. This document is for the pe
 
 ### Assets
 
-**Core portfolio (15 assets promoted from walk-forward screening):**
+**Core portfolio (11 assets promoted from walk-forward screening):**
 
-All assets use risk-parity allocation (6.5–7.8% each), `sl_mult=2.0`, `tp_mult=1.5` (except BTCUSD, ES, NQ: see below).
+Each asset uses risk-parity allocation with per-asset sl_mult, tp_mult, and max_depth calibrated via walk-forward optimization.
 
-| Asset | Ticker | Allocation | sl_mult | tp_mult |
-|---|---|---|---|---|
-| BTCUSD | BTC-USD | 6.5% | 3.0 | 2.5 |
-| EURGBP | EURGBP=X | 6.5% | 2.0 | 1.5 |
-| GC | GC=F | 6.5% | 2.0 | 1.5 |
-| NZDCHF | NZDCHF=X | 6.5% | 2.0 | 1.5 |
-| CHFJPY | CHFJPY=X | 6.5% | 2.0 | 1.5 |
-| CADJPY | CADJPY=X | 6.5% | 2.0 | 1.5 |
-| USDCHF | USDCHF=X | 6.5% | 2.0 | 1.5 |
-| EURJPY | EURJPY=X | 6.5% | 2.0 | 1.5 |
-| EURCAD | EURCAD=X | 6.5% | 2.0 | 1.5 |
-| AUDCHF | AUDCHF=X | 6.5% | 2.0 | 1.5 |
-| USDJPY | USDJPY=X | 6.5% | 2.0 | 1.5 |
-| USDCAD | USDCAD=X | 6.5% | 2.0 | 1.5 |
-| GBPCHF | GBPCHF=X | 6.5% | 2.0 | 1.5 |
-| ES | ES=F | 7.7% | 2.0 | 2.5 |
-| NQ | NQ=F | 7.8% | 2.0 | 2.5 |
+| Asset | Ticker | Allocation | sl_mult | tp_mult | max_depth |
+|---|---|---|---|---|---|
+| GC | GC=F | 9.0% | 1.00 | 4.00 | 2 |
+| CHFJPY | CHFJPY=X | 9.0% | 0.50 | 1.00 | 2 |
+| USDCHF | USDCHF=X | 4.0% | 0.85 | 3.00 | 4 |
+| AUDCHF | AUDCHF=X | 7.0% | 2.75 | 3.50 | 2 |
+| USDCAD | USDCAD=X | 7.0% | 2.50 | 2.00 | 5 |
+| ES | ES=F | 10.0% | 2.00 | 5.50 | 2 |
+| NQ | NQ=F | 8.0% | 2.50 | 5.00 | 2 |
+| GBPCAD | GBPCAD=X | 7.0% | 2.50 | 2.50 | 2 |
+| GBPNZD | GBPNZD=X | 7.0% | 3.00 | 1.00 | 3 |
+| NZDCAD | NZDCAD=X | 7.0% | 2.50 | 4.00 | 2 |
+| ^DJI | ^DJI | 4.0% | 0.50 | 4.00 | 4 |
 
-**BTC satellite bucket:** 5% AUM cap, vol target 40%, drawdown limit 25%, macro-gated entry (VIX, DXY, vol z-score, portfolio returns, crisis regime). Managed by `paper_trading/satellite/engine.py:HighVolSatellite`.
+**Allocations sum to ~100%.**
+
+**Backtest performance (5-year: 2021–2025):** PF 1.46, avgR +0.196, 2036 trades, 11 assets.
 
 **SL/TP Architecture:** Barriers are computed by `DynamicSLTPEngine` using `shared/volatility.py:VolatilityPrimitive` with `method="atr"`. At entry, initial barriers are set. On each refresh within the first `post_adjust_interval_bars` (default 3), `post_entry_adjust()` recomputes barriers based on current ATR — vol spikes (>1.3×) tighten SL; vol collapses (<0.7×) no action. Model-validity adjustments via `regime_geometry`: YELLOW → sl×0.9, tp×0.8; RED → sl×0.8, tp×0.5.
 
@@ -186,20 +184,17 @@ curl http://127.0.0.1:5000/ping
 
 After startup (Mon–Fri during market hours), verify log output shows:
 ```
-BTCUSD: BUY conf=XX% @ $XX.XX
-EURGBP: SELL conf=XX% @ $XX.XX
-GC: SELL conf=XX% @ $XX.XX
-NZDCHF: FLAT conf=XX% @ $XX.XX
-CHFJPY: BUY conf=XX% @ $XX.XX
-CADJPY: FLAT conf=XX% @ $XX.XX
-USDCHF: SELL conf=XX% @ $XX.XX
-EURJPY: BUY conf=XX% @ $XX.XX
-EURCAD: SELL conf=XX% @ $XX.XX
+GC: BUY conf=XX% @ $XX.XX
+CHFJPY: SELL conf=XX% @ $XX.XX
+USDCHF: BUY conf=XX% @ $XX.XX
 AUDCHF: FLAT conf=XX% @ $XX.XX
-USDJPY: SELL conf=XX% @ $XX.XX
 USDCAD: FLAT conf=XX% @ $XX.XX
-GBPCHF: BUY conf=XX% @ $XX.XX
-BTC satellite: gate=OPEN/CLOSED, position=ACTIVE/FLAT, value=XXXX
+ES: BUY conf=XX% @ $XX.XX
+NQ: SELL conf=XX% @ $XX.XX
+GBPCAD: FLAT conf=XX% @ $XX.XX
+GBPNZD: BUY conf=XX% @ $XX.XX
+NZDCAD: FLAT conf=XX% @ $XX.XX
+DJI: BUY conf=XX% @ $XX.XX
 Portfolio: $XXXXX (XX%)
 ```
 
@@ -251,19 +246,17 @@ for name, a in s['assets'].items():
 
 | Asset | Label | BUY/SELL Ratio | Mean Confidence |
 |-------|-------|----------------|-----------------|
-| BTCUSD | tb20 | ~1:1 | 55-75% |
-| EURGBP | tb20 | ~1:1 | 55-75% |
-| GC | tb20 | ~1:1 | 55-75% |
-| NZDCHF | tb20 | ~1:1 | 55-75% |
+| GC | fwd60 | ~1:1 | 55-75% |
 | CHFJPY | tb20 | ~1:1 | 55-75% |
-| CADJPY | tb20 | ~1:1 | 55-75% |
 | USDCHF | tb20 | ~1:1 | 55-75% |
-| EURJPY | tb20 | ~1:1 | 55-75% |
-| EURCAD | tb20 | ~1:1 | 55-75% |
 | AUDCHF | tb20 | ~1:1 | 55-75% |
-| USDJPY | tb20 | ~1:1 | 55-75% |
 | USDCAD | tb20 | ~1:1 | 55-75% |
-| GBPCHF | tb20 | ~1:1 | 55-75% |
+| ES | tb20 | ~1:1 | 55-75% |
+| NQ | tb20 | ~1:1 | 55-75% |
+| GBPCAD | tb20 | ~1:1 | 55-75% |
+| GBPNZD | tb20 | ~1:1 | 55-75% |
+| NZDCAD | tb20 | ~1:1 | 55-75% |
+| ^DJI | tb20 | ~1:1 | 55-75% |
 
 ### Narrative Check (Monday Morning)
 
@@ -487,7 +480,7 @@ Real-time liquidity regime computed from daily OHLCV volume and price data on ev
 **Dashboard indicators:**
 - **LIQ THIN** (yellow badge) — one or more assets in THIN regime
 - **LIQ STRSD** (red badge) — one or more assets in STRESSED regime (halted)
-- Hover tooltip shows per-asset breakdown: `EURCAD: THIN sl=1.15x size=0.85x`
+- Hover tooltip shows per-asset breakdown: `GC: THIN sl=1.15x size=0.85x`
 
 **Response:**
 - THIN regime: No action required. Monitor for progression to STRESSED.

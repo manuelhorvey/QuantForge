@@ -3,13 +3,13 @@
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue)
 ![Status](https://img.shields.io/badge/status-paper%20trading-green)
 ![WalkForward](https://img.shields.io/badge/walk--forward-36%20assets%20screened-success)
-![Portfolio](https://img.shields.io/badge/portfolio-20%20live%20assets-blue)
+![Portfolio](https://img.shields.io/badge/portfolio-11%20dashboard%20assets-blue)
 [![codecov](https://codecov.io/gh/manuelhorvey/QuantForge/graph/badge.svg)](https://codecov.io/gh/manuelhorvey/QuantForge)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 ---
 
-Cross-sectional multi-asset research and paper trading engine with walk-forward asset selection, per-asset binary XGBoost models, seven-layer governance, MetaTrader 5 bridge execution, and a React dashboard.
+Cross-sectional multi-asset research and paper trading engine with walk-forward asset selection, per-asset XGBoost models, seven-layer governance, MetaTrader 5 bridge execution, and a React dashboard.
 
 ---
 
@@ -38,11 +38,11 @@ Every promoted asset must survive expanding-window validation before entering th
 ```
 Research Universe (36+ assets)
         ↓
-Walk-Forward Screening (5-fold expanding window)
+Walk-Forward Screening (expanding window)
         ↓
 Asset Selection (GREEN / YELLOW / RED)
         ↓
-Per-Asset Model Training (binary XGBoost)
+Per-Asset Model Training (XGBoost, per-asset depth)
         ↓
 Live Inference (every 300s)
         ↓
@@ -55,114 +55,35 @@ State Persistence + Replay
 
 ---
 
-# Core Properties
-
-* Walk-forward validated before deployment
-* Per-asset model independence
-* Deterministic execution contracts
-* Replay-oriented state persistence (SQLite WAL)
-* Governance-first exposure control
-* Parallel isolated asset actors
-* Train/serve feature symmetry
-* Immutable execution attribution chain
-* Single centralized entry authority
-* Failure-domain isolation across assets
-* MT5 bridge for live demo execution via Wine
-
----
-
-# System Overview
-
-QuantForge operates as a factor-style allocation and execution platform.
-
-A universe of 36+ FX, commodity, and equity-index tickers is screened using expanding-window walk-forward backtests. Assets are scored on directional consistency, information coefficient, hit rate, and regime robustness before being promoted into the live paper portfolio.
-
-Each promoted asset runs an independent binary XGBoost model conditioned on:
-
-* volatility-adjusted carry,
-* multi-horizon momentum (21/63/126/252d),
-* z-score reversion,
-* volatility regime behavior,
-* and cross-asset macro momentum (DXY, VIX, SPX, WTI).
-
-Execution is governed by a seven-layer risk and validity framework with archetype-aware trade management. Orders can be routed through either a PaperBroker (simulated fills with slippage/impact) or the MT5 bridge to a live Exness demo account.
-
-```
-┌────────────────┐
-│ Research       │
-│ Universe       │
-│ 36+ Assets     │
-└──────┬─────────┘
-       │
-       ▼
-┌────────────────┐
-│ Walk-Forward   │
-│ Validation     │
-│ 5-Fold         │
-└──────┬─────────┘
-       │
-       ▼
-┌────────────────┐
-│ Asset          │
-│ Selection      │
-│ GREEN/YELLOW   │
-│ RED            │
-└──────┬─────────┘
-       │
-       ▼
-┌────────────────┐
-│ Live Inference │
-│ Per-Asset      │
-│ Binary XGBoost │
-└──────┬─────────┘
-       │
-       ▼
-┌────────────────┐          ┌─────────────────┐
-│ Governance     │          │  MT5 Bridge     │
-│ 7 Layers       │─────▶    │  (Wine Python)  │
-└──────┬─────────┘          └────────┬─────────┘
-       │                             │
-       ▼                             ▼
-┌────────────────┐          ┌─────────────────┐
-│ Execution      │          │  MetaTrader 5   │
-│ + Positioning  │          │  Exness Demo    │
-└──────┬─────────┘          └─────────────────┘
-       │
-       ▼
-┌────────────────┐
-│ Portfolio      │
-│ Risk-Parity    │
-└────────────────┘
-```
-
----
-
 # Current Portfolio
 
-20 live paper-traded assets promoted from the research universe.
+11 dashboard assets promoted from the research universe. Per-asset SL/TP/max_depth calibrated via walk-forward optimization.
 
-| Asset      | Ticker       | sl_mult | tp_mult | Allocation |
-| ---------- | ------------ | ------- | ------- | ---------- |
-| AUDCHF     | AUDCHF=X     | 0.50    | 1.50    | 6.5%       |
-| AUDNZD     | AUDNZD=X     | 0.50    | 1.50    | 6.5%       |
-| CADCHF     | CADCHF=X     | 0.50    | 1.50    | 6.5%       |
-| CADJPY     | CADJPY=X     | 0.50    | 1.50    | 6.5%       |
-| CHFJPY     | CHFJPY=X     | 0.50    | 1.50    | 6.5%       |
-| CL         | CL=F         | 0.50    | 1.50    | 7.0%       |
-| ES         | ES=F         | 0.50    | 2.50    | 7.7%       |
-| EURCAD     | EURCAD=X     | 0.50    | 1.50    | 6.5%       |
-| GC         | GC=F         | 0.50    | 1.50    | 6.5%       |
-| GBPCAD     | GBPCAD=X     | 0.50    | 1.50    | 6.5%       |
-| GBPCHF     | GBPCHF=X     | 0.50    | 1.50    | 6.5%       |
-| GBPNZD     | GBPNZD=X     | 0.50    | 1.50    | 6.5%       |
-| NZDCAD     | NZDCAD=X     | 0.50    | 1.50    | 6.5%       |
-| NQ         | NQ=F         | 0.50    | 2.50    | 7.8%       |
-| ^DJI       | ^DJI         | 0.50    | 1.50    | 7.0%       |
-| USDCHF     | USDCHF=X     | 0.50    | 1.50    | 6.5%       |
-| USDCAD     | USDCAD=X     | 0.50    | 1.50    | 6.5%       |
-| USDJPY     | USDJPY=X     | 0.50    | 1.50    | 6.5%       |
+| Asset      | Ticker       | sl_mult | tp_mult | Allocation | max_depth |
+| ---------- | ------------ | ------- | ------- | ---------- | --------- |
+| GC         | GC=F         | 1.00    | 4.00    | 9.0%       | 2         |
+| CHFJPY     | CHFJPY=X     | 0.50    | 1.00    | 9.0%       | 2         |
+| USDCHF     | USDCHF=X     | 0.85    | 3.00    | 4.0%       | 4         |
+| AUDCHF     | AUDCHF=X     | 2.75    | 3.50    | 7.0%       | 2         |
+| USDCAD     | USDCAD=X     | 2.50    | 2.00    | 7.0%       | 5         |
+| ES         | ES=F         | 2.00    | 5.50    | 10.0%      | 2         |
+| NQ         | NQ=F         | 2.50    | 5.00    | 8.0%       | 2         |
+| GBPCAD     | GBPCAD=X     | 2.50    | 2.50    | 7.0%       | 2         |
+| GBPNZD     | GBPNZD=X     | 3.00    | 1.00    | 7.0%       | 3         |
+| NZDCAD     | NZDCAD=X     | 2.50    | 4.00    | 7.0%       | 2         |
+| ^DJI       | ^DJI         | 0.50    | 4.00    | 4.0%       | 4         |
 
-Weekly risk-parity rebalancing redistributes capital proportionally.
+Daily risk-parity rebalancing redistributes capital proportionally.
+
+### Backtest Performance (5-Year: 2021–2025)
+
+| Metric | Value |
+|--------|-------|
+| Profit factor | 1.46 |
+| Avg R | +0.196 |
+| Win rate | 41% |
+| TP/SL/Flip | 19%/46%/34% |
+| Total trades | 2036 |
 
 ---
 
@@ -204,82 +125,34 @@ When MT5 is enabled, each engine cycle syncs internal capital bases to the live 
 
 ---
 
-# Why Binary Classification?
+# Model Architecture
 
-QuantForge intentionally reduces the prediction problem to directional participation rather than return magnitude estimation.
+Each asset runs an independent XGBoost model with per-asset configuration.
 
-The system optimizes for:
+```text
+Objective: binary:logistic
+Trees:     300
+LR:        0.02
+Depth:     per-asset (2–5)
+```
 
-* directional consistency,
-* ranking stability,
-* calibration simplicity,
-* execution compatibility,
-* and governance composability
-
-rather than precise return forecasting.
-
-HOLD states are intentionally removed during training to avoid ambiguous class boundaries.
-
----
-
-# Research & Validation Pipeline
-
-## Walk-Forward Validation
-
-All assets are evaluated using expanding-window walk-forward testing:
-
-* 3-year training window
-* 1-year forward test
-* 5 folds
-* per-asset PT/SL calibration
-* IC + hit-rate scoring
-* consistency weighting
-* bidirectionality validation
-
-Only promoted assets enter the live portfolio.
+No shared multi-asset model exists.
 
 ---
 
 # Feature Engineering
 
-## Alpha Features
+Built in `features/builder.py` using per-asset contracts from `features/registry.py`.
 
-Built in `features/alpha_features.py`.
+Each asset has a tailored feature set combining:
+- Macro filters (rate_diff, vix, dxy, breakeven, real yield)
+- Price momentum (21d, 63d windows)
+- Custom features (gc_lead_1, dji_lead_1)
 
-Primary feature families:
+## Archetype Features (inference-only)
 
-* Volatility-adjusted carry
-* Multi-horizon momentum (21 / 63 / 126 / 252d)
-* Z-score mean reversion
-* Volatility regime ratio
-* Day-of-week effects
-* Cross-asset macro momentum (DXY, VIX, SPX, WTI)
-
-## Market Structure Regimes
-
-Inference-only archetype features derived from OHLCV:
-
-* EMA spread
-* ADX(14)
-* RSI(14)
-* Bollinger z-score
-
-Used for execution conditioning, trade management, and regime-aware positioning.
-
----
-
-# Model Architecture
-
-Each asset runs an independent binary XGBoost model.
-
-```text
-Objective: binary:logistic
-Trees:     300
-Depth:     2
-LR:        0.02
-```
-
-No shared multi-asset model exists.
+Derived from OHLCV for execution conditioning:
+- EMA spread, ADX(14), RSI(14), Bollinger z-score
 
 ---
 
@@ -289,7 +162,7 @@ No shared multi-asset model exists.
 1. Fetch live OHLCV (MT5 or yfinance)
 2. Refresh latest price
 3. Fetch macro data
-4. Build alpha features
+4. Build per-asset features (FEATURE_REGISTRY)
 5. Validate truncation behavior
 6. Validate model hot-swap integrity
 7. Run XGBoost inference
@@ -334,7 +207,7 @@ PolicyDecision → FillResult → AttributionRecord
 Execution artifacts are append-only and replay-safe.
 
 ### Train/Serve Symmetry
-The same alpha feature builder is used in both training and live inference.
+The same feature builder is used in both training and live inference.
 
 ### Replay-Oriented Persistence
 Persistent state is stored in SQLite WAL mode with append-oriented semantics.
@@ -390,19 +263,6 @@ A React SPA (TypeScript, Vite, Tailwind CSS) served on port 5000.
 | `execution.json`    | JSON   | Execution quality metrics   |
 | `shadow.json`       | JSON   | Shadow trade comparison     |
 | `analytics.json`    | JSON   | Portfolio analytics         |
-
----
-
-# Runtime Optimizations
-
-* Vectorized triple-barrier labeling
-* Broadcast-based inference operations
-* Async diagnostics off hot path (daemon consumer thread)
-* SQLite WAL persistence
-* TTL macro cache
-* Parallel asset orchestration (ThreadPoolExecutor, max_workers=8)
-* Inference truncation validation
-* Object-identity model hot-swap verification
 
 ---
 
@@ -479,6 +339,7 @@ Dashboard: [http://localhost:5000](http://localhost:5000)
 | `./monitor_all`                                | One-command launch (terminal + bridge + engine + dashboard) |
 | `~/.local/bin/mt5-terminal`                    | Launch MT5 terminal via Wine    |
 | `~/.local/bin/mt5-bridge`                      | Launch MT5 bridge server        |
+| `backtests/trade_analysis.py`                  | Walk-forward backtest + optimization |
 | `scripts/walk_forward_backtest.py`             | Multi-ticker validation         |
 | `scripts/score_tickers.py`                     | Asset scoring                   |
 | `scripts/generate_promotion_report.py`         | Portfolio report generation     |
@@ -494,10 +355,12 @@ Dashboard: [http://localhost:5000](http://localhost:5000)
 configs/
     paper_trading.yaml        # Primary engine config
     mt5_symbol_map.yaml       # MT5 symbol mapping
+backtests/                   # Backtest + optimization scripts
+    trade_analysis.py         # Main backtest engine
 features/
-    alpha_features.py
-    archetypes.py
-    labels.py
+    builder.py                # Per-asset feature construction
+    registry.py               # Feature contracts (36 assets)
+    labels.py                 # Triple-barrier labeling
 paper_trading/
     engine.py                 # Main engine + capital sync
     asset_engine.py           # Per-asset lifecycle

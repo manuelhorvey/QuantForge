@@ -28,20 +28,20 @@ The repository intentionally treats trading infrastructure as a distributed stat
 
 # High-Level Architecture
 
-```text id="z2l0cm"
-Research Universe
+```text
+Research Universe (36+ assets)
         ↓
-Walk-Forward Validation
+Walk-Forward Validation (expanding window)
         ↓
-Asset Selection
+Asset Selection (GREEN / YELLOW / RED)
         ↓
-Per-Asset Training
+Per-Asset Training (XGBoost, per-asset depth)
         ↓
 Live Inference
         ↓
-Governance Filters
+Governance Filters (7 layers)
         ↓
-Execution & Positioning
+Execution & Positioning (MT5 or PaperBroker)
         ↓
 Persistence & Replay
         ↓
@@ -52,23 +52,22 @@ Monitoring & Attribution
 
 # System Architecture
 
-```text id="0qfg98"
+```text
 ┌─────────────────────────────────────────────────────────────────────┐
 │                       RESEARCH / SCREENING                          │
 │                                                                     │
-│  30+ tickers                                                        │
+│  36+ tickers                                                        │
+│      ↓                                                              │
+│  trade_analysis.py (walk-forward style)                             │
 │      ↓                                                              │
 │  walk_forward_backtest.py                                           │
 │      ↓                                                              │
 │  score_tickers.py                                                   │
 │      ↓                                                              │
-│  generate_promotion_report.py                                       │
-│      ↓                                                              │
-│  promotion_report.json                                              │
+│  Promotion to dashboard                                             │
 │                                                                     │
 │  Output:                                                            │
-│  - fold ICs                                                         │
-│  - directional consistency                                          │
+│  - per-asset SL/TP/depth calibration                                │
 │  - GREEN / YELLOW / RED states                                      │
 └─────────────────────────────────────────────────────────────────────┘
                               │
@@ -78,13 +77,13 @@ Monitoring & Attribution
 │                                                                     │
 │  fetch_asset_data()                                                 │
 │      ↓                                                              │
-│  build_alpha_features()                                             │
+│  build_features() (per-asset from FEATURE_REGISTRY)                 │
 │      ↓                                                              │
 │  triple_barrier_labels()                                            │
 │      ↓                                                              │
-│  binary reduction                                                   │
+│  binary reduction (drop HOLD)                                       │
 │      ↓                                                              │
-│  XGBoost binary:logistic                                            │
+│  XGBoost binary:logistic (per-asset max_depth)                      │
 │      ↓                                                              │
 │  model persistence + PSI baseline                                   │
 └─────────────────────────────────────────────────────────────────────┘
@@ -98,7 +97,7 @@ Monitoring & Attribution
 │                                                                     │
 │  fetch_live()                                                       │
 │      ↓                                                              │
-│  build_alpha_features()                                             │
+│  build_features()                                                   │
 │      ↓                                                              │
 │  XGBoost inference                                                  │
 │      ↓                                                              │
@@ -127,7 +126,6 @@ Monitoring & Attribution
 │  - equity_history                                                   │
 │                                                                     │
 │  Replay-oriented append semantics                                   │
-│  with deterministic reconstruction support                          │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -146,6 +144,7 @@ Monitoring & Attribution
 | Single entry authority      | All entries route through `_can_enter()`                       |
 | Train/serve symmetry        | Shared feature generation between training and inference       |
 | Parallel orchestration      | Assets execute concurrently through isolated actors            |
+| Per-asset model depth       | `max_depth` configured per-asset (2–5), not global             |
 
 ---
 
@@ -153,38 +152,30 @@ Monitoring & Attribution
 
 ## 1. Research & Asset Selection
 
-The offline research stage evaluates a universe of 30+ assets using expanding-window walk-forward validation.
+The offline research stage evaluates a universe of 36+ assets using expanding-window walk-forward validation.
 
 ### Validation Structure
 
 * 3-year rolling training window
-* 1-year forward evaluation
-* 5-fold walk-forward process
-* per-asset PT/SL calibration
+* 1-year forward evaluation (or 5-year full validation)
+* per-asset SL/TP/depth calibration
 * IC + hit-rate scoring
 * directional consistency weighting
-* bidirectionality evaluation
 
-Assets are classified into:
-
-* GREEN
-* YELLOW
-* RED
-
-Only promoted assets enter the live portfolio.
+Assets are classified into GREEN / YELLOW / RED. Only promoted assets enter the live portfolio.
 
 ---
 
 ## 2. Model Training
 
-Each promoted asset trains an independent binary XGBoost model.
+Each promoted asset trains an independent XGBoost model.
 
 ### Training Pipeline
 
-```text id="bh0b5h"
+```text
 fetch_asset_data()
         ↓
-build_alpha_features()
+build_features() (per-asset from FEATURE_REGISTRY)
         ↓
 triple_barrier_labels()
         ↓
@@ -203,65 +194,10 @@ persist model + PSI baseline
 | ------------- | ----------------- |
 | Objective     | `binary:logistic` |
 | Trees         | 300               |
-| Max Depth     | 2                 |
+| Max Depth     | per-asset (2–5)   |
 | Learning Rate | 0.02              |
 
-No shared multi-asset model exists.
-
-This intentionally isolates:
-
-* feature drift,
-* calibration instability,
-* regime degradation,
-* and inference failures
-
-to individual assets.
-
----
-
-# Feature Engineering
-
-## Alpha Features
-
-Implemented in `features/alpha_features.py`.
-
-### Feature Families
-
-* Volatility-adjusted carry
-* Multi-horizon momentum:
-
-  * 21d
-  * 63d
-  * 126d
-  * 252d
-* Z-score mean reversion
-* Volatility regime ratio
-* Day-of-week effects
-* Cross-asset macro momentum:
-
-  * DXY
-  * VIX
-  * SPX
-  * WTI
-
-Macro data is batch-fetched through a single `yf.download()` call with TTL caching.
-
----
-
-## Market Structure Features
-
-Inference-only archetype features derived from OHLCV:
-
-* EMA spread
-* ADX(14)
-* RSI(14)
-* Bollinger z-score
-
-Used for:
-
-* execution conditioning,
-* trade timing,
-* and regime-aware management.
+Per-asset max_depth from `configs/paper_trading.yaml`. No shared multi-asset model exists.
 
 ---
 
@@ -271,66 +207,23 @@ The live engine executes every 300 seconds.
 
 ## Runtime Pipeline
 
-```text id="2u8l08"
+```text
 1. Fetch 500d OHLCV
 2. Normalize timestamps
 3. Refresh latest price
 4. Fetch macro data
-5. Build alpha features
+5. Build features (per-asset from FEATURE_REGISTRY)
 6. Fetch full OHLCV
 7. Compute archetype features
 8. Validate inference truncation
 9. Validate model hot-swap integrity
 10. Run XGBoost inference
 11. Expand binary probabilities
-12. Apply threshold strategy
+12. Apply threshold strategy (THR=0.45)
 13. Generate TradeDecision
 14. Route through governance
 15. Execute position lifecycle
 ```
-
----
-
-# Runtime Optimizations
-
-QuantForge contains multiple optimizations designed to reduce hot-path latency and runtime instability.
-
-## Optimizations
-
-* Vectorized triple-barrier labeling
-* Broadcast-based inference operations
-* Parallel asset execution
-* Async diagnostics off hot path
-* TTL macro cache
-* SQLite WAL persistence
-* Inference truncation validation
-* Model object-identity hot-swap checks
-* Heavy-import isolation via daemon queue
-
----
-
-# Parallel Orchestration
-
-Live assets execute through isolated actors managed by `EngineOrchestrator`.
-
-## Orchestration Phases
-
-```text id="8x8xv4"
-REFRESH + SIGNAL (parallel)
-            ↓
-VALIDITY CHECKS
-            ↓
-PORTFOLIO HEALTH
-            ↓
-STATE PERSISTENCE
-```
-
-Each `AssetActor` tracks:
-
-* health state,
-* execution timing,
-* exposure,
-* and degradation status.
 
 ---
 
@@ -366,31 +259,11 @@ Persistent state is stored in SQLite WAL mode.
 | `confidence_buckets` | Confidence analytics  |
 | `equity_history`     | Equity curve history  |
 
-## Persistence Properties
-
-* append-oriented writes
-* replay-oriented semantics
-* deterministic recovery support
-* periodic WAL checkpointing
-* backward-compatible JSON snapshots
-
 ---
 
 # Failure Isolation
 
-Each asset executes independently.
-
-Failures in:
-
-* data ingestion,
-* inference,
-* governance,
-* diagnostics,
-* or execution
-
-cannot halt the global engine.
-
-Emergency portfolio circuit breakers activate when halt ratios exceed configured thresholds.
+Each asset executes independently. Failures in data ingestion, inference, governance, diagnostics, or execution cannot halt the global engine. Emergency portfolio circuit breakers activate when halt ratios exceed configured thresholds.
 
 ---
 
@@ -400,14 +273,13 @@ Emergency portfolio circuit breakers activate when halt ratios exceed configured
 
 | Module                | Purpose                             |
 | --------------------- | ----------------------------------- |
-| `alpha_features.py`   | Alpha feature generation            |
-| `data_fetch.py`       | YFinance ingestion + macro batching |
+| `builder.py`          | Per-asset feature construction      |
+| `registry.py`         | Feature contracts (36 tickers)      |
 | `labels.py`           | Triple-barrier labeling             |
-| `regime_features.py`  | Regime feature computation          |
 | `archetypes.py`       | Market structure classification     |
 | `macro_narrative.py`  | Weekly macro narrative overlays     |
 | `liquidity_regime.py` | Liquidity classification            |
-| `contract.py`         | Immutable feature contracts         |
+| `contract.py`         | Feature contract dataclass          |
 | `fxstreet_fetcher.py` | FXStreet → LLM narrative extraction |
 
 ---
@@ -420,7 +292,6 @@ Emergency portfolio circuit breakers activate when halt ratios exceed configured
 | `AssetEngine`            | Per-asset lifecycle         |
 | `AssetInferencePipeline` | Live inference              |
 | `AssetTrainingPipeline`  | Training pipeline           |
-| `DiagnosticsSnapshot`    | Deferred diagnostics        |
 | `PortfolioBuilder`       | Asset registry construction |
 | `StateStore`             | SQLite persistence          |
 | `EntryOptimizer`         | Entry conditioning          |
@@ -430,7 +301,6 @@ Emergency portfolio circuit breakers activate when halt ratios exceed configured
 | `ExecutionBridge`        | Slippage + impact           |
 | `ShadowSLTPEngine`       | Counterfactual replay       |
 | `AttributionCollector`   | Attribution pipeline        |
-| `HighVolSatellite`       | BTC opportunistic sleeve    |
 | `EngineOrchestrator`     | Parallel orchestration      |
 | `AssetActor`             | Asset execution wrapper     |
 | `HealthMonitor`          | Portfolio-level health      |
@@ -440,13 +310,11 @@ Emergency portfolio circuit breakers activate when halt ratios exceed configured
 # Configuration
 
 `configs/paper_trading.yaml` controls:
-
 * capital allocation,
 * rebalance frequency,
-* per-asset SL/TP geometry,
+* per-asset SL/TP/depth,
 * governance layers,
 * orchestrator settings,
-* ensemble configuration,
 * narrative overlays,
 * and liquidity controls.
 
@@ -466,7 +334,7 @@ Emergency portfolio circuit breakers activate when halt ratios exceed configured
 
 | Action                    | Command                                       |
 | ------------------------- | --------------------------------------------- |
-| Walk-forward screening    | `python scripts/walk_forward_backtest.py`     |
+| Walk-forward screening    | `python backtests/trade_analysis.py`          |
 | Score tickers             | `python scripts/score_tickers.py`             |
 | Generate promotion report | `python scripts/generate_promotion_report.py` |
 | Start engine + dashboard  | `./monitor_all`                               |
@@ -474,18 +342,13 @@ Emergency portfolio circuit breakers activate when halt ratios exceed configured
 | Run microbenchmark        | `python benchmarks/microbenchmark.py`         |
 | Run tests                 | `pytest tests/ -q --tb=short`                 |
 
-Dashboard URL:
-
-```text id="q8n6hf"
-http://127.0.0.1:5000
-```
+Dashboard URL: http://127.0.0.1:5000
 
 ---
 
 # Known Constraints
 
 * Paper trading only
-* Yahoo Finance dependency
 * No live brokerage integration
 * Ensemble disabled by default
 * Some FX crosses may produce incomplete first-cycle bars

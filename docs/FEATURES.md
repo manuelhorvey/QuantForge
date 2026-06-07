@@ -2,58 +2,63 @@
 
 ## Alpha Features
 
-The primary feature builder is `features/alpha_features.py:build_alpha_features()`. It produces a DataFrame with ~30 feature columns per asset, used for both training and inference.
+The primary feature builder is `features/builder.py:build_features()`. It produces per-asset feature sets defined by `features/registry.py:FEATURE_REGISTRY`, using a combination of macro filters, price momentum, and custom features.
 
 ### Input Data
 
-All data ingested from yfinance (no FRED in production):
+Data ingested from MT5 bridge (primary) or yfinance (fallback):
 
 | Source | Symbol | Data |
 |---|---|---|
-| Asset ticker | e.g. `CHFJPY=X` | Daily OHLCV close |
+| Asset ticker | e.g. `GC=F` | Daily OHLCV close |
 | Dollar index | `DX-Y.NYB` | DXY close |
 | VIX | `^VIX` | VIX close |
 | SPX | `^GSPC` | S&P 500 close |
 | Crude oil | `CL=F` | WTI close |
 | 10Y Treasury | `^TNX` | TNX yield |
 
-### Per-Asset Features
+### Feature Categories
 
-| Feature | Formula | Usage |
+#### Macro Filters
+| Feature | Source | Description |
 |---|---|---|
-| `{asset}_carry_vol_adj` | Close return × vol normalization | FX carry signal |
-| `{asset}_mom_21d` | `close.pct_change(21)` | 1-month momentum |
-| `{asset}_mom_63d` | `close.pct_change(63)` | 3-month momentum |
-| `{asset}_mom_126d` | `close.pct_change(126)` | 6-month momentum |
-| `{asset}_mom_252d` | `close.pct_change(252)` | 12-month momentum |
-| `{asset}_zscore_20` | `(close - SMA20) / close.std(20)` | Mean reversion signal |
-| `{asset}_vol_ratio` | Short-term vol / long-term vol | Vol regime indicator |
-| `{asset}_dow_signal` | Day-of-week encoding | Calendar effect |
+| `rate_diff` | yfinance | Interest rate differential proxy |
+| `dxy_mom_21` / `dxy_mom_63` | DX-Y.NYB | Dollar momentum |
+| `vix_ma21` | ^VIX | VIX 21-day moving average |
+| `vix_delta_5` | ^VIX | VIX 5-day change |
+| `breakeven_delta_63` | ^TNX | 10Y breakeven inflation change |
+| `real_yield_delta_63` | ^TNX | Real yield change |
+| `us_jp_10y_spread` | ^TNX | US-JP 10-year yield spread |
 
-### Cross-Asset Features
-
-| Feature | Source | Window |
+#### Price Momentum
+| Feature | Window | Description |
 |---|---|---|
-| `dxy_mom_21` | DX-Y.NYB | 21d |
-| `dxy_mom_63` | DX-Y.NYB | 63d |
-| `vix_mom_21` | ^VIX | 21d |
-| `vix_mom_63` | ^VIX | 63d |
-| `spx_mom_21` | ^GSPC | 21d |
-| `spx_mom_63` | ^GSPC | 63d |
-| `wti_mom_21` | CL=F | 21d |
-| `wti_mom_63` | CL=F | 63d |
+| `{asset}_mom_21` | 21d | 1-month momentum |
+| `{asset}_mom_63` | 63d | 3-month momentum |
 
-### Data Fetching
+#### Custom Features
+| Feature | Description |
+|---|---|
+| `gc_lead_1` | Gold 1-day lead |
+| `dji_lead_1` | Dow 1-day lead |
 
-`features/data_fetch.py` provides:
+### Per-Asset Feature Sets
 
-| Function | Returns | Period |
-|---|---|---|
-| `fetch_asset_data(name, ticker)` | (prices, rate_diffs, dxy, vix, spx, commodities) | 10y |
-| `fetch_asset_ohlcv(ticker)` | DataFrame(open, high, low, close, volume) | 10y |
-| `fetch_yf_series(ticker, name)` | pd.Series | 10y |
+Each dashboard asset has a tailored feature set from `features/registry.py`:
 
-All functions normalize dates to TZ-naive DatetimeIndex via `pd.to_datetime(s.index.date)`.
+| Asset | Features |
+|---|---|
+| GC | `real_yield_delta_63`, `breakeven_delta_63`, `dxy_mom_63`, `gc=f_mom_63` |
+| CHFJPY | `vix_ma21`, `vix_delta_5`, `us_jp_10y_spread`, `chfjpy=x_mom_21`, `chfjpy=x_mom_63` |
+| USDCHF | `rate_diff`, `dxy_mom_21`, `vix_ma21`, `vix_delta_5`, `usdchf=x_mom_21`, `usdchf=x_mom_63`, `gc_lead_1` |
+| AUDCHF | `rate_diff`, `dxy_mom_21`, `vix_ma21`, `vix_delta_5`, `audchf=x_mom_21`, `audchf=x_mom_63` |
+| USDCAD | `rate_diff`, `dxy_mom_21`, `vix_ma21`, `vix_delta_5`, `usdcad=x_mom_21`, `usdcad=x_mom_63`, `dji_lead_1` |
+| ES | `rate_diff`, `vix_ma21`, `dxy_mom_21`, `breakeven_delta_63`, `es=f_mom_21`, `es=f_mom_63` |
+| NQ | `rate_diff`, `vix_ma21`, `dxy_mom_21`, `nq=f_mom_21`, `nq=f_mom_63` |
+| GBPCAD | `rate_diff`, `dxy_mom_21`, `vix_ma21`, `vix_delta_5`, `gbpcad=x_mom_21`, `gbpcad=x_mom_63` |
+| GBPNZD | `rate_diff`, `dxy_mom_21`, `vix_ma21`, `vix_delta_5`, `gbpnzd=x_mom_21`, `gbpnzd=x_mom_63` |
+| NZDCAD | `rate_diff`, `dxy_mom_21`, `vix_ma21`, `vix_delta_5`, `nzdcad=x_mom_21`, `nzdcad=x_mom_63` |
+| ^DJI | `rate_diff`, `vix_ma21`, `dxy_mom_21`, `breakeven_delta_63`, `^dji_mom_21`, `^dji_mom_63` |
 
 ## Archetype Features
 
@@ -68,41 +73,27 @@ Computed inline in `paper_trading/inference/pipeline.py:_generate_and_apply()` f
 
 These are inference-only — used by `ArchetypeClassifier` but never passed to XGBoost.
 
-## Regime Features
-
-`features/regime_features.py:generate_regime_features()` produces:
-
-| Feature | Formula | Purpose |
-|---|---|---|
-| `hurst` | Hurst exponent via variance method | Trend persistence detection |
-| `kaufman_er` | Efficiency ratio (direction / path length) | Trend strength |
-| `adx_regime` | ADX value | Trend magnitude |
-| `vol_zscore` | `(vol - mean(vol)) / std(vol)` | Vol anomaly detection |
-| `compression` | ATR5 / ATR20 ratio | Vol contraction/expansion |
-
 ## Labeling
 
 `features/labels.py:triple_barrier_labels()`:
 
-1. Compute ATR-based barrier distances from `pt_sl = (tp_mult, sl_mult)`
-2. Apply triple-barrier touch: first touch of TP (+1), SL (-1), or vertical barrier at `vbar` bars → {-1, 0, 1}
+1. Compute ATR-based barrier distances from `pt_sl = (tp_mult, sl_mult)` per asset
+2. Apply triple-barrier touch: first touch of TP (+1), SL (-1), or vertical barrier → {-1, 0, 1}
 3. Training pipeline drops HOLD (0) labels and maps {-1, 1} → {0, 1} for binary XGBoost
 
-Per-asset `pt_sl` comes from `configs/paper_trading.yaml`:
-- BTC-USD: `pt_sl = (2.5, 3.0)`
-- All others: `pt_sl = (1.5, 2.0)`
+Per-asset `pt_sl` from `configs/paper_trading.yaml`.
 
 ## Feature Contract Validation
 
-`features/contract.py` provides `FeatureContract` dataclass and `validate_no_cross_asset_leakage()`. This is used for validation only — the current production pipeline builds features directly via `build_alpha_features()` without the contract routing system.
+`features/contract.py` provides `FeatureContract` dataclass and `validate_no_cross_asset_leakage()`.
 
 ## Lead-Lag Features
 
-`features/lead_lag_features.py` — not used in production. Exists for research experiments with inter-asset lead-lag relationships.
+`features/lead_lag_features.py` — not used in production. Exists for research experiments.
 
 ## Pair-Specific Features
 
-`features/pair_specific.py` — not used in production. Historical per-pair feature builders from the research phase.
+`features/pair_specific.py` — not used in production. Historical per-pair feature builders.
 
 ## COT Features
 
@@ -110,4 +101,4 @@ Per-asset `pt_sl` comes from `configs/paper_trading.yaml`:
 
 ## Architecture Note
 
-The current production system uses a flat feature manifold: all alpha features are computed independently and concatenated by common date index. There is no Driver Atlas routing, no regime-specific feature subspace assignment, and no per-contract prefix isolation in the production pipeline. Validation features cross-asset leakage is handled by `build_alpha_features()` returning only the requested asset's columns.
+Feature sets are defined per-asset in `FEATURE_REGISTRY` and built by `features/builder.py`. Each asset has an independent set of features — no shared feature manifold across all assets.
