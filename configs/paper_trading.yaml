@@ -17,7 +17,7 @@ data_source: mt5
 mt5:
   enabled: true
   bridge_host: 127.0.0.1
-  bridge_port: 9876
+  bridge_port: 9879
   symbol_map_path: configs/mt5_symbol_map.yaml
 
 ensemble:

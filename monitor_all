@@ -18,6 +18,7 @@ set -a; source .env 2>/dev/null; set +a
 WINE_PREFIX="${WINE_PREFIX:-$HOME/.wine_mt5}"
 MT5_EXE="$WINE_PREFIX/drive_c/Program Files/MetaTrader 5/terminal64.exe"
 SCRIPT_DIR="$(cd paper_trading/ops && pwd)"
+BRIDGE_PORT="${MT5_BRIDGE_PORT:-9879}"
 
 # ── Kill leftover QuantForge processes from previous runs ──
 PREV_MONITOR=$(pgrep -f 'python.*paper_trading.ops.monitor' 2>/dev/null | tr '\n' ' ')
@@ -44,10 +45,10 @@ fi
 
 # ── Bridge ──────────────────────────────────────────────────
 LAUNCHED_BRIDGE=""
-if nc -z 127.0.0.1 9876 >/dev/null 2>&1; then
-    echo "  MT5 bridge already running on :9876"
+if nc -z 127.0.0.1 $BRIDGE_PORT >/dev/null 2>&1; then
+    echo "  MT5 bridge already running on :$BRIDGE_PORT"
 else
-    echo "  Starting MT5 bridge on :9876..."
+    echo "  Starting MT5 bridge on :$BRIDGE_PORT..."
     ARGS=""
     if [ -n "${MT5_ACCOUNT:-}" ]; then ARGS="$ARGS --account $MT5_ACCOUNT"; fi
     if [ -n "${MT5_PASSWORD:-}" ]; then ARGS="$ARGS --password $MT5_PASSWORD"; fi
@@ -58,13 +59,13 @@ else
     LAUNCHED_BRIDGE=$!
     # Wait for bridge to accept connections
     for i in 1 2 3 4 5 6 7 8 9 10; do
-        if nc -z 127.0.0.1 9876 >/dev/null 2>&1; then
+        if nc -z 127.0.0.1 $BRIDGE_PORT >/dev/null 2>&1; then
             echo "  MT5 bridge ready (PID $LAUNCHED_BRIDGE)"
             break
         fi
         sleep 1
     done
-    if ! nc -z 127.0.0.1 9876 >/dev/null 2>&1; then
+    if ! nc -z 127.0.0.1 $BRIDGE_PORT >/dev/null 2>&1; then
         echo "  WARNING: MT5 bridge did not become ready — engine will use yfinance"
     fi
 fi

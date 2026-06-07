@@ -23,6 +23,7 @@ Usage:
 from __future__ import annotations
 
 import contextlib
+import os
 import json
 import logging
 import socket
@@ -51,9 +52,9 @@ class MT5DataError(Exception):
 
 
 class _FrameProtocol:
-    def __init__(self, host: str = "127.0.0.1", port: int = 9876):
+    def __init__(self, host: str = "127.0.0.1", port: int | None = None):
         self._host = host
-        self._port = port
+        self._port = port or int(os.environ.get("MT5_BRIDGE_PORT", "9879"))
         self._sock: socket.socket | None = None
         self._next_id = 1
         self._lock = threading.RLock()
@@ -128,14 +129,14 @@ class MT5Client:
         password: str = "",
         server: str = "",
         bridge_host: str = "127.0.0.1",
-        bridge_port: int = 9876,
+        bridge_port: int | None = None,
         symbol_map: dict[str, str] | None = None,
     ):
         self._account = account
         self._password = password
         self._server = server
         self._bridge_host = bridge_host
-        self._bridge_port = bridge_port
+        self._bridge_port = bridge_port or int(os.environ.get("MT5_BRIDGE_PORT", "9879"))
         self._symbol_map = symbol_map or {}
         self._proto = _FrameProtocol(bridge_host, bridge_port)
         self._last_heartbeat = 0.0

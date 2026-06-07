@@ -32,7 +32,7 @@ class MT5Config:
     password: str = ""
     server: str = ""
     bridge_host: str = "127.0.0.1"
-    bridge_port: int = 9876
+    bridge_port: int = 9879
     symbol_map_path: str = ""
 
     @classmethod
@@ -48,7 +48,7 @@ class MT5Config:
             password=password,
             server=server,
             bridge_host=data.get("bridge_host", "127.0.0.1"),
-            bridge_port=int(data.get("bridge_port", 9876)),
+            bridge_port=int(data.get("bridge_port", 9879)),
             symbol_map_path=data.get("symbol_map_path", ""),
         )
 
