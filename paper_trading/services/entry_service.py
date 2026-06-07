@@ -102,7 +102,9 @@ class EntryService:
         vol = self.tb_vol(data["close"])
         logger.debug(
             "%s tb_vol: vol=%.6f entry=%.4f close_last=%.4f close_min=%.4f close_max=%.4f close_len=%d",
-            asset.name, vol, entry_price,
+            asset.name,
+            vol,
+            entry_price,
             data["close"].iloc[-1] if len(data["close"]) else 0,
             data["close"].min() if len(data["close"]) else 0,
             data["close"].max() if len(data["close"]) else 0,
@@ -130,15 +132,16 @@ class EntryService:
             broker_side = "buy" if side == "long" else "sell"
             notional = self.compute_notional()
             qty = max(notional / entry_price, 1e-6)
-            if hasattr(asset.execution_bridge, '_is_real_broker') and asset.execution_bridge._is_real_broker:
+            if hasattr(asset.execution_bridge, "_is_real_broker") and asset.execution_bridge._is_real_broker:
                 broker = asset.execution_bridge.broker
                 existing_positions = broker.get_positions()
-                mt5_symbol = getattr(broker, '_symbol_map', {}).get(asset.ticker, asset.ticker)
+                mt5_symbol = getattr(broker, "_symbol_map", {}).get(asset.ticker, asset.ticker)
                 has_position = any(p.asset == mt5_symbol for p in existing_positions)
                 if has_position:
                     logger.warning(
                         "%s: skipping MT5 order — %s position already open in broker",
-                        asset.name, side.value,
+                        asset.name,
+                        side.value,
                     )
                 else:
                     if side == PositionSide.LONG:
@@ -148,13 +151,20 @@ class EntryService:
                         mt5_sl = entry_price * (1 + vol * sl_mult)
                         mt5_tp = entry_price * (1 - vol * tp_mult)
                     fill_price, order_id = asset.execution_bridge.submit_market_order(
-                        asset.ticker, broker_side, qty, entry_price,
-                        sl=mt5_sl, tp=mt5_tp,
+                        asset.ticker,
+                        broker_side,
+                        qty,
+                        entry_price,
+                        sl=mt5_sl,
+                        tp=mt5_tp,
                     )
                     if order_id:
                         logger.info(
                             "%s: MT5 order submitted — ticket=%s sl=%.5f tp=%.5f",
-                            asset.name, order_id, mt5_sl, mt5_tp,
+                            asset.name,
+                            order_id,
+                            mt5_sl,
+                            mt5_tp,
                         )
             else:
                 fill_price, entry_slippage_bps, _ = asset.execution_bridge.fill_price(

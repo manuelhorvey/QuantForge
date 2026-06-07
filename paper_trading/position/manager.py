@@ -68,8 +68,15 @@ class PositionManager:
             "%s CLOSE: side=%s entry=%.4f exit=%.4f ret=%.4f%% pnl=%.2f reason=%s "
             "current_value_before=%.2f pos_size=%.4f exposure=%.4f",
             getattr(self.position, "_asset_name", "?"),
-            side, entry, exit_price, ret * 100, pnl,
-            reason, self.current_value, self.position_size, self.exposure_multiplier,
+            side,
+            entry,
+            exit_price,
+            ret * 100,
+            pnl,
+            reason,
+            self.current_value,
+            self.position_size,
+            self.exposure_multiplier,
         )
 
         trade = {

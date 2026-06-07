@@ -329,8 +329,12 @@ class AssetInferencePipeline:
 
         logger.debug(
             "%s ENTRY: signal=%s close_price=%.4f current_price=%s confidence=%.1f pos_size=%.4f",
-            asset.name, decision.signal, decision.close_price,
-            asset.current_price, decision.confidence, pos_size,
+            asset.name,
+            decision.signal,
+            decision.close_price,
+            asset.current_price,
+            decision.confidence,
+            pos_size,
         )
 
         asset._apply_decision(decision, df)

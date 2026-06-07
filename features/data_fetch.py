@@ -211,14 +211,15 @@ def fetch_asset_data(
     except Exception as exc:
         logger.debug(
             "MT5 fetch_live failed for %s (%s): %s — falling back to yfinance",
-            asset_name, ticker, exc,
+            asset_name,
+            ticker,
+            exc,
         )
         close = fetch_yf_series(ticker, f"{asset_name}_close")
 
     if len(close) < _MIN_HISTORY_ROWS:
         raise ValueError(
-            f"{asset_name} ({ticker}): insufficient history "
-            f"({len(close)} rows, need >= {_MIN_HISTORY_ROWS})"
+            f"{asset_name} ({ticker}): insufficient history ({len(close)} rows, need >= {_MIN_HISTORY_ROWS})"
         )
 
     prices = close.to_frame("close")
@@ -310,7 +311,8 @@ def fetch_asset_ohlcv(
     except Exception as exc:
         logger.debug(
             "MT5 fetch_live failed for %s: %s — falling back to yfinance",
-            ticker, exc,
+            ticker,
+            exc,
         )
 
     period = period or _FETCH_PERIOD

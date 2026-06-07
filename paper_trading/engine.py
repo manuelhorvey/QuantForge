@@ -115,10 +115,11 @@ class PaperTradingEngine:
         self._build_asset_registry()
         # Filter broker symbol map to only dashboard assets so MT5
         # client doesn't fetch/subscribe to non-portfolio symbols.
-        if cfg.mt5.enabled and hasattr(self.broker, '_symbol_map'):
+        if cfg.mt5.enabled and hasattr(self.broker, "_symbol_map"):
             valid_tickers = {a.ticker for a in self.assets.values()}
             self.broker._symbol_map = {k: v for k, v in self.broker._symbol_map.items() if k in valid_tickers}
             from paper_trading.ops.data_fetcher import _mt5_symbol_map
+
             _mt5_symbol_map.clear()
             _mt5_symbol_map.update(self.broker._symbol_map)
         self._init_experiment_context()
