@@ -23,9 +23,9 @@ Usage:
 from __future__ import annotations
 
 import contextlib
-import os
 import json
 import logging
+import os
 import socket
 import struct
 import threading
