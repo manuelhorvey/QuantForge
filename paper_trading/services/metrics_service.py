@@ -113,9 +113,7 @@ class MetricsService:
         pos_info = None
         if pos_mgr.has_position():
             upnl = (
-                pos_mgr.position_pnl(current_price)
-                if current_price is not None and not pd.isna(current_price)
-                else 0.0
+                pos_mgr.position_pnl(current_price) if current_price is not None and not pd.isna(current_price) else 0.0
             )
             pos_info = {
                 "side": pos_mgr.position.side,
@@ -193,9 +191,7 @@ class MetricsService:
 
         remaining_frac = pos_mgr.get_remaining_fraction()
         scale_out_active = (
-            pos_mgr._scale_out_active
-            if hasattr(pos_mgr, "_scale_out_active") and pos_mgr._scale_out_active
-            else False
+            pos_mgr._scale_out_active if hasattr(pos_mgr, "_scale_out_active") and pos_mgr._scale_out_active else False
         )
 
         scale_out_tiers = None

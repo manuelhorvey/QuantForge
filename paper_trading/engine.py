@@ -237,8 +237,6 @@ class PaperTradingEngine:
             len(ctx.freeze.component_hashes),
         )
 
-
-
     def _refresh_narrative(self) -> bool:
         return self._narrative._refresh_narrative()
 

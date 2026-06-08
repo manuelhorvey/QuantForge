@@ -410,7 +410,12 @@ class AssetInferencePipeline:
 
             _proba_list = [float(proba[-1, 0]), float(proba[-1, 1]), float(proba[-1, 2])]
             _sig_div = diag.analyze_signal_divergence(
-                _proba_list, threshold, decision.signal, decision.confidence, shadow_stype, shadow_conf_pct,
+                _proba_list,
+                threshold,
+                decision.signal,
+                decision.confidence,
+                shadow_stype,
+                shadow_conf_pct,
             )
             _mod_div = diag.analyze_model_distribution(asset.name, _proba_list)
             _feat_drivers = diag.analyze_feature_impact(asset.model, x.iloc[[-1]], asset.features, proba[-1:])
@@ -429,7 +434,10 @@ class AssetInferencePipeline:
             asset._risk_signal = _risk_evaluate(asset.name)
             asset._shadow_drift_intel = _get_drift(asset.name)
             asset._shadow_action = _compute_shadow(
-                asset=asset.name, state=None, drift_report=asset._shadow_drift_intel, risk_signal=asset._risk_signal,
+                asset=asset.name,
+                state=None,
+                drift_report=asset._shadow_drift_intel,
+                risk_signal=asset._risk_signal,
             )
             _record_feedback(
                 asset=asset.name,
@@ -439,8 +447,10 @@ class AssetInferencePipeline:
                 action=asset._shadow_action,
             )
             asset._shadow_learning = _compile_learning(
-                asset=asset.name, feedback_logs=None,
-                drift_history=asset._shadow_drift_intel, risk_history=asset._risk_signal,
+                asset=asset.name,
+                feedback_logs=None,
+                drift_history=asset._shadow_drift_intel,
+                risk_history=asset._risk_signal,
             )
         except Exception:
             logger.debug("%s: shadow learning feedback skipped", asset.name)
@@ -452,15 +462,22 @@ class AssetInferencePipeline:
         apply_time = t_total - t_infer
         logger.debug(
             "PIPELINE_BENCHMARK %s: fetch=%.3fs feat=%.3fs infer=%.3fs apply=%.3fs total=%.3fs truncate=%s rows=%d",
-            asset.name, fetch_time, feat_time, infer_time, apply_time, t_total - t0,
-            getattr(asset, "_truncate_inference", False), len(x),
+            asset.name,
+            fetch_time,
+            feat_time,
+            infer_time,
+            apply_time,
+            t_total - t0,
+            getattr(asset, "_truncate_inference", False),
+            len(x),
         )
 
     def _validate_inference_truncation(self, asset, x: pd.DataFrame) -> None:
         if len(x) < _MAX_INDICATOR_LOOKBACK + 1:
             logger.warning(
                 "%s: insufficient rows (%d) for truncation validation — disabling",
-                asset.name, len(x),
+                asset.name,
+                len(x),
             )
             asset._truncate_inference = False
             return
@@ -476,13 +493,16 @@ class AssetInferencePipeline:
         if max_diff > 1e-6:
             logger.warning(
                 "%s: inference truncation diff=%.2e (>=1e-6) — disabling truncation",
-                asset.name, max_diff,
+                asset.name,
+                max_diff,
             )
             asset._truncate_inference = False
         else:
             logger.info(
                 "%s: inference truncation validated (diff=%.2e, rows=%d)",
-                asset.name, max_diff, len(x),
+                asset.name,
+                max_diff,
+                len(x),
             )
             asset._truncate_inference = True
 

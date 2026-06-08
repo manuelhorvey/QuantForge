@@ -63,11 +63,7 @@ class AssetPnlController:
         return self._check_time_stop(asset, max_hold)
 
     def _tick_shadow_sltp(self, asset) -> None:
-        if (
-            hasattr(asset, "_shadow_sltp")
-            and asset._shadow_sltp is not None
-            and asset._shadow_sltp.is_active
-        ):
+        if hasattr(asset, "_shadow_sltp") and asset._shadow_sltp is not None and asset._shadow_sltp.is_active:
             data = getattr(asset, "price_data", None) or getattr(asset, "_price_df", None)
             if data is not None:
                 asset._shadow_sltp.tick(

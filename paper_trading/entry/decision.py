@@ -59,6 +59,3 @@ class TPGeometry:
     scale_out_tiers: list[tuple[float, float]]  # [(fraction, multiplier)]
     convexity_score: float
     metadata: dict
-
-
-

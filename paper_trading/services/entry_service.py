@@ -27,8 +27,18 @@ class EntryService:
         vol = returns.ewm(span=100).std()
         return vol.iloc[-1] if not pd.isna(vol.iloc[-1]) else 0.01
 
-    def composite_size_scalar(self, extra_scalar: float = 1.0, *, validity_state, sl_mult, tp_mult,
-                                regime_geometry, governance, pos_mgr, meta_size_multiplier) -> float:
+    def composite_size_scalar(
+        self,
+        extra_scalar: float = 1.0,
+        *,
+        validity_state,
+        sl_mult,
+        tp_mult,
+        regime_geometry,
+        governance,
+        pos_mgr,
+        meta_size_multiplier,
+    ) -> float:
         _, _, effective_size = compute_effective_multipliers(
             base_sl=sl_mult,
             base_tp=tp_mult,
@@ -40,18 +50,23 @@ class EntryService:
             liquidity_size_scalar=governance._liquidity_size_scalar,
         )
         return (
-            pos_mgr.position_size
-            * pos_mgr.exposure_multiplier
-            * extra_scalar
-            * meta_size_multiplier
-            * effective_size
+            pos_mgr.position_size * pos_mgr.exposure_multiplier * extra_scalar * meta_size_multiplier * effective_size
         )
 
     def compute_notional(self, effective_capital_val: float, size_scalar_val: float) -> float:
         return effective_capital_val * size_scalar_val
 
-    def sizing_config(self, close: pd.Series, position_size_scalar: float = 1.0, *,
-                      execution_bridge, ticker, config, effective_capital_val, size_scalar_val) -> dict:
+    def sizing_config(
+        self,
+        close: pd.Series,
+        position_size_scalar: float = 1.0,
+        *,
+        execution_bridge,
+        ticker,
+        config,
+        effective_capital_val,
+        size_scalar_val,
+    ) -> dict:
         cfg = dict(config)
         if execution_bridge is None:
             return cfg
@@ -62,9 +77,21 @@ class EntryService:
         cfg["impact_bps"] = execution_bridge.estimate_impact_bps(ticker, notional)
         return cfg
 
-    def can_enter(self, side, price, *, last_stop_out_date, last_stop_out_side, config,
-                  cooldown_penalty_func, pending_entries, cycle_counter, last_signal_flip_cycle,
-                  min_flip_interval_bars, context=None) -> tuple[bool, str]:
+    def can_enter(
+        self,
+        side,
+        price,
+        *,
+        last_stop_out_date,
+        last_stop_out_side,
+        config,
+        cooldown_penalty_func,
+        pending_entries,
+        cycle_counter,
+        last_signal_flip_cycle,
+        min_flip_interval_bars,
+        context=None,
+    ) -> tuple[bool, str]:
         if last_stop_out_date is not None:
             cross_cooldown_hours = config.get("stopout_cross_side_cooldown_hours", 1.0)
             now = pd.Timestamp.now(tz="UTC")

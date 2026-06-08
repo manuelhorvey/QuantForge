@@ -82,6 +82,3 @@ def _generate_scale_out_profile(archetype: str, convexity: float) -> list[tuple[
 
     # Balanced (Trend Pullback)
     return [(1 / 3, 0.50), (1 / 3, 1.00), (1 / 3, 1.50)]
-
-
-

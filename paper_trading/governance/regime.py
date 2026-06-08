@@ -71,4 +71,3 @@ class RegimeClassifier:
         df["regime_confidence"] = max_prob
 
         return df
-

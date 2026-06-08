@@ -39,5 +39,3 @@ class SignalService:
 
         t = (last_meta_proba - threshold) / (1.0 - threshold)
         return min_size + t * (1.0 - min_size)
-
-

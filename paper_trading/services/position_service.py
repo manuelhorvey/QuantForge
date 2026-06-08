@@ -11,8 +11,20 @@ ET = pytz.timezone("US/Eastern")
 
 
 class PositionService:
-    def __init__(self, *, name, ticker, config, pos_mgr, state_store, attribution,
-                 attribution_svc, execution_bridge, model, shadow_sltp):
+    def __init__(
+        self,
+        *,
+        name,
+        ticker,
+        config,
+        pos_mgr,
+        state_store,
+        attribution,
+        attribution_svc,
+        execution_bridge,
+        model,
+        shadow_sltp,
+    ):
         self.name = name
         self.ticker = ticker
         self.config = config
@@ -25,7 +37,12 @@ class PositionService:
         self._shadow_sltp = shadow_sltp
 
     def macro_blend_trade_returns(
-        self, trade_ret: float, *, entry_signal_dir: int, last_macro_dir, last_blend_dir,
+        self,
+        trade_ret: float,
+        *,
+        entry_signal_dir: int,
+        last_macro_dir,
+        last_blend_dir,
     ) -> tuple[float, float]:
         entry = entry_signal_dir
         if entry == 0:
@@ -48,11 +65,27 @@ class PositionService:
             )
             pos_mgr.open(intent)
 
-    def close_position(self, exit_price, exit_date, reason, *, position, current_value,
-                       entry_archetype, current_trade_id, attribution_buffer, cycle_counter,
-                       last_entry_slippage, last_policy_hash, exit_archetype,
-                       attribution_export_dir, experiment_id,
-                       entry_signal_dir, last_macro_dir, last_blend_dir):
+    def close_position(
+        self,
+        exit_price,
+        exit_date,
+        reason,
+        *,
+        position,
+        current_value,
+        entry_archetype,
+        current_trade_id,
+        attribution_buffer,
+        cycle_counter,
+        last_entry_slippage,
+        last_policy_hash,
+        exit_archetype,
+        attribution_export_dir,
+        experiment_id,
+        entry_signal_dir,
+        last_macro_dir,
+        last_blend_dir,
+    ):
         fill_price = exit_price
         exit_slippage_bps = 0.0
         if self.execution_bridge is not None and self.pos_mgr.has_position():
@@ -183,8 +216,9 @@ class PositionService:
         _record_exit_outcome(self.name, reason)
         return mutations
 
-    def record_stop_out(self, side: str, exit_price: float, *, pos_mgr, regime_adjusted_entry,
-                        entry_price, churn_ratio_threshold):
+    def record_stop_out(
+        self, side: str, exit_price: float, *, pos_mgr, regime_adjusted_entry, entry_price, churn_ratio_threshold
+    ):
         sl_price = None
         if pos_mgr.position is not None:
             sl_price = pos_mgr.position.stop_loss
@@ -204,8 +238,7 @@ class PositionService:
             "_last_cooldown_update": pd.Timestamp.now(tz="UTC"),
         }
 
-    def cooldown_penalty(self, side: str, *, last_stop_out_side, cooldown_score,
-                         last_cooldown_update, config) -> float:
+    def cooldown_penalty(self, side: str, *, last_stop_out_side, cooldown_score, last_cooldown_update, config) -> float:
         if last_stop_out_side != side:
             return 0.0
         if not cooldown_score or cooldown_score <= 0:

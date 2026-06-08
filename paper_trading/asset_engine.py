@@ -181,6 +181,7 @@ class AssetEngine:
         self._entry = EntryService()
         self._attribution = AttributionCollector()
         from paper_trading.services.attribution_service import AttributionService as _AttributionService
+
         self._position = PositionService(
             name=self.name,
             ticker=self.ticker,
@@ -211,10 +212,9 @@ class AssetEngine:
         self._current_trade_id: str | None = None
         self._attribution_buffer: list[TradeAttributionRecord] = []
 
-
-
     def set_experiment_context(self, experiment_id: str, export_dir: str | None = None) -> None:
         from paper_trading.services.attribution_service import AttributionService
+
         self._attribution_export_dir = AttributionService.set_experiment_context(
             attribution_export_dir=self._attribution_export_dir,
             experiment_id=experiment_id,
@@ -224,6 +224,7 @@ class AssetEngine:
 
     def flush_attribution(self) -> None:
         from paper_trading.services.attribution_service import AttributionService
+
         AttributionService.flush_attribution(
             name=self.name,
             attribution_buffer=self._attribution_buffer,
@@ -246,6 +247,7 @@ class AssetEngine:
 
     def _meta_size_multiplier(self) -> float:
         from paper_trading.services.signal_service import SignalService
+
         return SignalService.meta_size_multiplier(self.config, getattr(self, "_last_meta_proba", None))
 
     def _composite_size_scalar(self, extra_scalar: float = 1.0) -> float:
@@ -270,7 +272,8 @@ class AssetEngine:
         effective = self._effective_capital()
         size_scalar = self._composite_size_scalar(position_size_scalar)
         return self._entry.sizing_config(
-            close, position_size_scalar,
+            close,
+            position_size_scalar,
             execution_bridge=self.execution_bridge,
             ticker=self.ticker,
             config=self.config,
@@ -295,6 +298,7 @@ class AssetEngine:
 
     def _load_meta_label_model(self) -> None:
         from paper_trading.services.signal_service import SignalService
+
         self._meta_label_model = SignalService.load_meta_label_model(self.config, self.name)
 
     def _tb_vol(self, close_series):
@@ -305,7 +309,9 @@ class AssetEngine:
 
     def _close_position(self, exit_price, exit_date, reason):
         mutations = self._position.close_position(
-            exit_price, exit_date, reason,
+            exit_price,
+            exit_date,
+            reason,
             position=self.position,
             current_value=self.current_value,
             entry_archetype=getattr(self, "_entry_archetype", None),
@@ -331,7 +337,8 @@ class AssetEngine:
 
     def _record_stop_out(self, side: str, exit_price: float) -> None:
         mutations = self._position.record_stop_out(
-            side, exit_price,
+            side,
+            exit_price,
             pos_mgr=self.pos_mgr,
             regime_adjusted_entry=self._regime_adjusted_entry,
             entry_price=self._entry_price,
@@ -362,7 +369,8 @@ class AssetEngine:
 
     def _can_enter(self, side: str, price: float, context: dict | None = None) -> tuple[bool, str]:
         return self._entry.can_enter(
-            side, price,
+            side,
+            price,
             last_stop_out_date=self._last_stop_out_date,
             last_stop_out_side=self._last_stop_out_side,
             config=self.config,
@@ -596,6 +604,7 @@ class AssetEngine:
 
     def _decision_to_dict(self, decision: TradeDecision):
         from paper_trading.services.metrics_service import MetricsService
+
         return MetricsService.decision_to_dict(
             decision,
             pos_mgr=self.pos_mgr,
@@ -618,6 +627,7 @@ class AssetEngine:
 
     def get_metrics(self):
         from paper_trading.services.metrics_service import MetricsService
+
         return MetricsService.get_metrics(
             name=self.name,
             ensure_position_synced=self._ensure_position_synced,
@@ -646,6 +656,7 @@ class AssetEngine:
 
     def _log_confidence_buckets(self):
         from paper_trading.services.metrics_service import MetricsService
+
         MetricsService.log_confidence_buckets(
             name=self.name,
             prob_history=self.prob_history,
@@ -654,6 +665,7 @@ class AssetEngine:
 
     def update_validity(self, halt: dict | None = None):
         from paper_trading.services.governance_service import GovernanceService
+
         return GovernanceService.update_validity(
             name=self.name,
             halt=halt,
@@ -665,6 +677,7 @@ class AssetEngine:
 
     def check_halt_conditions(self, metrics: dict | None = None):
         from paper_trading.services.governance_service import GovernanceService
+
         return GovernanceService.check_halt_conditions(
             get_metrics=(lambda: metrics if metrics is not None else self.get_metrics()),
             name=self.name,
