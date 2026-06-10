@@ -4,30 +4,20 @@ rebalance: daily
 retrain_freq: annual
 retrain_window: 5
 research_mode: false
-
-# ── Data Source ───────────────────────────────────────────────────────────────
-# Options: "yfinance" (default) or "mt5"
 data_source: mt5
-
-# ── MT5 Integration ───────────────────────────────────────────────────────────
-# Set enabled: true to use the Wine MT5 bridge for data and/or execution.
-# The bridge server must be running (run: mt5-bridge).
-# Credentials come from environment variables (MT5_ACCOUNT, MT5_PASSWORD, MT5_SERVER)
-# or .env file — never commit them to version control.
 mt5:
   enabled: true
   bridge_host: 127.0.0.1
   bridge_port: 9879
   symbol_map_path: configs/mt5_symbol_map.yaml
-
 ensemble:
   enabled: false
   base_weight: 0.6
   threshold: 0.15
   regime_feature_window: 63
 meta_labeling:
-  confidence_threshold: 0.40
-  threshold_reduced: 0.40
+  confidence_threshold: 0.4
+  threshold_reduced: 0.4
 portfolio_drawdown_limit: -0.15
 defaults:
   churn_ratio_threshold: 0.35
@@ -36,8 +26,8 @@ defaults:
   entry_defer_max_bars: 5
   min_flip_interval_bars: 3
   entry_optimization:
-    mom_max_pressure: 0.90
-    mom_min_pressure: 0.10
+    mom_max_pressure: 0.9
+    mom_min_pressure: 0.1
     mr_extreme_high: 0.85
     mr_extreme_low: 0.15
     breakout_max_compression: 0.05
@@ -49,22 +39,11 @@ optimizations:
   async_diagnostics: true
   regime_conviction_flip_gate:
     enabled: true
-    # Calibrated on 394 flips across 9 dashboard assets
-    # (data/sandbox/{asset}/oos_predictions.parquet).
-    # Regime bias in calibration sample: 62.8% trend, 33.8% range, 3.3% volatile.
-    # In a ranging market the gate will block more flips — that's correct,
-    # not a sign the threshold is wrong.
     regime_margin_threshold: 0.35
-    confidence_threshold: 0.50
+    confidence_threshold: 0.5
     min_bars_in_regime: 3
-
 execution:
   governance:
-    # Default regime geometry — acts as fallback for assets without
-    # per-asset regime_geometry.  Values of 1.0 mean no arbitrary
-    # tightening; per-asset sl_mult / tp_mult are the authoritative
-    # risk parameters.  Assets that need regime-sensitive tightening
-    # should define their own regime_geometry.
     regime_geometry:
       GREEN:
         sl_mult: 1.0
@@ -90,7 +69,7 @@ execution:
       stressed_halt: true
     narrative_config:
       enabled: true
-      fxstreet_url: "https://www.fxstreet.com/analysis"
+      fxstreet_url: https://www.fxstreet.com/analysis
       geopol_sl_widen_pct: 10
       risk_off_size_reduce_pct: 20
       min_confidence: 0.6
@@ -98,19 +77,19 @@ execution:
 assets:
   GC:
     ticker: GC=F
-    allocation: 0.070
-    sl_mult: 1.00
-    tp_mult: 4.00
+    allocation: 0.07
+    sl_mult: 1.0
+    tp_mult: 4.0
     regime_geometry:
       GREEN:
         sl_mult: 1.0
         tp_mult: 1.0
       YELLOW:
-        sl_mult: 0.90
-        tp_mult: 0.90
+        sl_mult: 0.9
+        tp_mult: 0.9
       RED:
-        sl_mult: 0.80
-        tp_mult: 0.80
+        sl_mult: 0.8
+        tp_mult: 0.8
     config:
       shadow_sltp:
         enabled: true
@@ -119,9 +98,9 @@ assets:
         trailing_distance_mult: 1.0
   USDCHF:
     ticker: USDCHF=X
-    allocation: 0.040
+    allocation: 0.04
     sl_mult: 0.85
-    tp_mult: 3.00
+    tp_mult: 3.0
     max_depth: 4
     regime_geometry:
       GREEN:
@@ -129,41 +108,51 @@ assets:
         tp_mult: 1.0
       YELLOW:
         sl_mult: 1.58
-        tp_mult: 0.90
+        tp_mult: 0.9
       RED:
         sl_mult: 1.41
-        tp_mult: 0.80
+        tp_mult: 0.8
     config:
       shadow_sltp:
+        enabled: true
+        method: trailing
+        trailing_activation_mult: 0.33
+        trailing_distance_mult: 1.0
+      dynamic_sltp:
         enabled: true
         method: trailing
         trailing_activation_mult: 0.33
         trailing_distance_mult: 1.0
   AUDCHF:
     ticker: AUDCHF=X
-    allocation: 0.050
+    allocation: 0.05
     sl_mult: 2.75
-    tp_mult: 3.50
+    tp_mult: 3.5
     regime_geometry:
       GREEN:
         sl_mult: 1.0
         tp_mult: 1.0
       YELLOW:
-        sl_mult: 0.90
-        tp_mult: 0.90
+        sl_mult: 0.9
+        tp_mult: 0.9
       RED:
-        sl_mult: 0.80
-        tp_mult: 0.80
+        sl_mult: 0.8
+        tp_mult: 0.8
     config:
       shadow_sltp:
         enabled: true
         method: trailing
         trailing_activation_mult: 0.33
         trailing_distance_mult: 1.0
+      dynamic_sltp:
+        enabled: true
+        method: trailing
+        trailing_activation_mult: 0.33
+        trailing_distance_mult: 1.0
   USDCAD:
     ticker: USDCAD=X
-    allocation: 0.050
-    sl_mult: 2.50
+    allocation: 0.05
+    sl_mult: 2.5
     tp_mult: 2.03
     max_depth: 5
     regime_geometry:
@@ -182,21 +171,26 @@ assets:
         method: trailing
         trailing_activation_mult: 0.33
         trailing_distance_mult: 1.0
+      dynamic_sltp:
+        enabled: true
+        method: trailing
+        trailing_activation_mult: 0.33
+        trailing_distance_mult: 1.0
   ES:
     ticker: ES=F
-    allocation: 0.070
-    sl_mult: 2.00
-    tp_mult: 5.50
+    allocation: 0.07
+    sl_mult: 2.0
+    tp_mult: 5.5
     regime_geometry:
       GREEN:
         sl_mult: 1.0
         tp_mult: 1.0
       YELLOW:
-        sl_mult: 0.90
-        tp_mult: 0.90
+        sl_mult: 0.9
+        tp_mult: 0.9
       RED:
-        sl_mult: 0.80
-        tp_mult: 0.80
+        sl_mult: 0.8
+        tp_mult: 0.8
     config:
       shadow_sltp:
         enabled: true
@@ -205,19 +199,19 @@ assets:
         trailing_distance_mult: 0.5
   NQ:
     ticker: NQ=F
-    allocation: 0.070
-    sl_mult: 2.50
-    tp_mult: 5.00
+    allocation: 0.07
+    sl_mult: 2.5
+    tp_mult: 5.0
     regime_geometry:
       GREEN:
         sl_mult: 1.0
         tp_mult: 1.0
       YELLOW:
-        sl_mult: 0.90
-        tp_mult: 0.90
+        sl_mult: 0.9
+        tp_mult: 0.9
       RED:
-        sl_mult: 0.80
-        tp_mult: 0.80
+        sl_mult: 0.8
+        tp_mult: 0.8
     config:
       shadow_sltp:
         enabled: true
@@ -226,332 +220,403 @@ assets:
         trailing_distance_mult: 0.5
   GBPCAD:
     ticker: GBPCAD=X
-    allocation: 0.050
-    sl_mult: 2.50
-    tp_mult: 2.50
+    allocation: 0.05
+    sl_mult: 2.5
+    tp_mult: 2.5
     regime_geometry:
       GREEN:
         sl_mult: 1.0
         tp_mult: 1.0
       YELLOW:
-        sl_mult: 0.90
-        tp_mult: 0.90
+        sl_mult: 0.9
+        tp_mult: 0.9
       RED:
-        sl_mult: 0.80
-        tp_mult: 0.80
+        sl_mult: 0.8
+        tp_mult: 0.8
     config:
       shadow_sltp:
+        enabled: true
+        method: trailing
+        trailing_activation_mult: 0.3
+        trailing_distance_mult: 1.5
+      dynamic_sltp:
         enabled: true
         method: trailing
         trailing_activation_mult: 0.3
         trailing_distance_mult: 1.5
   GBPNZD:
     ticker: GBPNZD=X
-    allocation: 0.050
-    sl_mult: 3.00
-    tp_mult: 1.00
+    allocation: 0.05
+    sl_mult: 3.0
+    tp_mult: 1.0
     max_depth: 3
     regime_geometry:
       GREEN:
         sl_mult: 1.0
         tp_mult: 1.0
       YELLOW:
-        sl_mult: 0.90
-        tp_mult: 0.90
+        sl_mult: 0.9
+        tp_mult: 0.9
       RED:
-        sl_mult: 0.80
-        tp_mult: 0.80
+        sl_mult: 0.8
+        tp_mult: 0.8
     config:
       shadow_sltp:
+        enabled: true
+        method: trailing
+        trailing_activation_mult: 0.3
+        trailing_distance_mult: 1.5
+      dynamic_sltp:
         enabled: true
         method: trailing
         trailing_activation_mult: 0.3
         trailing_distance_mult: 1.5
   NZDCAD:
     ticker: NZDCAD=X
-    allocation: 0.050
-    sl_mult: 2.50
-    tp_mult: 4.00
+    allocation: 0.05
+    sl_mult: 2.5
+    tp_mult: 4.0
     regime_geometry:
       GREEN:
         sl_mult: 1.0
         tp_mult: 1.0
       YELLOW:
-        sl_mult: 0.90
-        tp_mult: 0.90
+        sl_mult: 0.9
+        tp_mult: 0.9
       RED:
-        sl_mult: 0.80
-        tp_mult: 0.80
+        sl_mult: 0.8
+        tp_mult: 0.8
     config:
       shadow_sltp:
+        enabled: true
+        method: trailing
+        trailing_activation_mult: 0.3
+        trailing_distance_mult: 0.8
+      dynamic_sltp:
         enabled: true
         method: trailing
         trailing_activation_mult: 0.3
         trailing_distance_mult: 0.8
   ^DJI:
     ticker: ^DJI
-    allocation: 0.040
-    sl_mult: 0.50
-    tp_mult: 4.00
+    allocation: 0.04
+    sl_mult: 0.5
+    tp_mult: 4.0
     max_depth: 4
     regime_geometry:
       GREEN:
         sl_mult: 3.0
         tp_mult: 1.0
       YELLOW:
-        sl_mult: 2.70
-        tp_mult: 0.90
+        sl_mult: 2.7
+        tp_mult: 0.9
       RED:
-        sl_mult: 2.40
-        tp_mult: 0.80
+        sl_mult: 2.4
+        tp_mult: 0.8
     config:
       shadow_sltp:
         enabled: true
         method: trailing
         trailing_activation_mult: 0.3
         trailing_distance_mult: 0.5
+      dynamic_sltp:
+        enabled: true
+        method: trailing
+        trailing_activation_mult: 0.3
+        trailing_distance_mult: 0.5
   EURUSD:
     ticker: EURUSD=X
-    allocation: 0.040
-    sl_mult: 3.00
-    tp_mult: 1.50
+    allocation: 0.04
+    sl_mult: 3.0
+    tp_mult: 1.5
     max_depth: 3
     regime_geometry:
       GREEN:
         sl_mult: 1.0
         tp_mult: 1.0
       YELLOW:
-        sl_mult: 0.90
-        tp_mult: 0.90
+        sl_mult: 0.9
+        tp_mult: 0.9
       RED:
-        sl_mult: 0.80
-        tp_mult: 0.80
+        sl_mult: 0.8
+        tp_mult: 0.8
     config:
       shadow_sltp:
         enabled: true
         method: trailing
         trailing_activation_mult: 0.3
         trailing_distance_mult: 1.0
+      dynamic_sltp:
+        enabled: true
+        method: trailing
+        trailing_activation_mult: 0.3
+        trailing_distance_mult: 1.0
   NZDUSD:
     ticker: NZDUSD=X
-    allocation: 0.050
-    sl_mult: 2.50
-    tp_mult: 1.50
+    allocation: 0.05
+    sl_mult: 2.5
+    tp_mult: 1.5
     max_depth: 5
     regime_geometry:
       GREEN:
         sl_mult: 1.0
         tp_mult: 1.0
       YELLOW:
-        sl_mult: 0.90
-        tp_mult: 0.90
+        sl_mult: 0.9
+        tp_mult: 0.9
       RED:
-        sl_mult: 0.80
-        tp_mult: 0.80
+        sl_mult: 0.8
+        tp_mult: 0.8
     config:
       shadow_sltp:
         enabled: true
         method: trailing
         trailing_activation_mult: 0.5
         trailing_distance_mult: 0.8
-
-  # ── New additions (filter sweep 2026-06) ────────────────────────────────
+      dynamic_sltp:
+        enabled: true
+        method: trailing
+        trailing_activation_mult: 0.5
+        trailing_distance_mult: 0.8
   GBPAUD:
     ticker: GBPAUD=X
-    allocation: 0.050
-    sl_mult: 1.00
-    tp_mult: 2.00
+    allocation: 0.05
+    sl_mult: 1.0
+    tp_mult: 2.0
     max_depth: 2
     regime_geometry:
       GREEN:
-        sl_mult: 1.50
+        sl_mult: 1.5
         tp_mult: 1.0
       YELLOW:
         sl_mult: 1.35
-        tp_mult: 0.90
+        tp_mult: 0.9
       RED:
-        sl_mult: 1.20
-        tp_mult: 0.80
+        sl_mult: 1.2
+        tp_mult: 0.8
     config:
       shadow_sltp:
         enabled: true
         method: trailing
         trailing_activation_mult: 0.33
         trailing_distance_mult: 1.0
+      dynamic_sltp:
+        enabled: true
+        method: trailing
+        trailing_activation_mult: 0.33
+        trailing_distance_mult: 1.0
   NZDCHF:
     ticker: NZDCHF=X
-    allocation: 0.070
-    sl_mult: 1.00
-    tp_mult: 4.00
+    allocation: 0.07
+    sl_mult: 1.0
+    tp_mult: 4.0
     max_depth: 2
     regime_geometry:
       GREEN:
-        sl_mult: 1.50
+        sl_mult: 1.5
         tp_mult: 1.0
       YELLOW:
         sl_mult: 1.35
-        tp_mult: 0.90
+        tp_mult: 0.9
       RED:
-        sl_mult: 1.20
-        tp_mult: 0.80
+        sl_mult: 1.2
+        tp_mult: 0.8
     config:
       shadow_sltp:
+        enabled: true
+        method: trailing
+        trailing_activation_mult: 0.8
+        trailing_distance_mult: 0.8
+      dynamic_sltp:
         enabled: true
         method: trailing
         trailing_activation_mult: 0.8
         trailing_distance_mult: 0.8
   CADCHF:
     ticker: CADCHF=X
-    allocation: 0.050
-    sl_mult: 1.00
-    tp_mult: 4.00
+    allocation: 0.05
+    sl_mult: 1.0
+    tp_mult: 4.0
     max_depth: 2
     regime_geometry:
       GREEN:
-        sl_mult: 1.50
+        sl_mult: 1.5
         tp_mult: 1.0
       YELLOW:
         sl_mult: 1.35
-        tp_mult: 0.90
+        tp_mult: 0.9
       RED:
-        sl_mult: 1.20
-        tp_mult: 0.80
+        sl_mult: 1.2
+        tp_mult: 0.8
     config:
       shadow_sltp:
+        enabled: true
+        method: trailing
+        trailing_activation_mult: 1.0
+        trailing_distance_mult: 0.8
+      dynamic_sltp:
         enabled: true
         method: trailing
         trailing_activation_mult: 1.0
         trailing_distance_mult: 0.8
   AUDUSD:
     ticker: AUDUSD=X
-    allocation: 0.040
-    sl_mult: 1.50
-    tp_mult: 4.00
+    allocation: 0.04
+    sl_mult: 1.5
+    tp_mult: 4.0
     max_depth: 2
     regime_geometry:
       GREEN:
         sl_mult: 1.33
         tp_mult: 1.0
       YELLOW:
-        sl_mult: 1.20
-        tp_mult: 0.90
+        sl_mult: 1.2
+        tp_mult: 0.9
       RED:
         sl_mult: 1.07
-        tp_mult: 0.80
+        tp_mult: 0.8
     config:
       shadow_sltp:
         enabled: true
         method: trailing
         trailing_activation_mult: 1.0
         trailing_distance_mult: 0.8
+      dynamic_sltp:
+        enabled: true
+        method: trailing
+        trailing_activation_mult: 1.0
+        trailing_distance_mult: 0.8
   AUDNZD:
     ticker: AUDNZD=X
-    allocation: 0.030
-    sl_mult: 2.00
-    tp_mult: 1.00
+    allocation: 0.03
+    sl_mult: 2.0
+    tp_mult: 1.0
     max_depth: 2
     regime_geometry:
       GREEN:
         sl_mult: 1.0
         tp_mult: 1.0
       YELLOW:
-        sl_mult: 0.90
-        tp_mult: 0.90
+        sl_mult: 0.9
+        tp_mult: 0.9
       RED:
-        sl_mult: 0.80
-        tp_mult: 0.80
+        sl_mult: 0.8
+        tp_mult: 0.8
     config:
       shadow_sltp:
         enabled: true
         method: trailing
         trailing_activation_mult: 0.5
         trailing_distance_mult: 1.0
-
-  # ── Remaining filter survivors 2026-06 ────────────────────────────────────
+      dynamic_sltp:
+        enabled: true
+        method: trailing
+        trailing_activation_mult: 0.5
+        trailing_distance_mult: 1.0
   EURCHF:
     ticker: EURCHF=X
-    allocation: 0.050
-    sl_mult: 1.00
-    tp_mult: 3.00
+    allocation: 0.05
+    sl_mult: 1.0
+    tp_mult: 3.0
     max_depth: 4
     regime_geometry:
       GREEN:
-        sl_mult: 1.50
+        sl_mult: 1.5
         tp_mult: 1.0
       YELLOW:
         sl_mult: 1.35
-        tp_mult: 0.90
+        tp_mult: 0.9
       RED:
-        sl_mult: 1.20
-        tp_mult: 0.80
+        sl_mult: 1.2
+        tp_mult: 0.8
     config:
       shadow_sltp:
         enabled: true
         method: trailing
         trailing_activation_mult: 0.8
         trailing_distance_mult: 0.8
+      dynamic_sltp:
+        enabled: true
+        method: trailing
+        trailing_activation_mult: 0.8
+        trailing_distance_mult: 0.8
   EURCAD:
     ticker: EURCAD=X
-    allocation: 0.020
-    sl_mult: 1.00
-    tp_mult: 1.00
+    allocation: 0.02
+    sl_mult: 1.0
+    tp_mult: 1.0
     max_depth: 3
     regime_geometry:
       GREEN:
-        sl_mult: 1.50
+        sl_mult: 1.5
         tp_mult: 1.0
       YELLOW:
         sl_mult: 1.35
-        tp_mult: 0.90
+        tp_mult: 0.9
       RED:
-        sl_mult: 1.20
-        tp_mult: 0.80
+        sl_mult: 1.2
+        tp_mult: 0.8
     config:
       shadow_sltp:
         enabled: true
         method: trailing
         trailing_activation_mult: 0.5
         trailing_distance_mult: 1.0
+      dynamic_sltp:
+        enabled: true
+        method: trailing
+        trailing_activation_mult: 0.5
+        trailing_distance_mult: 1.0
   EURNZD:
     ticker: EURNZD=X
-    allocation: 0.030
-    sl_mult: 1.50
-    tp_mult: 2.50
+    allocation: 0.03
+    sl_mult: 1.5
+    tp_mult: 2.5
     max_depth: 3
     regime_geometry:
       GREEN:
         sl_mult: 1.33
         tp_mult: 1.0
       YELLOW:
-        sl_mult: 1.20
-        tp_mult: 0.90
+        sl_mult: 1.2
+        tp_mult: 0.9
       RED:
         sl_mult: 1.07
-        tp_mult: 0.80
+        tp_mult: 0.8
     config:
       shadow_sltp:
         enabled: true
         method: trailing
         trailing_activation_mult: 0.5
         trailing_distance_mult: 1.5
+      dynamic_sltp:
+        enabled: true
+        method: trailing
+        trailing_activation_mult: 0.5
+        trailing_distance_mult: 1.5
   GBPCHF:
     ticker: GBPCHF=X
-    allocation: 0.030
-    sl_mult: 1.00
-    tp_mult: 2.00
+    allocation: 0.03
+    sl_mult: 1.0
+    tp_mult: 2.0
     max_depth: 2
     regime_geometry:
       GREEN:
-        sl_mult: 1.50
+        sl_mult: 1.5
         tp_mult: 1.0
       YELLOW:
         sl_mult: 1.35
-        tp_mult: 0.90
+        tp_mult: 0.9
       RED:
-        sl_mult: 1.20
-        tp_mult: 0.80
+        sl_mult: 1.2
+        tp_mult: 0.8
     config:
       shadow_sltp:
+        enabled: true
+        method: trailing
+        trailing_activation_mult: 0.8
+        trailing_distance_mult: 1.0
+      dynamic_sltp:
         enabled: true
         method: trailing
         trailing_activation_mult: 0.8
