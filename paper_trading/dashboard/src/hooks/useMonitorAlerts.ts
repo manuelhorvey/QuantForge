@@ -8,6 +8,9 @@ export interface Alert {
   asset: string
   severity: 'critical' | 'warning' | 'info'
   message: string
+  detail?: string
+  count?: number
+  assets?: string[]
   timestamp: string
 }
 
@@ -30,6 +33,10 @@ export function dismissAlert(id: string) {
   } catch {}
 }
 
+function shortenMessage(msg: string): string {
+  return msg.replace(/sl=\d+\.\d+x size=\d+\.\d+x/g, '').replace(/,\s*,/g, ',').replace(/,\s*$/, '').trim()
+}
+
 export function useMonitorAlerts(): Alert[] {
   const { data: state } = usePortfolioState()
   const { data: health } = useHealthScores()
@@ -39,45 +46,76 @@ export function useMonitorAlerts(): Alert[] {
     const dismissed = loadDismissed()
     const now = state?.timestamp ?? new Date().toISOString()
 
-    // Health alerts
-    if (health?.assets) {
-      for (const [name, h] of Object.entries(health.assets)) {
-        if (h.health_score < 0.5) {
-          alerts.push({
-            id: `health-critical-${name}`,
-            type: 'health',
-            asset: name,
-            severity: 'critical',
-            message: `${name} health is critical (${(h.health_score * 100).toFixed(0)}%)`,
-            timestamp: now,
-          })
-        } else if (h.health_score < 0.8) {
-          alerts.push({
-            id: `health-degraded-${name}`,
-            type: 'health',
-            asset: name,
-            severity: 'warning',
-            message: `${name} health degraded (${(h.health_score * 100).toFixed(0)}%)`,
-            timestamp: now,
-          })
+    // Group halted assets by reason
+    const haltByReason = new Map<string, string[]>()
+    if (state?.assets) {
+      for (const [name, asset] of Object.entries(state.assets)) {
+        if (asset.halt?.halted) {
+          const reasons = asset.halt.reasons ?? ['unknown']
+          const key = reasons.join('; ')
+          if (!haltByReason.has(key)) haltByReason.set(key, [])
+          haltByReason.get(key)!.push(name)
         }
       }
     }
 
-    // Halt alerts
-    if (state?.halt_conditions) {
-      for (const [name, asset] of Object.entries(state.assets ?? {})) {
-        if (asset.halt?.halted) {
-          alerts.push({
-            id: `halt-${name}`,
-            type: 'halt',
-            asset: name,
-            severity: 'critical',
-            message: `${name} halted — ${(asset.halt.reasons ?? []).join(', ') || 'unknown'}`,
-            timestamp: now,
-          })
-        }
+    for (const [reasonKey, assets] of haltByReason) {
+      const short = shortenMessage(reasonKey)
+      alerts.push({
+        id: `halt-${reasonKey.slice(0, 20).replace(/\s+/g, '-')}`,
+        type: 'halt',
+        asset: assets.length === 1 ? assets[0] : `${assets.length} assets`,
+        severity: 'critical',
+        message: assets.length === 1
+          ? `${assets[0]} halted — ${short}`
+          : `${assets.length} assets halted — ${short}`,
+        detail: assets.join(', '),
+        count: assets.length,
+        assets,
+        timestamp: now,
+      })
+    }
+
+    // Group health alerts by label
+    const healthCritical: string[] = []
+    const healthDegraded: string[] = []
+    if (health?.assets) {
+      for (const [name, h] of Object.entries(health.assets)) {
+        if (h.health_score < 0.5) healthCritical.push(name)
+        else if (h.health_score < 0.8) healthDegraded.push(name)
       }
+    }
+
+    if (healthCritical.length > 0) {
+      alerts.push({
+        id: 'health-critical',
+        type: 'health',
+        asset: healthCritical.length === 1 ? healthCritical[0] : `${healthCritical.length} assets`,
+        severity: 'critical',
+        message: healthCritical.length === 1
+          ? `${healthCritical[0]} health critical`
+          : `${healthCritical.length} assets health critical`,
+        detail: healthCritical.join(', '),
+        count: healthCritical.length,
+        assets: healthCritical,
+        timestamp: now,
+      })
+    }
+
+    if (healthDegraded.length > 0) {
+      alerts.push({
+        id: 'health-degraded',
+        type: 'health',
+        asset: healthDegraded.length === 1 ? healthDegraded[0] : `${healthDegraded.length} assets`,
+        severity: 'warning',
+        message: healthDegraded.length === 1
+          ? `${healthDegraded[0]} health degraded`
+          : `${healthDegraded.length} assets health degraded`,
+        detail: healthDegraded.join(', '),
+        count: healthDegraded.length,
+        assets: healthDegraded,
+        timestamp: now,
+      })
     }
 
     // Governance alerts from halt thresholds
@@ -105,6 +143,6 @@ export function useMonitorAlerts(): Alert[] {
       }
     }
 
-    return alerts.filter(a => !dismissed.has(a.id)).slice(0, 20)
+    return alerts.filter(a => !dismissed.has(a.id))
   }, [health, state])
 }
