@@ -112,6 +112,13 @@ class PaperTradingEngine:
         self._recovery = EngineRecoveryService(self)
         self._state = EngineStateService(self)
 
+        from paper_trading.execution_context import ExecutionContext
+
+        self._execution_context = ExecutionContext(
+            state_store=self.state_store,
+            execution_bridge=self.execution_bridge,
+            engine_config=self._engine_cfg,
+        )
         self._build_asset_registry()
         # Filter broker symbol map to only dashboard assets so MT5
         # client doesn't fetch/subscribe to non-portfolio symbols.
@@ -218,8 +225,7 @@ class PaperTradingEngine:
                 tp_mult=spec.get("tp_mult", 2.5),
                 max_depth=spec.get("max_depth", 2),
                 regime_geometry=spec.get("regime_geometry", {}),
-                state_store=self.state_store,
-                execution_bridge=self.execution_bridge,
+                context=self._execution_context,
             )
 
     def _init_experiment_context(self) -> None:

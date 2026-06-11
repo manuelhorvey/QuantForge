@@ -26,21 +26,22 @@ class TestCoreAssetMTM(unittest.TestCase):
         mock_contract.features = ["feat1", "feat2"]
         
         # Initialize AssetEngine with mocked components
-        with unittest.mock.patch('paper_trading.asset_engine.get_config', return_value=mock_config):
-            with unittest.mock.patch('paper_trading.asset_engine.ImportanceStore'):
-                with unittest.mock.patch('paper_trading.asset_engine.PSIMonitor'):
-                    with unittest.mock.patch('paper_trading.asset_engine.RegimeClassifier'):
-                        with unittest.mock.patch('paper_trading.asset_engine.build_dynamic_sltp_from_config'):
-                            with unittest.mock.patch('paper_trading.asset_engine.build_scale_out_from_config'):
-                                self.asset = AssetEngine(
-                                    ticker=self.ticker,
-                                    name=self.name,
-                                    contract=mock_contract,
-                                    allocation=0.1,
-                                    config={},
-                                    state_store=mock_store,
-                                    initial_capital=self.initial_capital
-                                )
+        from paper_trading.execution_context import ExecutionContext
+        ctx = ExecutionContext(state_store=mock_store, engine_config=mock_config)
+        with unittest.mock.patch('paper_trading.asset_engine.ImportanceStore'):
+            with unittest.mock.patch('paper_trading.asset_engine.PSIMonitor'):
+                with unittest.mock.patch('paper_trading.asset_engine.RegimeClassifier'):
+                    with unittest.mock.patch('paper_trading.asset_engine.build_dynamic_sltp_from_config'):
+                        with unittest.mock.patch('paper_trading.asset_engine.build_scale_out_from_config'):
+                            self.asset = AssetEngine(
+                                ticker=self.ticker,
+                                name=self.name,
+                                contract=mock_contract,
+                                allocation=0.1,
+                                config={},
+                                initial_capital=self.initial_capital,
+                                context=ctx,
+                            )
         self.asset.peak_value = self.initial_capital
         self.asset.current_value = self.initial_capital
 

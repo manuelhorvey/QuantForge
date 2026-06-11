@@ -49,7 +49,6 @@ class AssetEngine:
         halt_config=None,
         config=None,
         expected_prob_conf=0.45,
-        state_store=None,
         journal_path=None,
         sl_mult=1.0,
         tp_mult=2.5,
@@ -58,16 +57,17 @@ class AssetEngine:
         initial_capital=None,
         position_size=None,
         retrain_window=None,
-        execution_bridge=None,
-        market_data_service=None,
-        engine_config=None,
+        context=None,
     ):
+        from paper_trading.execution_context import ExecutionContext
+
+        ctx = context or ExecutionContext()
+        engine_cfg = ctx.get_engine_config()
         self.ticker = ticker
         self.name = name
         self.contract = contract
         self.features = list(contract.features)
         self.allocation = allocation
-        engine_cfg = engine_config or get_config()
         self._engine_cfg = engine_cfg
         self.initial_capital = initial_capital if initial_capital is not None else engine_cfg.capital * allocation
         self.capital_base = self.initial_capital
@@ -106,18 +106,15 @@ class AssetEngine:
         self.tp_mult = tp_mult
         self.max_depth = max_depth
         self.regime_geometry = regime_geometry or {}
-        self.execution_bridge = execution_bridge
+        self.execution_bridge = ctx.get_execution_bridge()
         self._research_mode = engine_cfg.research_mode
         self._last_macro_dir: int | None = None
         self._last_blend_dir: int | None = None
         self._entry_signal_dir: int = 0
         self._retrain_window = retrain_window if retrain_window is not None else engine_cfg.retrain_window
-        if state_store is not None:
-            self.state_store = state_store
-        elif journal_path is _SKIP_JOURNAL:
+        self.state_store = ctx.get_state_store()
+        if journal_path is _SKIP_JOURNAL:
             self.state_store = None
-        else:
-            self.state_store = _STORE
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self._importance_store = ImportanceStore(base_dir)
         self._psi_monitor = PSIMonitor(base_dir)
@@ -194,7 +191,7 @@ class AssetEngine:
             model=self.model,
             shadow_sltp=self._shadow_sltp,
         )
-        self._market_data = market_data_service or get_market_data_service()
+        self._market_data = ctx.get_market_data_service()
         from features.archetypes import ArchetypeClassifier
 
         self._archetype_classifier = ArchetypeClassifier()

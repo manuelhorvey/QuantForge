@@ -20,13 +20,11 @@ from monitoring.validity_state_machine import ValidityStateMachine as _ValidityS
 from paper_trading.asset_engine import AssetEngine
 from paper_trading.asset_pnl_controller import AssetPnlController
 from paper_trading.attribution.collector import AttributionCollector
-from paper_trading.config_manager import get_config
 from paper_trading.entry.optimizer import EntryOptimizer
 from paper_trading.entry.policy import ExecutionPolicyLayer
 from paper_trading.governance.asset import AssetGovernance
 from paper_trading.inference.pipeline import AssetInferencePipeline
 from paper_trading.inference.training import AssetTrainingPipeline
-from paper_trading.ops.market_data_service import get_market_data_service
 from paper_trading.position.dynamic_sltp import DynamicSLTPEngine, build_dynamic_sltp_from_config
 from paper_trading.position.manager import PositionManager
 from paper_trading.position.scale_out import build_scale_out_from_config
@@ -34,14 +32,12 @@ from paper_trading.services.attribution_service import AttributionService
 from paper_trading.services.entry_service import EntryService
 from paper_trading.services.position_service import PositionService
 from paper_trading.shadow.engine import ShadowSLTPEngine
-from paper_trading.state_store import _SKIP_JOURNAL, StateStore
 from shared.registry import StrategyRegistry
 
 logger = logging.getLogger("quantforge.asset_engine_factory")
 
 ET = pytz.timezone("US/Eastern")
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_STORE = StateStore(BASE)
 
 
 def build_asset_engine(
@@ -52,7 +48,6 @@ def build_asset_engine(
     halt_config: dict | None = None,
     config: dict | None = None,
     expected_prob_conf: float = 0.45,
-    state_store: StateStore | None = None,
     journal_path: str | None = None,
     sl_mult: float = 1.0,
     tp_mult: float = 2.5,
@@ -61,11 +56,12 @@ def build_asset_engine(
     initial_capital: float | None = None,
     position_size: float | None = None,
     retrain_window: int | None = None,
-    execution_bridge=None,
-    market_data_service=None,
-    engine_config=None,
+    context=None,
 ) -> AssetEngine:
-    engine_cfg = engine_config or get_config()
+    from paper_trading.execution_context import ExecutionContext
+
+    ctx = context or ExecutionContext()
+    engine_cfg = ctx.get_engine_config()
     resolved_initial_cap = initial_capital if initial_capital is not None else engine_cfg.capital * allocation
 
     engine = AssetEngine(
@@ -76,7 +72,6 @@ def build_asset_engine(
         halt_config=halt_config,
         config=config,
         expected_prob_conf=expected_prob_conf,
-        state_store=state_store,
         journal_path=journal_path,
         sl_mult=sl_mult,
         tp_mult=tp_mult,
@@ -85,9 +80,7 @@ def build_asset_engine(
         initial_capital=resolved_initial_cap,
         position_size=position_size,
         retrain_window=retrain_window,
-        execution_bridge=execution_bridge,
-        market_data_service=market_data_service,
-        engine_config=engine_cfg,
+        context=ctx,
     )
 
     # ── Post-init wiring (moved from __init__) ──────────────────────────
@@ -136,8 +129,6 @@ def build_asset_engine(
         model=engine.model,
         shadow_sltp=engine._shadow_sltp,
     )
-    engine._market_data = market_data_service or get_market_data_service()
-
     # Inference & training pipelines
     engine._training = AssetTrainingPipeline(engine)
     engine._pnl = AssetPnlController(engine)
