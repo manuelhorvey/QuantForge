@@ -147,14 +147,14 @@ class EngineOrchestrator:
 
         # ── Drawdown circuit breaker ──────────────────────────────────────
         total_value = sum(
-            actor._engine.current_value for actor in self._actors.values()
-            if hasattr(actor._engine, "current_value")
+            actor._engine.current_value for actor in self._actors.values() if hasattr(actor._engine, "current_value")
         )
         if self._peak_portfolio_value is None:
             self._peak_portfolio_value = total_value
         self._peak_portfolio_value = max(self._peak_portfolio_value, total_value)
         dd_result = check_drawdown_circuit_breaker(
-            total_value, self._peak_portfolio_value,
+            total_value,
+            self._peak_portfolio_value,
             drawdown_limit=-0.15,
         )
         results["drawdown"] = dd_result

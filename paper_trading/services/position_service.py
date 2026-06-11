@@ -212,8 +212,15 @@ class PositionService:
         return mutations
 
     def record_stop_out(
-        self, side: str, exit_price: float, *, pos_mgr, regime_adjusted_entry, entry_price,
-        churn_ratio_threshold, cycle_counter,
+        self,
+        side: str,
+        exit_price: float,
+        *,
+        pos_mgr,
+        regime_adjusted_entry,
+        entry_price,
+        churn_ratio_threshold,
+        cycle_counter,
     ):
         sl_price = None
         if pos_mgr.position is not None:
@@ -234,8 +241,9 @@ class PositionService:
             "_last_cooldown_update_cycle": cycle_counter,
         }
 
-    def cooldown_penalty(self, side: str, *, last_stop_out_side, cooldown_score,
-                          last_cooldown_update_cycle, config, cycle_counter) -> float:
+    def cooldown_penalty(
+        self, side: str, *, last_stop_out_side, cooldown_score, last_cooldown_update_cycle, config, cycle_counter
+    ) -> float:
         if last_stop_out_side != side:
             return 0.0
         if not cooldown_score or cooldown_score <= 0:

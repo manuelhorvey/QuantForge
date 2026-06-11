@@ -195,7 +195,11 @@ class EntryService:
         if rr < min_rr:
             logger.warning(
                 "%s: RR=%.2f < min=%.2f, aborting entry (sl_dist=%.6f tp=%.6f)",
-                asset.name, rr, min_rr, sl_dist, final_tp,
+                asset.name,
+                rr,
+                min_rr,
+                sl_dist,
+                final_tp,
             )
             return
 
@@ -268,12 +272,16 @@ class EntryService:
                     if abs(mt5_sl - stored_sl) / max(abs(stored_sl), 1e-9) > 0.001:
                         logger.error(
                             "%s: BROKER SL MISMATCH submitted=%.5f stored=%.5f",
-                            asset.name, mt5_sl, stored_sl,
+                            asset.name,
+                            mt5_sl,
+                            stored_sl,
                         )
                     if abs(mt5_tp - stored_tp) / max(abs(stored_tp), 1e-9) > 0.001:
                         logger.error(
                             "%s: BROKER TP MISMATCH submitted=%.5f stored=%.5f",
-                            asset.name, mt5_tp, stored_tp,
+                            asset.name,
+                            mt5_tp,
+                            stored_tp,
                         )
             else:
                 fill_price, entry_slippage_bps, _ = asset.execution_bridge.fill_price(
