@@ -230,9 +230,6 @@ export default function EquityChart() {
             )}
           </AreaChart>
         </ResponsiveContainer>
-        <div className="absolute inset-0 pointer-events-none select-none flex items-center justify-center overflow-hidden">
-          <span className="text-muted/[0.04] text-4xl font-bold font-mono tracking-widest">PAPER TRADING</span>
-        </div>
       </div>
     </ChartContainer>
   )

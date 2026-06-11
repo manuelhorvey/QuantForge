@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useTrades } from '../hooks/useTrades'
 import { formatAssetPrice, formatHeldDuration, safeToFixed } from '../utils/format'
 import DataTable, { type ColumnDef } from './ui/DataTable'
@@ -10,6 +10,7 @@ import { TableSkeleton } from './ui/Skeleton'
 import { usePortfolioState } from '../hooks/usePortfolioState'
 import Badge, { reasonToBadge, signalToBadge } from './ui/Badge'
 import type { TradeEntry } from '../hooks/useTrades'
+import TradeInspectorModal from './trades/TradeInspectorModal'
 
 const PAGE_SIZE = 10
 
@@ -23,6 +24,8 @@ function reasonLabel(reason?: string): string {
 
 export default function TradeFeed() {
   const [page, setPage] = useState(0)
+  const [selectedTrade, setSelectedTrade] = useState<TradeEntry | null>(null)
+  const handleRowClick = useCallback((trade: TradeEntry) => setSelectedTrade(trade), [])
   const offset = page * PAGE_SIZE
   const { data: trades, isPending } = useTrades(PAGE_SIZE + 1, offset)
   const { data: portfolio } = usePortfolioState()
@@ -151,6 +154,25 @@ export default function TradeFeed() {
         defaultSortDir="desc"
         storageKey="trades"
       />
+      <DataTable
+        columns={columns}
+        data={rows}
+        keyExtractor={t => `${t.asset}_${t.exit_date}_${t.entry_date}_${t.entry}_${t.exit}`}
+        compact
+        sortable
+        defaultSortKey="exit_date"
+        defaultSortDir="desc"
+        storageKey="trades"
+        onRowClick={handleRowClick}
+      />
+      {selectedTrade && (
+        <TradeInspectorModal
+          asset={selectedTrade.asset}
+          entryDate={selectedTrade.entry_date}
+          exitDate={selectedTrade.exit_date}
+          onClose={() => setSelectedTrade(null)}
+        />
+      )}
     </Panel>
   )
 }

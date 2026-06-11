@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react'
-import { RefreshCw, TrendingUp } from 'lucide-react'
+import { Menu, RefreshCw, TrendingUp } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { usePortfolioState } from '../hooks/usePortfolioState'
 import ThemeToggle from './ui/ThemeToggle'
 
-export default function Header() {
+interface HeaderProps {
+  onMenuClick?: () => void
+}
+
+export default function Header({ onMenuClick }: HeaderProps) {
   const { isError } = usePortfolioState()
   const queryClient = useQueryClient()
   const [refreshing, setRefreshing] = useState(false)
@@ -30,12 +34,20 @@ export default function Header() {
     >
       <div className="max-w-[90rem] mx-auto px-4 sm:px-7 py-2.5 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onMenuClick}
+            className="p-1.5 rounded-md border border-default hover:border-strong hover:bg-panel transition-colors lg:hidden active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-emerald/50"
+            title="Toggle navigation"
+            aria-label="Toggle navigation"
+          >
+            <Menu className="w-3.5 h-3.5 text-secondary" strokeWidth={2} />
+          </button>
           <div className="w-7 h-7 rounded-lg bg-accent-emerald/90 flex items-center justify-center shrink-0">
             <TrendingUp className="w-3.5 h-3.5 text-[#08090c]" strokeWidth={2.25} />
           </div>
           <div className="min-w-0">
             <h1 className="text-sm font-bold tracking-tight text-primary leading-none truncate">QuantForge</h1>
-            <p className="text-[11px] text-tertiary font-medium mt-0.5">Paper Trading</p>
           </div>
         </div>
 

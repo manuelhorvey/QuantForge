@@ -14,8 +14,11 @@ const LiveAttributionSchema = z.array(
 
 export type LiveAttributionRecord = z.infer<typeof LiveAttributionSchema.element>
 
-export const useLiveAttribution = createApiQuery<z.infer<typeof LiveAttributionSchema>>(
+const useLiveAttributionQuery = createApiQuery<z.infer<typeof LiveAttributionSchema>>(
   '/attribution/live.json',
   LiveAttributionSchema,
-  { refetchInterval: 60_000, staleTime: 50_000 },
 )
+
+export function useLiveAttribution() {
+  return useLiveAttributionQuery({ refetchInterval: 60_000, staleTime: 50_000 })
+}
