@@ -59,7 +59,13 @@ def compute_take_profit(
         tp_distance=round(tp_distance, 6),
         scale_out_tiers=tiers,
         convexity_score=convexity,
-        metadata={"archetype": archetype, "regime": reg_key, "reg_mult": reg_mult, "base_sl_dist": sl_distance, "tp_mult_override": tp_mult_override},
+        metadata={
+            "archetype": archetype,
+            "regime": reg_key,
+            "reg_mult": reg_mult,
+            "base_sl_dist": sl_distance,
+            "tp_mult_override": tp_mult_override,
+        },
     )
 
 

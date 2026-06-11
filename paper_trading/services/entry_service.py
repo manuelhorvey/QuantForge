@@ -427,7 +427,11 @@ class EntryService:
                     from paper_trading.entry.tp_compiler import compute_take_profit
 
                     tp_geo = compute_take_profit(
-                        float(df["close"].iloc[-1]), sl_dist, state, entry.decision.archetype, structure,
+                        float(df["close"].iloc[-1]),
+                        sl_dist,
+                        state,
+                        entry.decision.archetype,
+                        structure,
                         tp_mult_override=curr_tp_mult,
                     )
 

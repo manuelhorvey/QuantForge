@@ -541,7 +541,11 @@ class AssetEngine:
                             from paper_trading.entry.tp_compiler import compute_take_profit
 
                             tp_geo = compute_take_profit(
-                                decision.close_price, sl_dist, state, decision.archetype, structure,
+                                decision.close_price,
+                                sl_dist,
+                                state,
+                                decision.archetype,
+                                structure,
                                 tp_mult_override=curr_tp_mult,
                             )
 
