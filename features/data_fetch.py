@@ -184,20 +184,41 @@ def _fetch_single_series(ticker: str, name: str | None = None) -> pd.Series:
 
 
 def _fetch_fred_series(ticker: str) -> pd.Series:
-    """Fetch a single macro series from FRED as fallback when yfinance fails."""
-    import pandas_datareader.data as web
+    """Fetch a single macro series from FRED CSV endpoint (no API key required).
+
+    Uses stdlib urllib — no external dependency beyond pandas.
+    """
+    import csv
+    import io
+    import urllib.request
 
     series_id = _FRED_FALLBACK.get(ticker)
     if series_id is None:
         return pd.Series(dtype=float)
+    url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
     try:
-        data = web.DataReader(series_id, "fred", start="2020-01-01")
-        if data.empty:
+        with urllib.request.urlopen(url, timeout=15) as resp:
+            text = resp.read().decode("utf-8")
+        rows = list(csv.DictReader(io.StringIO(text)))
+        if not rows:
             return pd.Series(dtype=float)
-        s = data.iloc[:, 0].squeeze().copy()
+        cols = list(rows[0].keys())
+        date_col = "observation_date" if "observation_date" in cols else cols[0]
+        val_col = next((c for c in cols if c != date_col), None)
+        if val_col is None:
+            return pd.Series(dtype=float)
+        dates, values = [], []
+        for r in rows:
+            try:
+                v = float(r[val_col])
+            except (ValueError, KeyError):
+                continue
+            dates.append(r[date_col])
+            values.append(v)
+        s = pd.Series(values, index=pd.to_datetime(dates), dtype=float, name=ticker)
+        s = s.loc[s.index >= "2020-01-01"]
         s.index = _normalize_index(s.index)
-        s.name = ticker
-        logger.debug("FRED fallback succeeded for %s (%s)", ticker, series_id)
+        logger.debug("FRED fallback succeeded for %s (%s): %d rows", ticker, series_id, len(s))
         return s
     except Exception as exc:
         logger.debug("FRED fallback failed for %s (%s): %s", ticker, series_id, exc)
