@@ -127,7 +127,15 @@ class AssetInferencePipeline:
             if not cot_data.empty:
                 cot_data = cot_data.iloc[-_trunc_rows:]
 
-        alpha_df = build_alpha_features(hist_prices, rate_diffs, dxy=dxy, vix=vix, spx=spx, commodities=commodities, cot_data=cot_data)
+        alpha_df = build_alpha_features(
+            hist_prices,
+            rate_diffs,
+            dxy=dxy,
+            vix=vix,
+            spx=spx,
+            commodities=commodities,
+            cot_data=cot_data,
+        )
         alpha_idx = alpha_df.index
 
         ohlcv = fetch_asset_ohlcv(asset.ticker)

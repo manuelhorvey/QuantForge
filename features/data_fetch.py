@@ -317,8 +317,8 @@ def fetch_asset_data(
         # zero.  Fall back to the next shorter tenor for the base currency
         # to preserve a non-zero differential.
         if base_ticker == quote_ticker:
-            _FALLBACK_TENOR = {"^TYX": "^TNX", "^TNX": "^FVX", "^FVX": "^IRX"}
-            alt = _FALLBACK_TENOR.get(base_ticker)
+            _fallback_tenor = {"^TYX": "^TNX", "^TNX": "^FVX", "^FVX": "^IRX"}
+            alt = _fallback_tenor.get(base_ticker)
             if alt is not None and alt in macro:
                 base_ticker = alt
         base_yield = macro.get(base_ticker, tnx).reindex(common).ffill()

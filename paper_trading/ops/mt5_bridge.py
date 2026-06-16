@@ -202,7 +202,7 @@ def _handle_place_order(params: dict) -> dict:
     deviation = params.get("deviation", 20)
 
     order_type = mt5.ORDER_TYPE_BUY if side == "buy" else mt5.ORDER_TYPE_SELL
-    
+
     tick = mt5.symbol_info_tick(symbol)
     if tick is None:
         for _ in range(10):
@@ -332,7 +332,7 @@ def _handle_close_position(params: dict) -> dict:
 
     pos = positions[0]
     close_type = mt5.ORDER_TYPE_SELL if pos.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY
-    
+
     tick = mt5.symbol_info_tick(pos.symbol)
     if tick is None:
         for _ in range(10):

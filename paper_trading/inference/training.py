@@ -134,8 +134,10 @@ class AssetTrainingPipeline:
             stratify=strat,
         )
 
-        imbalance_ratio = (y_tr == 0).sum() / max((y_tr == 1).sum(), 1)
-        logger.info("%s: binary labels: 0=%d 1=%d imbalance_ratio=%.2f", asset.name, (y_tr == 0).sum(), (y_tr == 1).sum(), imbalance_ratio)
+        n0 = (y_tr == 0).sum()
+        n1 = (y_tr == 1).sum()
+        imbalance_ratio = n0 / max(n1, 1)
+        logger.info("%s: binary labels: 0=%d 1=%d imbalance_ratio=%.2f", asset.name, n0, n1, imbalance_ratio)
 
         depth = getattr(asset, "max_depth", 2)
         model = xgb.XGBClassifier(
