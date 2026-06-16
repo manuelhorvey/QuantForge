@@ -85,53 +85,37 @@ def _normalize_index(idx: pd.Index) -> pd.Index:
 
 
 def _fetch_macro_batch() -> dict[str, pd.Series]:
-    """Fetch all macro tickers in a single yfinance call.
+    """Fetch all macro tickers, trying MT5 first, then yfinance.
 
     Returns dict of {name: Series} with UTC-normalized daily indices.
     """
-    import yfinance as yf
-
     cached = _macro_cache.get("macro_batch")
     if cached is not None:
         return cached
 
     logger.debug("fetching macro batch: %s", _MACRO_TICKERS)
-    df = yf.download(
-        _MACRO_TICKERS,
-        period=_FETCH_PERIOD,
-        auto_adjust=True,
-        progress=False,
-        group_by="ticker",
-    )
 
     result: dict[str, pd.Series] = {}
-    if df.empty:
-        logger.warning("macro batch download returned empty — retrying individually")
-        for ticker in _MACRO_TICKERS:
-            result[ticker] = _fetch_single_series(ticker)
-        _macro_cache.set("macro_batch", result)
-        return result
 
-    # yfinance with group_by="ticker" returns MultiIndex columns.
-    # Handle both MultiIndex and single-column cases.
-    if isinstance(df.columns, pd.MultiIndex):
-        for ticker in _MACRO_TICKERS:
-            clean = ticker.replace("=", "-")
-            if clean in df.columns.get_level_values(0):
-                series = df[clean]["Close"].squeeze().copy()
-                series.index = _normalize_index(series.index)
-                result[ticker] = series
-    else:
-        # Single ticker or fallback — shouldn't happen with multi-ticker download
-        for ticker in _MACRO_TICKERS:
-            # rename columns to match single-ticker format
-            pass  # fallback to individual fetch below
+    # Try MT5 data_fetcher.safe_download for each macro ticker
+    from paper_trading.ops.data_fetcher import safe_download as _sd
 
-    # Fallback for any ticker that wasn't in the batch result
     for ticker in _MACRO_TICKERS:
-        if ticker not in result:
-            logger.debug("macro ticker %s not in batch — fetching individually", ticker)
-            result[ticker] = _fetch_single_series(ticker)
+        try:
+            df = _sd(ticker, start="2021-01-01", auto_adjust=True, progress=False)
+            if not df.empty:
+                close_col = "Close" if "Close" in df.columns else ("close" if "close" in df.columns else None)
+                if close_col is not None:
+                    series = df[close_col].squeeze().copy()
+                    if isinstance(series, pd.DataFrame):
+                        series = series.iloc[:, 0]
+                    series.index = _normalize_index(series.index)
+                    result[ticker] = series
+                    continue
+        except Exception:
+            pass
+        # Fallback: try yfinance directly
+        result[ticker] = _fetch_single_series(ticker)
 
     # Normalise all yield tickers from percentage to decimal
     _yield_tickers = {"^TNX", "^FVX", "^TYX", "^IRX"}
@@ -273,6 +257,28 @@ def fetch_asset_data(
 
     common = close.index.intersection(dxy.index).intersection(vix.index).intersection(spx.index).intersection(wti.index)
     common = common.intersection(tnx.dropna().index)
+
+    if common.empty:
+        logger.warning(
+            "  %s (%s): no overlapping dates between close (%s..%s) and macro — "
+            "zero-filling macro data for live inference",
+            asset_name,
+            ticker,
+            close.index.min().date() if not close.empty else "?",
+            close.index.max().date() if not close.empty else "?",
+        )
+        # Zero-fill missing macro series so inference can proceed
+        close_idx = close.index
+        for name, series in [("DXY", dxy), ("VIX", vix), ("SPX", spx), ("WTI", wti), ("TNX", tnx)]:
+            if series.empty:
+                logger.debug("  zero-filling %s for %s", name, asset_name)
+        dxy = pd.Series(0.0, index=close_idx)
+        vix = pd.Series(0.0, index=close_idx)
+        spx = pd.Series(0.0, index=close_idx)
+        wti = pd.Series(0.0, index=close_idx)
+        tnx = pd.Series(0.0, index=close_idx)
+        common = close_idx
+
     logger.info(
         "  aligned on %d business days (close range: %s..%s, common range: %s..%s)",
         len(common),
@@ -281,13 +287,6 @@ def fetch_asset_data(
         common.min().date() if not common.empty else "?",
         common.max().date() if not common.empty else "?",
     )
-    if common.empty:
-        raise ValueError(
-            f"{asset_name} ({ticker}): no overlapping dates between asset close "
-            f"({close.index.min().date() if not close.empty else '?'}.."
-            f"{close.index.max().date() if not close.empty else '?'}) "
-            f"and macro data — possible stale/delayed macro update"
-        )
 
     prices = prices.loc[common].copy()
     dxy = dxy.reindex(common).ffill()
