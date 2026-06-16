@@ -13,7 +13,7 @@ Operational procedures for the paper trading system. This document is for the pe
 | Config file | `configs/paper_trading.yaml` |
 | State file (JSON) | `data/live/state.json` |
 | State store (SQLite) | `data/live/state.db` (5 tables: trades, attribution, shadow_trades, confidence_buckets, equity_history) |
-| Model files | `paper_trading/models/*.json` |
+| Model files | `paper_trading/models/*.json` (base), `models/regime/*.json` (regime) |
 | Logs | stdout (redirect to file as needed) |
 | Refresh interval | 300s / 5 min (configurable via `QUANTFORGE_REFRESH_INTERVAL` env var) |
 | Weekend behavior | Auto-pauses Fri 17:00 ET — Sun 17:00 ET; no signal computation occurs |
@@ -32,10 +32,10 @@ Operational procedures for the paper trading system. This document is for the pe
 Each asset uses risk-parity allocation with per-asset sl_mult, tp_mult, and max_depth calibrated via walk-forward optimization.
 
 | Asset | Ticker | Allocation | sl_mult | tp_mult | max_depth |
-|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|
 | GC | GC=F | 7.0% | 1.00 | 4.00 | 2 |
 | USDCHF | USDCHF=X | 4.0% | 0.85 | 3.00 | 4 |
-| AUDCHF | AUDCHF=X | 5.0% | 2.75 | 3.50 | 2 |
+| AUDCHF | AUDCHF=X | 5.0% | 2.75 | 3.50 | 3 |
 | USDCAD | USDCAD=X | 5.0% | 2.50 | 2.03 | 5 |
 | ES | ES=F | 7.0% | 2.00 | 5.50 | 2 |
 | NQ | NQ=F | 7.0% | 2.50 | 5.00 | 2 |
@@ -43,13 +43,13 @@ Each asset uses risk-parity allocation with per-asset sl_mult, tp_mult, and max_
 | GBPNZD | GBPNZD=X | 5.0% | 3.00 | 1.00 | 3 |
 | NZDCAD | NZDCAD=X | 5.0% | 2.50 | 4.00 | 2 |
 | ^DJI | ^DJI | 4.0% | 0.50 | 4.00 | 4 |
-| EURUSD | EURUSD=X | 4.0% | 3.00 | 1.50 | 3 |
+| EURUSD | EURUSD=X | 4.0% | 3.00 | 1.50 | 4 |
 | NZDUSD | NZDUSD=X | 5.0% | 2.50 | 1.50 | 5 |
-| GBPAUD | GBPAUD=X | 5.0% | 1.00 | 2.00 | 2 |
+| GBPAUD | GBPAUD=X | 5.0% | 1.00 | 2.00 | 3 |
 | NZDCHF | NZDCHF=X | 7.0% | 1.00 | 4.00 | 2 |
 | CADCHF | CADCHF=X | 5.0% | 1.00 | 4.00 | 2 |
 | AUDUSD | AUDUSD=X | 4.0% | 1.50 | 4.00 | 2 |
-| AUDNZD | AUDNZD=X | 3.0% | 2.00 | 1.00 | 2 |
+| AUDNZD | AUDNZD=X | 3.0% | 2.00 | 1.00 | 3 |
 | EURCHF | EURCHF=X | 5.0% | 1.00 | 3.00 | 4 |
 | EURCAD | EURCAD=X | 2.0% | 1.00 | 1.00 | 3 |
 | EURNZD | EURNZD=X | 3.0% | 1.50 | 2.50 | 3 |
@@ -57,7 +57,9 @@ Each asset uses risk-parity allocation with per-asset sl_mult, tp_mult, and max_
 
 **Total allocation: ~1.00.**
 
-**Backtest performance (5-year: 2021–2025):** PF 1.908, avgR +0.268, 2383 trades, 21 assets.
+**Backtest performance (pre-leak-fix baseline, 5-year: 2021–2025):** PF 1.908, avgR +0.268, 2383 trades, 21 assets.
+> Note: These are the screening baseline. Current walk-forward diagnostics after look-ahead fixes
+> show lower, honest metrics. Live performance will differ.
 
 **SL/TP Architecture:** Barriers are computed by `DynamicSLTPEngine` using `shared/volatility.py:VolatilityPrimitive` with `method="atr"`. At entry, initial barriers are set. On each refresh within the first `post_adjust_interval_bars` (default 3), `post_entry_adjust()` recomputes barriers based on current ATR — vol spikes (>1.3×) tighten SL; vol collapses (<0.7×) no action. Model-validity adjustments via per-asset `regime_geometry` in `configs/paper_trading.yaml` — each asset defines its own GREEN/YELLOW/RED multipliers for sl_mult and tp_mult.
 
@@ -159,6 +161,13 @@ The script:
 6. Opens/closes positions based on signal vs current position
 7. Serves dashboard on port 5000
 8. Repeats every refresh interval (default 300s, configurable via `QUANTFORGE_REFRESH_INTERVAL` env var)
+
+**Signal logging:** The `scripts/monitor_paper_trading.py` script polls the dashboard every 6 hours
+and appends a CSV row to `data/monitoring/paper_trade_monitor.csv`. Use it for daily signal checks:
+
+```bash
+python scripts/monitor_paper_trading.py
+```
 
 **Weekend / after-hours:** The engine auto-detects market closure (Fri after 17:00 ET, all day Sat/Sun). Refresh cycles are skipped — no yfinance data pulls, no signal generation, no SL/TP checks. The dashboard stays live showing the last pre-close state with a yellow **CLSD** badge. Normal operation resumes at the next scheduled refresh after Sun 17:00 ET.
 
@@ -736,6 +745,42 @@ Project Root/
 └── monitor_all                   # Entry point script
 ```
 
+## 7. Go-Live Checklist (Paper Trading → Live)
+
+Before transitioning from paper to live, verify all checks below. 6/7 must pass for go-live.
+
+| # | Check | Target | Source | Criticality |
+|---|-------|--------|--------|-------------|
+| 1 | Gate override rate | <40% across all assets | `data/monitoring/paper_trade_monitor.csv` — column `gate_overrides` | Hard |
+| 2 | Mean confidence | >0.52 for ≥18/21 assets | Monitor CSV — column `mean_confidence` per snapshot | Hard |
+| 3 | Signal flips | ≤3/day for ≥18/21 assets | Monitor CSV — column `signal_flips` | Hard |
+| 4 | Cross-asset correlation | No unexplained >0.7 | `python scripts/signal_correlation_check.py` | Hard |
+| 5 | MT5 errors | Zero across all cycles | `grep ERROR /tmp/paper_trading.log` | Hard |
+| 6 | Trades executed | ≥10 across portfolio | MT5 terminal or dashboard trades panel | Hard |
+| 7 | GBPNZD DXY fix | Option A/B/C decided | Your call by June 20 | Decision |
+
+**Decision:** 6/7 pass → go live at 50% position size for 2 weeks, then full size if live Sharpe tracks within 0.2 of backtest Sharpe.
+
+**Audit commands:**
+```bash
+# 1. Gate override rate
+python -c "import csv; from collections import Counter; r=csv.DictReader(open('data/monitoring/paper_trade_monitor.csv')); rates=[int(row['gate_overrides'])/int(row['n_assets']) for row in r if row.get('gate_overrides')]; print(f'Mean: {sum(rates)/len(rates):.1%}  Max: {max(rates):.1%}')"
+
+# 2. Mean confidence across days
+python -c "import csv; r=csv.DictReader(open('data/monitoring/paper_trade_monitor.csv')); [print(f'{row[\"timestamp\"][:10]}: {row[\"mean_confidence\"]}') for row in r]"
+
+# 3. Signal flips per day
+python -c "import csv; r=csv.DictReader(open('data/monitoring/paper_trade_monitor.csv')); [print(f'{row[\"timestamp\"][:10]}: {row[\"signal_flips\"]}') for row in r]"
+
+# 4. MT5 errors
+grep -c 'ERROR' /tmp/paper_trading.log
+
+# 5. Trades from dashboard
+curl -s http://127.0.0.1:5000/trades.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'Trades: {len(d)}')"
+```
+
+---
+
 ## Appendix: Troubleshooting
 
 | Symptom | Likely Cause | Check |
@@ -746,6 +791,8 @@ Project Root/
 | All assets showing FLAT with low conf | Macro data stale | Check `data/live/cache/` modification dates |
 | Portfolio value not changing | Process not running | `ps aux | grep monitor.py` |
 | BTC drawdown > 15% | Normal for BTC (limit is -15%) | Let it run unless RED state persists > 5 days |
+| GBPNZD showing stale prices or DXY missing | `DX-Y.NYB` not available on some MT5 brokers | Zero-fill DXY features or exclude from go-live |
+| AUDNZD flipping excessively or low confidence | Ensemble may be degrading signal (IC -0.020 in pilot) | Monitor flip count; disable ensemble per-asset if >3 flips/day |
 | JPY cross entering RED state | VIX spike or yield spread inversion | Check VIX level and US-JP 10y spread |
 | GC=F showing flat/neutral bias | Real yields not updating on weekends | Normal — gold macro features are daily |
 | Dashboard shows CLSD / "weekend — no refresh" | Normal — market is closed | Engine resumes automatically Sun 17:00 ET |

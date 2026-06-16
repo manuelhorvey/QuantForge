@@ -63,7 +63,7 @@ State Persistence + Replay
 | ---------- | ------------ | ------- | ------- | ---------- | --------- |
 | GC         | GC=F         | 1.00    | 4.00    | 7.0%       | 2         |
 | USDCHF     | USDCHF=X     | 0.85    | 3.00    | 4.0%       | 4         |
-| AUDCHF     | AUDCHF=X     | 2.75    | 3.50    | 5.0%       | 2         |
+| AUDCHF     | AUDCHF=X     | 2.75    | 3.50    | 5.0%       | 3         |
 | USDCAD     | USDCAD=X     | 2.50    | 2.03    | 5.0%       | 5         |
 | ES         | ES=F         | 2.00    | 5.50    | 7.0%       | 2         |
 | NQ         | NQ=F         | 2.50    | 5.00    | 7.0%       | 2         |
@@ -71,13 +71,13 @@ State Persistence + Replay
 | GBPNZD     | GBPNZD=X     | 3.00    | 1.00    | 5.0%       | 3         |
 | NZDCAD     | NZDCAD=X     | 2.50    | 4.00    | 5.0%       | 2         |
 | ^DJI       | ^DJI         | 0.50    | 4.00    | 4.0%       | 4         |
-| EURUSD     | EURUSD=X     | 3.00    | 1.50    | 4.0%       | 3         |
+| EURUSD     | EURUSD=X     | 3.00    | 1.50    | 4.0%       | 4         |
 | NZDUSD     | NZDUSD=X     | 2.50    | 1.50    | 5.0%       | 5         |
-| GBPAUD     | GBPAUD=X     | 1.00    | 2.00    | 5.0%       | 2         |
+| GBPAUD     | GBPAUD=X     | 1.00    | 2.00    | 5.0%       | 3         |
 | NZDCHF     | NZDCHF=X     | 1.00    | 4.00    | 7.0%       | 2         |
 | CADCHF     | CADCHF=X     | 1.00    | 4.00    | 5.0%       | 2         |
 | AUDUSD     | AUDUSD=X     | 1.50    | 4.00    | 4.0%       | 2         |
-| AUDNZD     | AUDNZD=X     | 2.00    | 1.00    | 3.0%       | 2         |
+| AUDNZD     | AUDNZD=X     | 2.00    | 1.00    | 3.0%       | 3         |
 | EURCHF     | EURCHF=X     | 1.00    | 3.00    | 5.0%       | 4         |
 | EURCAD     | EURCAD=X     | 1.00    | 1.00    | 2.0%       | 3         |
 | EURNZD     | EURNZD=X     | 1.50    | 2.50    | 3.0%       | 3         |
@@ -85,7 +85,11 @@ State Persistence + Replay
 
 Allocation sums to ~1.00. Daily risk-parity rebalancing redistributes capital proportionally.
 
-### Backtest Performance (5-Year 2021–2025, 21-asset portfolio)
+### Backtest Performance (pre-leak-fix baseline — 5-Year 2021–2025, 21-asset portfolio)
+
+> Metrics from the original screening (before look-ahead leak fixes). Current walk-forward
+> diagnostics (post-fix) show lower, honest metrics. These numbers are preserved as the
+> baseline that justified promotion; live performance will differ.
 
 | Metric | Value |
 |--------|-------|
@@ -142,11 +146,28 @@ Each asset runs an independent XGBoost model with per-asset configuration.
 **Live inference**: `binary:logistic` — trained on {-1, 1} labels after dropping HOLD.
 
 ```text
-Objective: binary:logistic (live), multi:softprob (backtest)
-Trees:     300
-LR:        0.02
-Depth:     per-asset (2–5)
+Base model:    XGBClassifier (binary:logistic, 300 trees, LR=0.02, depth 2-5)
+Regime model:  XGBClassifier (binary:logistic, 200 trees, LR=0.03, depth=2)
+Ensemble:      60% base P(LONG) + 40% regime P(LONG)
 ```
+
+### Base Model
+Per-asset `binary:logistic` classifier trained on 13 alpha features (12 standard + 1 COT flag).
+Uses `scale_pos_weight` = imbalance ratio to correct the label skew.
+Saved to `paper_trading/models/{ASSET}_model.json`.
+
+### Regime-Conditional Model
+Second `binary:logistic` classifier trained on the same alpha features **plus** 7 regime
+features (hurst, kaufman_er, adx, vol_zscore, compression, utc_hour, session_vol_profile).
+Generates a separate P(LONG) conditioned on market regime context.
+Saved to `models/regime/{ASSET}_regime.json`.
+
+### Ensemble Blend
+At inference time the two P(LONG) values are blended:
+`P(LONG)_final = 0.6 × P(LONG)_base + 0.4 × P(LONG)_regime`
+
+The ensemble threshold (±0.075 around 0.5) determines the neutral band. P(LONG) > 0.575 →
+BUY, < 0.425 → SELL, else FLAT.
 
 No shared multi-asset model exists.
 
@@ -154,9 +175,12 @@ No shared multi-asset model exists.
 
 # Feature Engineering
 
-Built in `features/alpha_features.py:build_alpha_features()`.
+Three feature sets feed the inference pipeline: alpha, regime, and archetype.
 
-Every asset uses the same 12 alpha features (per-asset prefix):
+## Alpha Features
+
+Built in `features/alpha_features.py:build_alpha_features()`.
+13 features per asset (12 standard + 1 COT flag):
 
 | Feature | Description |
 |---------|-------------|
@@ -168,12 +192,30 @@ Every asset uses the same 12 alpha features (per-asset prefix):
 | `{ASSET}_zscore_20` | 20-day z-score |
 | `{ASSET}_vol_ratio` | Short/long-term vol ratio |
 | `{ASSET}_dow_signal` | Day-of-week encoding |
+| `{ASSET}_has_cot` | COT data availability flag (zero-filled for unlisted pairs) |
 | `dxy_mom_21d` | DXY 21-day return |
 | `vix_mom_5d` | VIX 5-day return |
 | `spx_mom_5d` | SPX 5-day return |
 | `WTI_mom_21d` | WTI crude 21-day return |
 
 Some assets additionally include `yield_slope` (GBPAUD, CADCHF, AUDNZD, EURNZD, GBPCHF) or `mom126` (EURCHF, NZDUSD).
+
+## Regime Features (inference + regime model training)
+
+Built in `features/regime_features.py:generate_regime_features()` from OHLCV.
+7 features prefixed with `{ASSET}_`:
+
+| Feature | Description |
+|---------|-------------|
+| `hurst` | Hurst exponent — trending (H>0.5) vs mean-reverting (H<0.5) |
+| `kaufman_er` | Kaufman efficiency ratio |
+| `adx` | ADX(14) — trend strength |
+| `vol_zscore` | Volatility shock detection (vol_10 / vol_21) |
+| `compression` | Vol compression ratio (ATR_5 / ATR_20) |
+| `utc_hour` | UTC hour of bar timestamp |
+| `session_vol_profile` | Hourly vol relative to 20-day norm |
+
+Used by the regime-conditional XGBoost model. The base model ignores these.
 
 ## Archetype Features (inference-only)
 
@@ -188,16 +230,19 @@ Derived from OHLCV for execution conditioning:
 1. Fetch live OHLCV (MT5 or yfinance, 5y window)
 2. Refresh latest price
 3. Fetch macro data
-4. Build alpha features (build_alpha_features, 12 cols)
-5. Build archetype features (ema_spread, adx, rsi, bb_zscore)
-6. Optional truncation validation (predict last row only)
-7. PSI drift check (rolling 21d vs baseline)
-8. XGBoost inference (binary:logistic → 3-col proba expansion)
-9. Optional meta-label inference
-10. FixedThresholdStrategy(0.45) → BUY/SELL/FLAT
-11. Archetype classification
-12. Route through 7 governance layers
-13. Execute or defer (MT5 bridge for real broker)
+4. Build alpha features (build_alpha_features, 13 cols)
+5. Build regime features from OHLCV (generate_regime_features, 7 cols)
+6. Build archetype features (ema_spread, adx, rsi, bb_zscore)
+7. Optional truncation validation (predict last row only)
+8. PSI drift check (rolling 21d vs baseline)
+9. Base XGBoost inference (binary:logistic → P(LONG)_base)
+10. Regime model inference (binary:logistic → P(LONG)_regime)
+11. Ensemble blend: 0.6 × P(LONG)_base + 0.4 × P(LONG)_regime
+12. Optional meta-label inference
+13. FixedThresholdStrategy(0.45) → BUY/SELL/FLAT
+14. Archetype classification
+15. Route through 7 governance layers
+16. Execute or defer (MT5 bridge for real broker)
 ```
 
 ---
@@ -370,7 +415,11 @@ Dashboard: [http://localhost:5000](http://localhost:5000)
 | `scripts/walk_forward_backtest.py`             | Multi-ticker validation         |
 | `scripts/score_tickers.py`                     | Asset scoring                   |
 | `scripts/generate_promotion_report.py`         | Portfolio report generation     |
-| `scripts/train_all_assets.py`                  | Full retraining                 |
+| `scripts/train_all_assets.py`                  | Full retraining (legacy)        |
+| `scripts/retrain_all_fixed.py`                 | Retrain with all pipeline fixes |
+| `scripts/train_regime_models.py`               | Train regime-conditional models |
+| `scripts/ensemble_pilot_backtest.py`           | 3-asset ensemble pilot backtest |
+| `scripts/monitor_paper_trading.py`             | Poll dashboard + CSV logging    |
 | `scripts/setup_mt5_wine.sh`                    | MT5 Wine environment setup      |
 | `benchmarks/microbenchmark.py`                 | Runtime benchmarking            |
 
@@ -411,6 +460,8 @@ paper_trading/
     config_manager.py         # YAML config loader
     serve.py                  # Dashboard server entry point
 scripts/                      # CLI tools
+models/
+    regime/                   # Per-asset regime-conditional models (gitignored)
 docs/                         # Documentation + ADRs
 shared/                       # Strategy registry, sizing, execution config
 labels/                       # Triple-barrier labeling, meta-labeling
@@ -434,6 +485,10 @@ tests/                        # Test suite
 * Macro data sourced entirely from Yahoo Finance
 * Dashboard requires `yarn build` after asset list changes
 * MT5 bridge is single-threaded — concurrent requests are serialized via RLock
+* **GBPNZD** fails on `DX-Y.NYB` (DXY) data availability for certain MT5 brokers —
+  trades without that macro feature; consider zero-fill or exclude from go-live
+* **AUDNZD ensemble** degraded signal quality in the pilot (IC -0.020);
+  candidate for per-asset ensemble disable if paper trading confirms weakness
 
 ---
 

@@ -23,7 +23,11 @@ Project documentation for the QuantForge cross-sectional factor ranking and pape
 | `python backtests/trade_analysis.py` | Walk-forward style backtest + per-asset optimization |
 | `python scripts/walk_forward_backtest.py` | Multi-ticker walk-forward validation |
 | `python scripts/score_tickers.py` | Asset scoring and promotion classification |
-| `python scripts/train_all_assets.py` | Full retraining of all asset models |
+| `python scripts/train_all_assets.py` | Full retraining (legacy) |
+| `python scripts/retrain_all_fixed.py` | Retrain with all pipeline fixes |
+| `python scripts/train_regime_models.py` | Train regime-conditional models |
+| `python scripts/ensemble_pilot_backtest.py` | 3-asset ensemble pilot backtest |
+| `python scripts/monitor_paper_trading.py` | Poll dashboard + CSV logging |
 
 ## Core Pipeline
 

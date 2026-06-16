@@ -17,9 +17,9 @@ random_state=42, n_jobs=1, tree_method='hist', verbosity=0
 **Per-asset max_depth:**
 | Depth | Assets |
 |-------|--------|
-| 2 | GC, AUDCHF, ES, NQ, GBPCAD, NZDCAD, GBPAUD, NZDCHF, CADCHF, AUDUSD, AUDNZD, GBPCHF |
-| 3 | GBPNZD, EURUSD, EURCAD, EURNZD |
-| 4 | USDCHF, ^DJI, EURCHF |
+| 2 | GC, ES, NQ, GBPCAD, NZDCAD, NZDCHF, CADCHF, AUDUSD, GBPCHF |
+| 3 | AUDCHF, GBPNZD, GBPAUD, AUDNZD, EURCAD, EURNZD |
+| 4 | USDCHF, ^DJI, EURUSD, EURCHF |
 | 5 | USDCAD, NZDUSD |
 
 **Signature:** `model.predict(X: pd.DataFrame) -> np.ndarray`
@@ -28,6 +28,25 @@ random_state=42, n_jobs=1, tree_method='hist', verbosity=0
 `paper_trading/inference/pipeline.py:_generate_and_apply()`
 **Serialization:** `model.save_model(path)` / `model.load_model(path)` — `.json` format
 **Path:** `paper_trading/models/{asset_name}_model.json`
+
+---
+
+### Regime-Conditional Model
+**Type:** `xgboost.XGBClassifier`
+**Objective:** `binary:logistic`
+**Architecture:** Binary classifier trained on alpha features + 7 regime features
+**Constructor:**
+```
+n_estimators=200, max_depth=2, learning_rate=0.03,
+random_state=42, n_jobs=1, tree_method='hist', verbosity=0
+```
+**Per-asset:** One per asset, stored at `models/regime/{asset_name}_regime.json`
+**Feature names:** Persisted in a sidecar `{asset_name}_regime_features.txt` file.
+
+### Ensemble
+**Weight:** `base_weight = 0.6` (regime weight = 0.4)
+**Threshold:** `0.15` — LONG when `P(LONG) > 0.575`, SHORT when `P(LONG) < 0.425`
+**Formula:** `P(LONG)_final = base_weight * P(LONG)_base + (1-base_weight) * P(LONG)_regime`
 
 ---
 
@@ -51,12 +70,13 @@ random_state=42, n_jobs=1, tree_method='hist', verbosity=0
 ## 3. FEATURE CONTRACT
 
 **Primary builder:** `features/alpha_features.py:build_alpha_features()`
+**Regime builder:** `features/regime_features.py:generate_regime_features()`
 **Per-asset contract:** Defined in `features/registry.py:FEATURE_REGISTRY` (36 tickers) — used for training custom features.
-**Input:** 12 standard alpha features per asset via `build_alpha_features()`, plus optional custom features.
+**Input:** 13 standard alpha features + 7 regime features per asset.
 
-### Per-asset features (all 21 dashboard assets use these 12 base features):
+### Alpha features (all 21 dashboard assets use these 13 base features):
 
-All assets receive the same 12 alpha features with per-asset prefix (`{ASSET}_`):
+All assets receive the same 13 alpha features with per-asset prefix (`{ASSET}_`):
 
 | Feature | Description |
 |---------|-------------|
@@ -68,6 +88,7 @@ All assets receive the same 12 alpha features with per-asset prefix (`{ASSET}_`)
 | `{ASSET}_zscore_20` | 20-day z-score vs SMA |
 | `{ASSET}_vol_ratio` | Short/long-term vol ratio |
 | `{ASSET}_dow_signal` | Day-of-week encoding |
+| `{ASSET}_has_cot` | COT data availability flag (zero-filled for pairs not in COT data) |
 | `dxy_mom_21d` | DXY 21-day return |
 | `vix_mom_5d` | VIX 5-day return |
 | `spx_mom_5d` | SPX 5-day return |
@@ -84,6 +105,24 @@ All assets receive the same 12 alpha features with per-asset prefix (`{ASSET}_`)
 | AUDNZD | `yield_slope` |
 | EURNZD | `yield_slope` |
 | GBPCHF | `yield_slope` |
+
+### Regime features (used by regime-conditional model, generated from OHLCV)
+
+Built in `features/regime_features.py:generate_regime_features()`.
+7 features per asset, prefixed with `{ASSET}_` when fed to the regime model:
+
+| Feature | Description |
+|---------|-------------|
+| `hurst` | Hurst exponent (window=21) — trending vs mean-reverting |
+| `kaufman_er` | Kaufman efficiency ratio (window=10) |
+| `adx` | ADX(14) — trend strength |
+| `vol_zscore` | Volatility shock detection (vol_10 / vol_21) |
+| `compression` | Vol compression ratio (ATR_5 / ATR_20) |
+| `utc_hour` | UTC hour of bar timestamp |
+| `session_vol_profile` | Hourly vol relative to 20-day norm |
+
+20 total features enter the regime model (13 alpha + 7 regime).
+The base model sees only the 13 alpha features.
 
 ### Archetype features (inference-only, from full-history OHLCV)
 
@@ -140,10 +179,21 @@ df.index = pd.to_datetime(df.index.tz_convert("UTC").date)
 
 **Pipeline:** `paper_trading/inference/training.py:AssetTrainingPipeline.train()`
 **Data window:** 5y history from yfinance (`_FETCH_PERIOD = "5y"`, `_FETCH_WARMUP_BUFFER = 1250`), train on last `retrain_window` years (default 5)
-**Feature builder:** `build_alpha_features()` — 12 alpha feature columns
+**Feature builder:** `build_alpha_features()` — 13 alpha feature columns
 **Minimum samples:** 100 binary labels; 2+ unique classes
 **Train/val split:** 80/20 chronological, stratified by label if minimum class count ≥ 2
 **Per-asset max_depth** from `yaml` config (default 2).
+**scale_pos_weight:** Set to `imbalance_ratio` (n_neg / n_pos) per asset.
+**Vertical barrier:** Configurable per-asset via `contract.label_params["vertical_barrier"]` (default 20).
+**Gap (embargo):** `max(gap, vertical_barrier)` — enforced to prevent leakage.
+
+#### Regime Model Training
+- Second XGBoost trained on alpha features + 7 regime features (generated from OHLCV via `fetch_asset_ohlcv()`)
+- 20 total features (13 alpha + 7 regime, all prefixed by asset name)
+- Saved to `models/regime/{ASSET}_regime.json`
+- Loaded at engine startup by `_train_regime_if_configured()`
+- Ensemble configured (60/20) only when regime model exists
+
 **Post-training:**
 - Persist PSI baseline from training feature distribution
 - Train optional meta-label model (XGBoost)
