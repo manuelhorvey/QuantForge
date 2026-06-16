@@ -97,59 +97,62 @@ def _normalize_index(idx: pd.Index) -> pd.Index:
 
 
 def _fetch_macro_batch() -> dict[str, pd.Series]:
-    """Fetch all macro tickers via yfinance (macro indices not on MT5).
+    """Fetch all macro tickers — FRED API primary, yfinance fallback.
 
-    Returns dict of {name: Series} with UTC-normalized daily indices.
+    FRED is the primary source because yfinance has been dropping many
+    macro index tickers (^VIX, ^TYX, etc.).  Returns dict of {ticker: Series}
+    with UTC-normalized daily indices.
     """
-    import yfinance as yf
-
     cached = _macro_cache.get("macro_batch")
     if cached is not None:
         return cached
 
-    logger.debug("fetching macro batch: %s", _MACRO_TICKERS)
-
-    # Use a single batch download — shorter period (2y) to avoid yfinance
-    # "possibly delisted" errors that occur with period=5y for some tickers.
-    try:
-        df = yf.download(
-            _MACRO_TICKERS,
-            period="2y",
-            auto_adjust=True,
-            progress=False,
-            group_by="ticker",
-        )
-    except Exception:
-        df = pd.DataFrame()
+    logger.debug("fetching macro batch via FRED: %s", _MACRO_TICKERS)
 
     result: dict[str, pd.Series] = {}
-    if not df.empty and isinstance(df.columns, pd.MultiIndex):
-        for ticker in _MACRO_TICKERS:
-            clean = ticker.replace("=", "-")
-            if clean in df.columns.get_level_values(0):
-                series = df[clean]["Close"].squeeze().copy()
-                series.index = _normalize_index(series.index)
-                result[ticker] = series
 
-    # Fallback for any ticker not in batch result
+    # FRED API is primary — more reliable than yfinance for macro indices
     for ticker in _MACRO_TICKERS:
-        if ticker not in result:
-            logger.debug("macro ticker %s not in batch — fetching individually", ticker)
+        s = _fetch_fred_series(ticker)
+        if not s.empty:
+            result[ticker] = s
+
+    # yfinance fallback for any ticker FRED could not serve
+    missing = [t for t in _MACRO_TICKERS if t not in result]
+    if missing:
+        import yfinance as yf
+
+        logger.debug("FRED misses — trying yfinance batch: %s", missing)
+        try:
+            df = yf.download(
+                missing,
+                period="2y",
+                auto_adjust=True,
+                progress=False,
+                group_by="ticker",
+            )
+        except Exception:
+            df = pd.DataFrame()
+
+        if not df.empty and isinstance(df.columns, pd.MultiIndex):
+            for ticker in missing:
+                clean = ticker.replace("=", "-")
+                if clean in df.columns.get_level_values(0):
+                    series = df[clean]["Close"].squeeze().copy()
+                    series.index = _normalize_index(series.index)
+                    result[ticker] = series
+
+        # Individual yfinance fallback for any still missing
+        for ticker in missing:
+            if ticker in result:
+                continue
+            logger.debug("macro ticker %s — yfinance individual fetch", ticker)
             try:
                 s = _fetch_single_series(ticker)
                 if not s.empty:
                     result[ticker] = s
             except Exception:
                 pass
-
-    # FRED API fallback for any ticker still missing or empty
-    for ticker in _MACRO_TICKERS:
-        if ticker in result and not result[ticker].empty:
-            continue
-        logger.info("macro ticker %s unavailable via yfinance — trying FRED fallback", ticker)
-        s = _fetch_fred_series(ticker)
-        if not s.empty:
-            result[ticker] = s
 
     # Normalise all yield tickers from percentage to decimal
     _yield_tickers = {"^TNX", "^FVX", "^TYX", "^IRX"}
@@ -158,7 +161,7 @@ def _fetch_macro_batch() -> dict[str, pd.Series]:
             result[yt] = result[yt] / 100.0
 
     _macro_cache.set("macro_batch", result)
-    logger.debug("macro batch: %d tickers fetched", len(result))
+    logger.debug("macro batch: %d/%d tickers fetched", len(result), len(_MACRO_TICKERS))
     return result
 
 
