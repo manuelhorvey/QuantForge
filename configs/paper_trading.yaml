@@ -660,3 +660,33 @@ assets:
         trailing_activation_mult: 0.8
         trailing_distance_mult: 1.0
         min_rr_ratio: 1.5
+  EURAUD:
+    ticker: EURAUD=X
+    allocation: 0.01
+    sl_mult: 0.54
+    tp_mult: 1.77
+    max_depth: 2
+    regime_geometry:
+      GREEN:
+        sl_mult: 1.5
+        tp_mult: 1.0
+      YELLOW:
+        sl_mult: 1.35
+        tp_mult: 0.9
+      RED:
+        sl_mult: 1.2
+        tp_mult: 0.8
+    config:
+      ensemble:
+        threshold: 0.20
+      shadow_sltp:
+        enabled: true
+        method: trailing
+        trailing_activation_mult: 0.5
+        trailing_distance_mult: 1.0
+      dynamic_sltp:
+        enabled: true
+        method: trailing
+        trailing_activation_mult: 0.5
+        trailing_distance_mult: 1.0
+        min_rr_ratio: 1.5
