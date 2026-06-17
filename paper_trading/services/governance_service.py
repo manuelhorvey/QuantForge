@@ -90,6 +90,13 @@ class GovernanceService:
         hc = halt_config
         hard_reasons = []
         soft_warnings = []
+        logger.debug(
+            "%s halt check: dd=%.4f mpf=%s drought_date=%s prob_n=%d mean_conf=%.2f liq_halted=%s",
+            name, dd, metrics.get("monthly_pf"),
+            metrics.get("last_signal_date"), len(prob_history),
+            metrics.get("mean_confidence", 0),
+            governance._liquidity_halted,
+        )
         if dd <= hc["drawdown"]:
             hard_reasons.append(f"DD {metrics['drawdown']:.1f}% <= {hc['drawdown'] * 100:.0f}%")
         mpf = metrics.get("monthly_pf")
@@ -110,6 +117,10 @@ class GovernanceService:
             if pd.isna(mean_conf):
                 mean_conf = 0
             drift = abs(mean_conf - expected_prob_conf)
+            logger.debug(
+                "%s drift check: n=%d mean_conf=%.3f expected=%.3f drift=%.3f limit=%.3f",
+                name, len(prob_history), mean_conf, expected_prob_conf, drift, prob_drift_limit,
+            )
             if drift > prob_drift_limit:
                 hard_reasons.append(f"Confidence drift: {drift:.3f} > {prob_drift_limit:.2f}")
                 drift_ok = False
@@ -135,6 +146,8 @@ class GovernanceService:
             psi_ok = False
 
         halted = len(hard_reasons) > 0
+        if halted:
+            logger.info("%s halted: %s", name, "; ".join(hard_reasons))
         return {
             "halted": halted,
             "reasons": [*hard_reasons, *soft_warnings],
