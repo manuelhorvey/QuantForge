@@ -191,6 +191,7 @@ class AssetEngine:
         self._last_psi_drift = None
         self._truncate_inference = False
         self._psi_drift_initialized = False
+        self._signal_chain: list = []
 
         # ── Shadow engine ────────────────────────────────────────────
         self._shadow_sltp = None

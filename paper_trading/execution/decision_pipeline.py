@@ -108,12 +108,42 @@ def apply_signal_stability_filter(ctx: DecisionContext) -> None:
         return
     engine = ctx.engine
     prob_long = ctx.decision.prob_long
-    margin = abs(prob_long - 0.5)
-    if margin < 0.05:
+    prob_short = ctx.decision.prob_short
+    max_prob = max(prob_long, prob_short)
+    margin = max_prob - 0.5
+    if margin < 0.15:
         logger.debug(
-            "%s: signal too close to boundary (margin=%.4f) — holding flat",
+            "%s: signal too close to boundary (margin=%.4f, max_prob=%.4f) — holding flat",
             engine.name,
             margin,
+            max_prob,
+        )
+        ctx.new_side = None
+
+
+HYSTERESIS_WINDOW = 3
+HYSTERESIS_MIN_AGREE = 2
+
+
+def apply_signal_hysteresis(ctx: DecisionContext) -> None:
+    if ctx.new_side is None:
+        return
+    engine = ctx.engine
+    engine._signal_chain.append(ctx.new_side)
+    if len(engine._signal_chain) > HYSTERESIS_WINDOW:
+        engine._signal_chain.pop(0)
+    if not engine.pos_mgr.has_position() or ctx.new_side == ctx.current_side:
+        return
+    if len(engine._signal_chain) < HYSTERESIS_WINDOW:
+        return
+    agree = sum(1 for s in engine._signal_chain if s == ctx.new_side)
+    if agree < HYSTERESIS_MIN_AGREE:
+        logger.info(
+            "%s: hysteresis blocked flip to %s (%d/%d last signals agree)",
+            engine.name,
+            ctx.new_side,
+            agree,
+            HYSTERESIS_WINDOW,
         )
         ctx.new_side = None
 
@@ -163,8 +193,26 @@ def manage_position(ctx: DecisionContext) -> None:
     if ctx.new_side == ctx.current_side:
         return
 
-    # Close existing if flip allowed
-    if engine.pos_mgr.has_position() and ctx.flip_allowed:
+    # Check entry gate before doing anything.
+    # If cool-down or other gate blocks, don't close the existing position
+    # (avoids the "close-then-wait" churn pattern).
+    if ctx.new_side is not None:
+        ok, reason = engine._can_enter(
+            ctx.new_side,
+            d.close_price,
+            {"regime": getattr(engine, "_current_regime", "neutral")},
+        )
+        if not ok:
+            logger.info(
+                "%s: flip aborted — entry gate blocking %s (%s)",
+                engine.name,
+                ctx.new_side,
+                reason,
+            )
+            ctx.new_side = None
+
+    # Close existing if flip allowed AND entry gate passed
+    if engine.pos_mgr.has_position() and ctx.flip_allowed and ctx.new_side is not None:
         profit_lock_pct = engine.config.get("profit_lock_threshold_pct", 15.0)
         current_price = getattr(engine, "current_price", None)
         if current_price is not None and current_price > 0:
@@ -182,20 +230,6 @@ def manage_position(ctx: DecisionContext) -> None:
 
     if ctx.new_side is None or not ctx.flip_allowed:
         return
-
-    ok, reason = engine._can_enter(
-        ctx.new_side,
-        d.close_price,
-        {"regime": getattr(engine, "_current_regime", "neutral")},
-    )
-    if not ok:
-        logger.info(
-            "%s: entry gate blocking %s entry — %s",
-            engine.name,
-            ctx.new_side,
-            reason,
-        )
-        ctx.new_side = None
 
 
 def build_entry_artifacts(ctx: DecisionContext) -> None:
@@ -332,6 +366,7 @@ DEFAULT_STAGES: list[StageFn] = [
     resolve_signal,
     apply_confidence_gate,
     apply_signal_stability_filter,
+    apply_signal_hysteresis,
     apply_meta_label_advisory,
     update_regime_bar_counter,
     evaluate_conviction_gate,

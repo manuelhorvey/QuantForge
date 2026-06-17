@@ -189,9 +189,20 @@ class PositionService:
         is_real = getattr(self.execution_bridge, "_is_real_broker", False)
         if mt5_ticket is not None and self.execution_bridge is not None and is_real:
             try:
-                self.execution_bridge.broker.close_position(self.ticker, str(mt5_ticket))
+                success = self.execution_bridge.broker.close_position(self.ticker, str(mt5_ticket))
+                if not success:
+                    logger.error(
+                        "%s: MT5 close returned failure for ticket=%s — position may be orphaned",
+                        self.name,
+                        mt5_ticket,
+                    )
             except Exception as e:
-                logger.warning("%s: MT5 close failed for ticket=%s: %s", self.name, mt5_ticket, e)
+                logger.error(
+                    "%s: MT5 close raised exception for ticket=%s: %s — position may be orphaned",
+                    self.name,
+                    mt5_ticket,
+                    e,
+                )
 
         new_trade_log = list(self.pos_mgr.trade_log)
         mutations = {

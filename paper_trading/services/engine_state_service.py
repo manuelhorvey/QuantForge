@@ -201,6 +201,7 @@ class EngineStateService:
                         "tp": pos.take_profit,
                         "entry_date": pos.entry_date,
                         "vol": pos.vol,
+                        "mt5_ticket": asset.position.get("mt5_ticket") if asset.position else None,
                     },
                     "current_value": asset.pos_mgr.current_value,
                     "peak_value": asset.pos_mgr.peak_value,
