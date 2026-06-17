@@ -424,7 +424,7 @@ class EntryService:
                 getattr(asset.pos_mgr, "position_size", 1.0) * getattr(asset.pos_mgr, "exposure_multiplier", 1.0),
                 1e-9,
             ),
-            getattr(asset, "_last_meta_proba", 0.0),
+            getattr(asset, "_last_meta_proba", None) or 0.0,
             dd_taper,
             max_pos_notional if total_equity > 0 else 0.0,
             max_risk_usd if total_equity > 0 else 0.0,
