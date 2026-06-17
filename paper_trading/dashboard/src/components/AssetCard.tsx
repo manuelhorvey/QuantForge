@@ -7,6 +7,8 @@ import {
   rrToState,
   governanceDot,
   governanceText,
+  governanceBorder,
+  governanceBgMuted,
   type GovernanceState,
 } from './ui/governance'
 
@@ -64,7 +66,7 @@ const AssetCard: React.FC<Props> = React.memo(({ name }) => {
 
   if (!info) {
     return (
-      <div className="panel rounded-lg px-4 py-3">
+      <div className="bg-panel border border-default rounded-lg px-4 py-3 shadow-panel">
         <div className="text-sm text-secondary font-medium">{name}</div>
         <div className="text-xs text-tertiary mt-1">No data</div>
       </div>
@@ -74,9 +76,10 @@ const AssetCard: React.FC<Props> = React.memo(({ name }) => {
   const confState: GovernanceState = confToState(info.confidence)
   const retState: GovernanceState = info.totalReturn >= 0 ? 'GREEN' : 'RED'
   const ddState: GovernanceState = ddToState(info.drawdown)
+  const cardState: GovernanceState = info.signal === 'BUY' ? 'GREEN' : info.signal === 'SELL' ? 'RED' : 'INIT'
 
   return (
-    <div className="relative panel rounded-lg px-4 py-3 overflow-hidden group">
+    <div className={`relative bg-panel border border-default rounded-lg px-4 py-3 overflow-hidden group shadow-panel transition-all duration-200 hover:border-strong hover:shadow-card border-l-2 ${governanceBorder[cardState]} ${governanceBgMuted[cardState]}`}>
       <div className="flex items-center gap-2 mb-2">
         <span className="font-semibold text-sm text-primary">{name}</span>
         {(info.isNew || newBadge) && (

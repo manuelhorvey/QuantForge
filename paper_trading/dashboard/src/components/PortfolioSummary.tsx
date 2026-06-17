@@ -65,7 +65,7 @@ export default function PortfolioSummary() {
           {p?.start_date ? `Since ${p.start_date}` : 'Return window unavailable'}
         </span>
       </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
         {cards.map(c => (
           <StatCard
             key={c.label}

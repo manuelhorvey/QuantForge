@@ -7,17 +7,18 @@ interface BadgeProps {
   variant?: BadgeVariant
   size?: 'sm' | 'md'
   dot?: boolean
+  glow?: boolean
   icon?: 'long' | 'short' | 'flat' | ReactNode
   children: ReactNode
   className?: string
 }
 
 const variantStyles: Record<BadgeVariant, string> = {
-  default: 'bg-accent-emerald/10 text-accent-emerald border-accent-emerald/20',
-  success: 'bg-gov-green-muted text-gov-green border-gov-green/25',
-  warning: 'bg-gov-yellow-muted text-gov-yellow border-gov-yellow/25',
-  error: 'bg-gov-red-muted text-gov-red border-gov-red/25',
-  neutral: 'bg-gov-init-muted text-gov-init border-gov-init/25',
+  default: 'bg-accent-emerald/10 text-accent-emerald border-accent-emerald/25',
+  success: 'bg-gov-green-muted text-gov-green border-gov-green/35',
+  warning: 'bg-gov-yellow-muted text-gov-yellow border-gov-yellow/35',
+  error: 'bg-gov-red-muted text-gov-red border-gov-red/35',
+  neutral: 'bg-gov-init-muted text-gov-init border-gov-init/35',
 }
 
 const sizeStyles = {
@@ -36,14 +37,18 @@ export default function Badge({
   variant = 'default',
   size = 'sm',
   dot = false,
+  glow = false,
   icon,
   children,
   className = '',
 }: BadgeProps) {
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded font-semibold tracking-wider uppercase border ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
+      className={`inline-flex items-center gap-1 rounded font-semibold tracking-wider uppercase border ${variantStyles[variant]} ${sizeStyles[size]} relative ${className}`}
     >
+      {glow && (
+        <span className="absolute inset-0 rounded pointer-events-none opacity-20" style={{ boxShadow: '0 0 6px 1px currentColor' }} />
+      )}
       {dot && <span className="w-1 h-1 rounded-full bg-current shrink-0" />}
       {icon && <BadgeIcon icon={icon} />}
       {children}

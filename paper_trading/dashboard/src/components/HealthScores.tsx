@@ -15,6 +15,12 @@ function healthText(score: number): string {
   return 'text-gov-red'
 }
 
+function healthBg(score: number): string {
+  if (score >= 0.8) return 'bg-gov-green-muted2'
+  if (score >= 0.5) return 'bg-gov-yellow-muted2'
+  return 'bg-gov-red-muted2'
+}
+
 function healthLabel(score: number): string {
   if (score >= 0.8) return 'Healthy'
   if (score >= 0.5) return 'Degraded'
@@ -59,7 +65,7 @@ export default function HealthScores() {
           const h = data.assets[name]
           const pct = (h.health_score * 100).toFixed(0)
           return (
-            <div key={name} className="border border-default rounded-lg px-3 py-2.5 bg-surface/50">
+            <div key={name} className={`border border-default rounded-lg px-3 py-2.5 ${healthBg(h.health_score)}`}>
               <div className="flex items-center justify-between gap-1 mb-2">
                 <span className="text-xs font-semibold text-primary font-mono truncate">{name}</span>
                 <span className={`text-sm font-bold metric-value tabular-nums shrink-0 ${healthText(h.health_score)}`}>

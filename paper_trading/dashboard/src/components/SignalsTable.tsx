@@ -83,9 +83,11 @@ export default function SignalsTable() {
       sortKey: r => r.confidence,
       render: r => (
         <div className="flex items-center gap-1.5 justify-end">
-          <div className="w-10 h-1 bg-panel rounded-full overflow-hidden">
+          <div className="w-12 h-1 bg-panel rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all duration-300 ${confClass(r.confidence).replace('text-', 'bg-')}`}
+              className={`h-full rounded-full transition-all duration-300 ${
+                r.confidence >= 60 ? 'bg-gov-green' : r.confidence >= 45 ? 'bg-gov-yellow' : 'bg-gov-red'
+              }`}
               style={{ width: `${r.confidence}%` }}
             />
           </div>
@@ -158,10 +160,10 @@ export default function SignalsTable() {
                 placeholder="Filter…"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                className="input-terminal w-28 sm:w-32 pl-7"
+                className="input-terminal w-28 sm:w-32 pl-7 focus:border-strong focus:shadow-[0_0_0_1px_rgba(20,184,166,0.2)]"
               />
             </div>
-            <span className="text-[10px] text-tertiary font-mono tabular-nums">{rows.length}</span>
+            <span className="text-[10px] text-tertiary font-mono tabular-nums bg-surface/50 px-1.5 py-0.5 rounded">{rows.length}</span>
           </div>
         }
       />

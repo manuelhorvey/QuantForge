@@ -23,7 +23,7 @@ import FillQualityGauge from './components/execution/FillQualityGauge'
 import TradeExecutionTable from './components/execution/TradeExecutionTable'
 import MonitoringDashboard from './components/monitor/MonitoringDashboard'
 import GovernanceRadar from './components/governance/GovernanceRadar'
-import RebalancingDashboard from './components/portfolio/RebalancingDashboard'
+
 
 import { useAttributionTrades } from './hooks/useAttributionTrades'
 import Sidebar from './components/layout/Sidebar'
@@ -56,7 +56,6 @@ export default function App() {
               <PortfolioSummary />
               <AssetGrid />
               <HaltConditions />
-              <RebalancingDashboard />
             </Section>
 
             <Section id="signals" errorTitle="Signals">

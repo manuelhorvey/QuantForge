@@ -103,11 +103,12 @@ export default function EquityChart() {
             onClick={() => toggle(name)}
             aria-pressed={active}
             aria-label={`${active ? 'Hide' : 'Show'} ${name} on equity chart`}
-            className={`px-2 py-1 rounded-md border text-2xs font-medium font-mono transition-all duration-150 ${
+            className={`px-2 py-1 rounded-md border text-2xs font-medium font-mono transition-all duration-150 focus-ring ${
               active
                 ? 'text-primary bg-panel border-strong shadow-inner-subtle'
                 : 'text-muted border-default hover:border-strong hover:text-secondary'
             }`}
+
           >
             <span className="flex items-center gap-1.5">
               <span

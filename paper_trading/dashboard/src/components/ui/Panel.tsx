@@ -9,6 +9,7 @@ interface PanelProps {
   variant?: PanelVariant
   hoverable?: boolean
   onClick?: () => void
+  leftAccent?: string
 }
 
 const paddingMap = {
@@ -31,23 +32,26 @@ export default function Panel({
   variant = 'default',
   hoverable = false,
   onClick,
+  leftAccent,
 }: PanelProps) {
   const hoverStyles = hoverable
-    ? 'cursor-pointer hover:border-strong transition-colors duration-200'
+    ? 'cursor-pointer hover:border-strong hover:shadow-card transition-all duration-200'
     : ''
 
   return (
     <div
       onClick={onClick}
       className={[
-        'rounded-lg',
+        'rounded-lg relative',
         variantStyles[variant],
         paddingMap[padding],
         hoverStyles,
+        leftAccent ? 'border-l-2' : '',
         className,
       ]
         .filter(Boolean)
         .join(' ')}
+      style={leftAccent ? { borderLeftColor: leftAccent } : undefined}
     >
       {children}
     </div>

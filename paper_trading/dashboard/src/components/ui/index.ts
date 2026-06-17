@@ -1,6 +1,9 @@
 export { default as Badge, signalToBadge, reasonToBadge } from './Badge'
 export { default as Button } from './Button'
 export { default as ChartContainer } from './ChartContainer'
+export { default as Divider } from './Divider'
+export { default as StateIndicatorDot } from './StateIndicatorDot'
+export { default as ProgressBar } from './ProgressBar'
 export {
   CHART_PALETTE,
   CHART_PRIMARY,
@@ -39,6 +42,8 @@ export {
   governanceBadge,
   governanceDot,
   governanceText,
+  governanceBorder,
+  governanceBgMuted,
   GOV_STATE_META,
   getStateMeta,
   mapStateToFill,

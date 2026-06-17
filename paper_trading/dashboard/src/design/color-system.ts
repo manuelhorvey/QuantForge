@@ -13,7 +13,7 @@ export const rawTokens = {
   'color-teal-200': '#adf5d8',
   'color-teal-300': '#75ebc5',
   'color-teal-400': '#3dd9ae',
-  'color-teal-500': '#2dd4bf',
+  'color-teal-500': '#14b8a6',
   'color-teal-600': '#1bb5a5',
   'color-teal-700': '#15918a',
   'color-teal-800': '#14736e',
@@ -50,7 +50,7 @@ export const rawTokens = {
   'color-app': '#08090c',
   'color-surface': '#0c0d12',
   'color-card': '#0c0d12',
-  'color-panel': '#111318',
+  'color-panel': '#13161f',
   'color-panel-hover': '#161820',
 
   // ── Text hierarchy ────────────────────────────────
@@ -60,16 +60,19 @@ export const rawTokens = {
   'color-text-muted': '#475569',
 
   // ── Borders ───────────────────────────────────────
-  'color-border': '#1a1d28',
+  'color-border': '#1e2233',
   'color-border-strong': '#2a3040',
 
   // ── Glass ─────────────────────────────────────────
   'color-glass': 'rgba(12, 13, 18, 0.92)',
 
+  // ── Focus ring ────────────────────────────────────
+  'color-focus-ring': 'rgba(20, 184, 166, 0.45)',
+
   // ── Governance (semantic) ─────────────────────────
-  'color-gov-green': '#22c55e',
-  'color-gov-green-muted': 'rgba(34, 197, 94, 0.12)',
-  'color-gov-green-muted2': 'rgba(34, 197, 94, 0.06)',
+  'color-gov-green': '#25d065',
+  'color-gov-green-muted': 'rgba(37, 208, 101, 0.12)',
+  'color-gov-green-muted2': 'rgba(37, 208, 101, 0.06)',
   'color-gov-green-light': '#16a34a',
   'color-gov-green-dark': '#15803d',
 
@@ -79,9 +82,9 @@ export const rawTokens = {
   'color-gov-yellow-light': '#d97706',
   'color-gov-yellow-dark': '#b45309',
 
-  'color-gov-red': '#ef4444',
-  'color-gov-red-muted': 'rgba(239, 68, 68, 0.12)',
-  'color-gov-red-muted2': 'rgba(239, 68, 68, 0.06)',
+  'color-gov-red': '#f04444',
+  'color-gov-red-muted': 'rgba(240, 68, 68, 0.12)',
+  'color-gov-red-muted2': 'rgba(240, 68, 68, 0.06)',
   'color-gov-red-light': '#dc2626',
   'color-gov-red-dark': '#b91c1c',
 
@@ -98,19 +101,19 @@ export const rawTokens = {
   'color-accent-pink': '#f472b6',
 
   // ── Chart palette (10-color sequence) ─────────────
-  'color-chart-0': '#2dd4bf',
+  'color-chart-0': '#14b8a6',
   'color-chart-1': '#60a5fa',
   'color-chart-2': '#fbbf24',
   'color-chart-3': '#f472b6',
   'color-chart-4': '#a78bfa',
-  'color-chart-5': '#5eead4',
-  'color-chart-6': '#93c5fd',
-  'color-chart-7': '#fde68a',
-  'color-chart-8': '#f9a8d4',
-  'color-chart-9': '#c4b5fd',
+  'color-chart-5': '#34d399',
+  'color-chart-6': '#38bdf8',
+  'color-chart-7': '#fb923c',
+  'color-chart-8': '#e879f9',
+  'color-chart-9': '#a3e635',
 
   'color-chart-rose': '#fb7185',
-  'color-chart-teal': '#2dd4bf',
+  'color-chart-teal': '#14b8a6',
 
   // ── Shadows ───────────────────────────────────────
   'shadow-panel': '0 1px 0 rgba(255,255,255,0.04) inset, 0 4px 24px rgba(0,0,0,0.35)',
@@ -142,7 +145,7 @@ export const rawTokens = {
   'spacing-16': '64px',
 
   // ── Typography: Font families ─────────────────────
-  'font-sans': "'IBM Plex Sans', system-ui, sans-serif",
+  'font-sans': "'Inter', system-ui, sans-serif",
   'font-mono': "'JetBrains Mono', ui-monospace, monospace",
 
   // ── Typography: Font sizes & line heights ──────────
@@ -359,7 +362,7 @@ export const usage = {
   secondaryAction: neutral[800],
   secondaryActionHover: neutral[700],
   activeBorder: teal[500],
-  activeGlow: 'rgba(45, 212, 191, 0.3)',
+  activeGlow: 'rgba(20, 184, 166, 0.3)',
   signalLong: success.DEFAULT,
   signalShort: error.DEFAULT,
   signalFlat: warning.DEFAULT,

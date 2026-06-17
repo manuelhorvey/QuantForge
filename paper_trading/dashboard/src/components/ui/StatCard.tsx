@@ -65,9 +65,9 @@ export default function StatCard({
   }
 
   return (
-    <div className={`bg-panel border border-default rounded-lg p-3 sm:p-3.5 transition-colors duration-200 hover:border-strong ${className}`}>
+    <div className={`bg-panel border border-default rounded-lg p-3 sm:p-3.5 transition-all duration-200 hover:border-strong hover:-translate-y-0.5 hover:shadow-card ${className}`}>
       <span className="text-[11px] font-medium text-tertiary uppercase tracking-wider">{label}</span>
-      <div className="text-xl font-semibold tracking-tight font-mono tabular-nums mt-1 text-primary">
+      <div className="text-xl sm:text-2xl font-semibold tracking-tight font-mono tabular-nums mt-1 text-primary leading-tight">
         {value}
       </div>
       {sub != null && (

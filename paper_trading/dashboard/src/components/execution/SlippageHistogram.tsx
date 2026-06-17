@@ -48,8 +48,8 @@ export default function SlippageHistogram() {
           <p className="text-2xs text-tertiary mb-1 font-medium">Entry Slippage</p>
           <ResponsiveContainer width="100%" height="90%">
             <BarChart data={entryData} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
-              <XAxis dataKey="range" tick={{ ...axisTick, fontSize: 8 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ ...axisTick, fontSize: 8 }} axisLine={false} tickLine={false} allowDecimals={false} />
+              <XAxis dataKey="range" tick={{ ...axisTick, fontSize: 9 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ ...axisTick, fontSize: 9 }} axisLine={false} tickLine={false} allowDecimals={false} />
               <Tooltip contentStyle={tooltipStyle} />
               <Bar dataKey="count" radius={[2, 2, 0, 0]}>
                 {entryData.map((e, i) => <Cell key={i} fill={e.fill} />)}
@@ -61,8 +61,8 @@ export default function SlippageHistogram() {
           <p className="text-2xs text-tertiary mb-1 font-medium">Exit Slippage</p>
           <ResponsiveContainer width="100%" height="90%">
             <BarChart data={exitData} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
-              <XAxis dataKey="range" tick={{ ...axisTick, fontSize: 8 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ ...axisTick, fontSize: 8 }} axisLine={false} tickLine={false} allowDecimals={false} />
+              <XAxis dataKey="range" tick={{ ...axisTick, fontSize: 9 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ ...axisTick, fontSize: 9 }} axisLine={false} tickLine={false} allowDecimals={false} />
               <Tooltip contentStyle={tooltipStyle} />
               <Bar dataKey="count" radius={[2, 2, 0, 0]}>
                 {exitData.map((e, i) => <Cell key={i} fill={e.fill} />)}

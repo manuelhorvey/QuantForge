@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import '../generated/tokens.css';
 
 :root {
@@ -11,6 +11,16 @@
 @tailwind utilities;
 
 @layer utilities {
+  .focus-ring {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    transition: outline-color 150ms ease;
+  }
+
+  .focus-ring:focus-visible {
+    outline-color: var(--color-focus-ring);
+  }
+
   .skeleton-shimmer {
     background: linear-gradient(
       90deg,
@@ -61,6 +71,7 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-feature-settings: 'tnum' 1, 'cv02' 1, 'cv05' 1;
+    letter-spacing: -0.01em;
   }
 
   ::selection {
@@ -93,7 +104,7 @@
     font-weight: 600;
     color: var(--color-text-tertiary);
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
   }
 
   .section-title {
@@ -202,7 +213,7 @@
     font-size: 10px;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     color: var(--color-text-tertiary);
   }
 
@@ -227,7 +238,7 @@
   }
 
   .table-row-hover:hover {
-    background-color: color-mix(in srgb, var(--color-panel) 60%, transparent);
+    background-color: color-mix(in srgb, var(--color-panel) 80%, transparent);
   }
 
   .anchor-nav {

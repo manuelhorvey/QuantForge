@@ -47,17 +47,18 @@ export default function Header({ onMenuClick }: HeaderProps) {
           <button
             type="button"
             onClick={onMenuClick}
-            className="p-1.5 rounded-md border border-default hover:border-strong hover:bg-panel transition-colors lg:hidden active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-emerald/50"
+            className="p-1.5 rounded-md border border-default hover:border-strong hover:bg-panel transition-colors lg:hidden active:scale-95 focus-ring"
             title="Toggle navigation"
             aria-label="Toggle navigation"
           >
             <Menu className="w-3.5 h-3.5 text-secondary" strokeWidth={2} />
           </button>
-          <div className="w-7 h-7 rounded-lg bg-accent-emerald/90 flex items-center justify-center shrink-0">
-            <TrendingUp className="w-3.5 h-3.5 text-[#08090c]" strokeWidth={2.25} />
+          <div className="w-8 h-8 rounded-lg bg-accent-emerald/90 flex items-center justify-center shrink-0 shadow-sm">
+            <TrendingUp className="w-4 h-4 text-[#08090c]" strokeWidth={2.25} />
           </div>
           <div className="min-w-0">
             <h1 className="text-sm font-bold tracking-tight text-primary leading-none truncate">QuantForge</h1>
+            <p className="text-[9px] text-tertiary font-mono tracking-wider uppercase leading-none mt-0.5">Paper Trading</p>
           </div>
         </div>
 
@@ -82,7 +83,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
             type="button"
             onClick={handleRefresh}
             disabled={refreshing}
-            className="p-1.5 rounded-md border border-default hover:border-strong hover:bg-panel transition-colors disabled:opacity-40 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-emerald/50"
+            className="p-1.5 rounded-md border border-default hover:border-strong hover:bg-panel transition-colors disabled:opacity-40 active:scale-95 focus-ring"
             title="Refresh all data"
             aria-label="Refresh all dashboard data"
           >

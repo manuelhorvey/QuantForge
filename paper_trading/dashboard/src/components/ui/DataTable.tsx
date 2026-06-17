@@ -26,6 +26,7 @@ interface DataTableProps<T> {
   className?: string
   storageKey?: string
   onSortChange?: (col: string | null, dir: 'asc' | 'desc' | null) => void
+  mobileAccent?: (row: T) => string | undefined
 }
 
 type SortDir = 'asc' | 'desc' | null
@@ -45,7 +46,7 @@ export default function DataTable<T>({
   columns, data, keyExtractor, sortable = false,
   defaultSortKey, defaultSortDir = 'desc',
   stickyHeader = true, compact = false, emptyMessage = 'No data',
-  onRowClick, className = '', storageKey, onSortChange,
+  onRowClick, className = '', storageKey, onSortChange, mobileAccent,
 }: DataTableProps<T>) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [scrolled, setScrolled] = useState(false)
@@ -63,7 +64,7 @@ export default function DataTable<T>({
     if (!sortCol || !sortDir) return data
     const col = columns.find(c => c.key === sortCol)
     if (!col?.sortable) return data
-    const fn = col.sortKey ?? ((r: any) => r[sortCol])
+    const fn = col.sortKey ?? ((r: T) => r[sortCol as keyof T])
     return [...data].sort((a, b) => {
       const va = fn(a)
       const vb = fn(b)
@@ -116,7 +117,9 @@ export default function DataTable<T>({
               className={[
                 'w-full text-left rounded-lg border border-default bg-panel/50 px-3 py-2.5',
                 onRowClick ? 'active:scale-[0.99] transition-transform' : 'disabled:opacity-100',
+                mobileAccent ? 'border-l-2' : '',
               ].join(' ')}
+              style={mobileAccent ? { borderLeftColor: mobileAccent(row) ?? 'var(--color-border)' } : undefined}
             >
               <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
                 {columns.map(col => (
@@ -143,8 +146,8 @@ export default function DataTable<T>({
         <table className={`w-full text-[11px] min-w-[500px] ${compact ? 'text-[10px]' : ''}`}>
         <thead>
           <tr
-            className={`border-b transition-shadow duration-150 ${
-              scrolled && stickyHeader ? 'border-default shadow-panel' : 'border-default'
+            className={`transition-shadow duration-200 ${
+              scrolled && stickyHeader ? 'shadow-[0_2px_8px_rgba(0,0,0,0.25)]' : ''
             }`}
           >
             {columns.map(col => (
@@ -204,7 +207,7 @@ export default function DataTable<T>({
                 className={[
                   'border-b border-default/30 table-row-hover',
                   onRowClick ? 'cursor-pointer' : '',
-                  i % 2 === 1 ? 'bg-panel/20' : '',
+                  i % 2 === 1 ? 'bg-panel/30' : '',
                 ].join(' ')}
                 style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 32px' }}
               >

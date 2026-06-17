@@ -25,6 +25,20 @@ export const governanceText: Record<GovernanceState, string> = {
   INIT: 'text-gov-init',
 }
 
+export const governanceBorder: Record<GovernanceState, string> = {
+  GREEN: 'border-l-gov-green',
+  YELLOW: 'border-l-gov-yellow',
+  RED: 'border-l-gov-red',
+  INIT: 'border-l-gov-init',
+}
+
+export const governanceBgMuted: Record<GovernanceState, string> = {
+  GREEN: 'bg-gov-green-muted2',
+  YELLOW: 'bg-gov-yellow-muted2',
+  RED: 'bg-gov-red-muted2',
+  INIT: 'bg-gov-init-muted2',
+}
+
 export function prematureRateState(rate: number | null): GovernanceState {
   if (rate === null) return 'INIT'
   if (rate > 0.3) return 'RED'

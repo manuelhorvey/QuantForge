@@ -27,12 +27,21 @@ function statusBg(status: HealthSnapshotCardProps['status']): string {
   }
 }
 
+function statusBgMuted(status: HealthSnapshotCardProps['status']): string {
+  switch (status) {
+    case 'healthy': return 'bg-gov-green-muted2'
+    case 'degraded': return 'bg-gov-yellow-muted2'
+    case 'critical': return 'bg-gov-red-muted2'
+    default: return ''
+  }
+}
+
 export default function HealthSnapshotCard({
   title, value, status, trend, change, icon,
 }: HealthSnapshotCardProps) {
   return (
     <div
-      className="bg-panel border border-default rounded-lg px-3 py-2.5"
+      className={`bg-panel border border-default rounded-lg px-3 py-2.5 transition-all duration-200 hover:border-strong ${status ? statusBgMuted(status) : ''}`}
       role="status"
       aria-label={`${title}: ${value ?? '—'} — ${status ?? 'unknown'}`}
     >

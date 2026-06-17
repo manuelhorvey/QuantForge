@@ -49,10 +49,10 @@ export default function GovernanceRadar() {
             <p className="sr-only">{chartLabel}</p>
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart data={chartData} cx="50%" cy="50%" outerRadius="80%">
-                <PolarGrid stroke="var(--color-border)" strokeWidth={0.5} />
+                <PolarGrid stroke="var(--color-border)" strokeWidth={0.75} />
                 <PolarAngleAxis
                   dataKey="axis"
-                  tick={{ fontSize: 10, fill: 'var(--color-text-tertiary)', fontWeight: 500 }}
+                  tick={{ fontSize: 10, fill: 'var(--color-text-secondary)', fontWeight: 500 }}
                 />
                 <PolarRadiusAxis
                   angle={90}
@@ -68,6 +68,7 @@ export default function GovernanceRadar() {
                   fill="var(--color-accent-emerald)"
                   fillOpacity={0.15}
                   strokeWidth={1.5}
+                  animationDuration={400}
                 />
               </RadarChart>
             </ResponsiveContainer>
