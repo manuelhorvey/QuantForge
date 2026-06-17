@@ -29,11 +29,11 @@ from paper_trading.orchestrator.actor import AssetActor
 from paper_trading.orchestrator.engine import EngineOrchestrator
 from paper_trading.replay.wal import WalWriter
 from paper_trading.services.engine_narrative_service import EngineNarrativeService
-from paper_trading.writer import BackgroundWriter
 from paper_trading.services.engine_rebalance_service import EngineRebalanceService
 from paper_trading.services.engine_recovery_service import EngineRecoveryService
 from paper_trading.services.engine_state_service import EngineStateService
 from paper_trading.state_store import _SKIP_JOURNAL, StateStore, sanitize  # noqa: F401
+from paper_trading.writer import BackgroundWriter
 from shared.execution_config import build_execution_configs
 from shared.registry import StrategyRegistry
 
@@ -188,8 +188,8 @@ class PaperTradingEngine:
     def _install_mt5_data_provider(self, cfg) -> None:
         import yaml
 
-        from paper_trading.ops.data_fetcher import set_mt5_client
         from paper_trading.compat import MT5Client
+        from paper_trading.ops.data_fetcher import set_mt5_client
 
         symbol_map: dict[str, str] = {}
         if cfg.mt5.symbol_map_path:

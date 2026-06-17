@@ -5,13 +5,25 @@ from datetime import datetime
 import pandas as pd
 import pytz
 
+from features.archetypes import ArchetypeClassifier
+from features.market_structure import MarketStructureDetector
 from monitoring.importance_tracker import ImportanceStore
 from monitoring.psi_monitor import PSIMonitor
 from monitoring.validity_state_machine import ValidityStateMachine as _ValidityStateMachine
 from paper_trading.asset_pnl_controller import AssetPnlController
 from paper_trading.attribution.collector import AttributionCollector
+from paper_trading.compat import (
+    ExecutionContext,
+    GovernanceService,
+    MetricsService,
+    SignalService,
+    evaluate_regime_conviction_gate,
+    run_decision_pipeline,
+)
 from paper_trading.config_manager import get_config  # noqa: F401  (patched by tests)
 from paper_trading.entry.decision import TradeDecision
+from paper_trading.entry.optimizer import EntryOptimizer
+from paper_trading.entry.policy import ExecutionPolicyLayer
 from paper_trading.governance.asset import AssetGovernance
 from paper_trading.governance.regime import RegimeClassifier
 from paper_trading.inference.pipeline import AssetInferencePipeline
@@ -20,24 +32,12 @@ from paper_trading.ops.data_fetcher import flatten
 from paper_trading.position.dynamic_sltp import DynamicSLTPEngine, build_dynamic_sltp_from_config
 from paper_trading.position.manager import PositionManager
 from paper_trading.position.scale_out import build_scale_out_from_config
+from paper_trading.services.attribution_service import AttributionService as _AttributionService
 from paper_trading.services.entry_service import EntryService
 from paper_trading.services.position_service import PositionService
-from paper_trading.services.attribution_service import AttributionService as _AttributionService
-from paper_trading.entry.optimizer import EntryOptimizer
-from paper_trading.entry.policy import ExecutionPolicyLayer
-from features.archetypes import ArchetypeClassifier
-from features.market_structure import MarketStructureDetector
 from paper_trading.shadow.engine import ShadowSLTPEngine
 from paper_trading.state_store import _SKIP_JOURNAL
 from shared.registry import StrategyRegistry
-from paper_trading.compat import (
-    ExecutionContext,
-    SignalService,
-    MetricsService,
-    GovernanceService,
-    evaluate_regime_conviction_gate,
-    run_decision_pipeline,
-)
 
 logger = logging.getLogger("quantforge.asset_engine")
 
