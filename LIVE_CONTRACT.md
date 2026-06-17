@@ -76,7 +76,7 @@ random_state=42, n_jobs=1, tree_method='hist', verbosity=0
 
 ### Alpha features (all 21 dashboard assets use these 13 base features):
 
-All assets receive the same 13 alpha features with per-asset prefix (`{ASSET}_`):
+13 features total (9 per-asset + 4 cross-asset), all with per-asset prefix (`{ASSET}_`):
 
 | Feature | Description |
 |---------|-------------|
@@ -142,7 +142,7 @@ Computed inline in `paper_trading/inference/pipeline.py:_generate_and_apply()` v
 ### Sources
 | Source | Data | Frequency |
 |---|---|---|
-| `yfinance` / `MT5` | Daily OHLCV for all assets + macro (DXY=DX-Y.NYB, VIX=^VIX, SPX=^GSPC, WTI=CL=F, TNX=^TNX) | Daily bars |
+| `MT5` / `yfinance` | Daily OHLCV for all assets + macro (DXY=DX-Y.NYB, VIX=^VIX, SPX=^GSPC, WTI=CL=F, TNX=^TNX) | Daily bars |
 
 ### Ingestion rules
 - `fetch_live(ticker)` — 5 years OHLCV (`_FETCH_PERIOD = "5y"`, `_FETCH_WARMUP_BUFFER = 1250`), truncated to `_MAX_INDICATOR_LOOKBACK + 50` rows when inference truncation is validated
@@ -173,13 +173,24 @@ df.index = pd.to_datetime(df.index.tz_convert("UTC").date)
 
 **Per-asset pt_sl** from `configs/paper_trading.yaml`.
 
+**Halt parameters** (from `configs/paper_trading.yaml`, global defaults overridable per asset):
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `drawdown` | -0.08 | Per-asset drawdown limit |
+| `monthly_pf` | 0.70 | Minimum trailing monthly profit factor |
+| `signal_drought` | 30 | Max days without a signal before penalty |
+| `prob_drift` | 0.25 | Max confidence drift from expected baseline |
+| `prob_drift_min_samples` | 10 | Minimum signals required before drift check activates |
+| `expected_prob_conf` | 0.65 | Expected probability confidence baseline |
+
 ---
 
 ## 6. MODEL TRAINING CONTRACT
 
 **Pipeline:** `paper_trading/inference/training.py:AssetTrainingPipeline.train()`
 **Data window:** 5y history from yfinance (`_FETCH_PERIOD = "5y"`, `_FETCH_WARMUP_BUFFER = 1250`), train on last `retrain_window` years (default 5)
-**Feature builder:** `build_alpha_features()` — 13 alpha feature columns
+**Feature builder:** `build_alpha_features()` — 13 alpha feature columns (9 per-asset + 4 cross-asset)
 **Minimum samples:** 100 binary labels; 2+ unique classes
 **Train/val split:** 80/20 chronological, stratified by label if minimum class count ≥ 2
 **Per-asset max_depth** from `yaml` config (default 2).
@@ -260,10 +271,10 @@ Before placing an MT5 order, the engine checks if a position already exists for 
 
 ### Current assets (21 promoted)
 | Asset | Ticker | Allocation | sl_mult | tp_mult | max_depth |
-|---|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|---|---|
 | GC | GC=F | 7.0% | 1.00 | 4.00 | 2 |
 | USDCHF | USDCHF=X | 4.0% | 0.85 | 3.00 | 4 |
-| AUDCHF | AUDCHF=X | 5.0% | 2.75 | 3.50 | 2 |
+| AUDCHF | AUDCHF=X | 5.0% | 2.75 | 3.50 | 3 |
 | USDCAD | USDCAD=X | 5.0% | 2.50 | 2.03 | 5 |
 | ES | ES=F | 7.0% | 2.00 | 5.50 | 2 |
 | NQ | NQ=F | 7.0% | 2.50 | 5.00 | 2 |
@@ -271,13 +282,13 @@ Before placing an MT5 order, the engine checks if a position already exists for 
 | GBPNZD | GBPNZD=X | 5.0% | 3.00 | 1.00 | 3 |
 | NZDCAD | NZDCAD=X | 5.0% | 2.50 | 4.00 | 2 |
 | ^DJI | ^DJI | 4.0% | 0.50 | 4.00 | 4 |
-| EURUSD | EURUSD=X | 4.0% | 3.00 | 1.50 | 3 |
+| EURUSD | EURUSD=X | 4.0% | 3.00 | 1.50 | 4 |
 | NZDUSD | NZDUSD=X | 5.0% | 2.50 | 1.50 | 5 |
-| GBPAUD | GBPAUD=X | 5.0% | 1.00 | 2.00 | 2 |
+| GBPAUD | GBPAUD=X | 5.0% | 1.00 | 2.00 | 3 |
 | NZDCHF | NZDCHF=X | 7.0% | 1.00 | 4.00 | 2 |
 | CADCHF | CADCHF=X | 5.0% | 1.00 | 4.00 | 2 |
 | AUDUSD | AUDUSD=X | 4.0% | 1.50 | 4.00 | 2 |
-| AUDNZD | AUDNZD=X | 3.0% | 2.00 | 1.00 | 2 |
+| AUDNZD | AUDNZD=X | 3.0% | 2.00 | 1.00 | 3 |
 | EURCHF | EURCHF=X | 5.0% | 1.00 | 3.00 | 4 |
 | EURCAD | EURCAD=X | 2.0% | 1.00 | 1.00 | 3 |
 | EURNZD | EURNZD=X | 3.0% | 1.50 | 2.50 | 3 |
@@ -329,7 +340,8 @@ Seven layered governance mechanisms, each independently configurable:
 | Feature stability | Per retrain | Validity penalty | — |
 | Meta-labeling (XGBoost) | Per signal | Size scalar [0–1] | `meta_labeling` |
 | Macro narrative | Weekly | SL +10%, size −20% | `narrative_config` |
-| Liquidity regime | Per signal | SL +15/30%, size −15/30%, halt | `liquidity_config` |
+| Liquidity regime | Per signal | THIN: SL +15%, size −15% (soft) |
+| | | STRESSED: SL +30%, size −30%, hard halt | `liquidity_config` |
 | PSI drift | Per cycle | Validity penalty, halt at 3+ SEVERE | — |
 | Portfolio drawdown | Per cycle | Circuit breaker at −15% | `portfolio_drawdown_limit` |
 
@@ -396,7 +408,7 @@ Where:
 
 ### Post-entry adjustments
 - Trailing stop: `_trailing_initial_barriers()` delegates to `_atr_barriers()` for SL, then adjusts
-- `trailing_activation_mult = 2.0` — trailing activates at 2× SL distance from entry
+- `trailing_activation_mult` and `trailing_distance_mult` are per-asset from `configs/paper_trading.yaml` (ranges: activation 0.3–1.0, distance 0.5–1.5)
 
 ---
 

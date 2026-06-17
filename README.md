@@ -57,7 +57,7 @@ State Persistence + Replay
 
 # Current Portfolio
 
-21 assets promoted from the research universe via expanding-window walk-forward. Per-asset SL/TP/max_depth calibrated via grid sweep.
+21 assets promoted from the research universe via expanding-window walk-forward. Per-asset SL/TP/max_depth calibrated via grid sweep. Values sourced from `configs/paper_trading.yaml`.
 
 | Asset      | Ticker       | sl_mult | tp_mult | Allocation | max_depth |
 | ---------- | ------------ | ------- | ------- | ---------- | --------- |
@@ -152,7 +152,7 @@ Ensemble:      60% base P(LONG) + 40% regime P(LONG)
 ```
 
 ### Base Model
-Per-asset `binary:logistic` classifier trained on 13 alpha features (12 standard + 1 COT flag).
+Per-asset `binary:logistic` classifier trained on 13 alpha features (9 per-asset + 4 cross-asset, includes COT flag).
 Uses `scale_pos_weight` = imbalance ratio to correct the label skew.
 Saved to `paper_trading/models/{ASSET}_model.json`.
 
@@ -160,14 +160,16 @@ Saved to `paper_trading/models/{ASSET}_model.json`.
 Second `binary:logistic` classifier trained on the same alpha features **plus** 7 regime
 features (hurst, kaufman_er, adx, vol_zscore, compression, utc_hour, session_vol_profile).
 Generates a separate P(LONG) conditioned on market regime context.
-Saved to `models/regime/{ASSET}_regime.json`.
+Saved to `models/regime/{ASSET}_regime.json`. Requires `scripts/train_regime_models.py` to generate.
 
 ### Ensemble Blend
-At inference time the two P(LONG) values are blended:
+When regime models exist, the two P(LONG) values are blended at inference:
 `P(LONG)_final = 0.6 × P(LONG)_base + 0.4 × P(LONG)_regime`
 
 The ensemble threshold (±0.075 around 0.5) determines the neutral band. P(LONG) > 0.575 →
 BUY, < 0.425 → SELL, else FLAT.
+
+Ensemble is configured programmatically per-asset (not globally gated). Base model only is used when no regime model is loaded.
 
 No shared multi-asset model exists.
 
@@ -180,7 +182,7 @@ Three feature sets feed the inference pipeline: alpha, regime, and archetype.
 ## Alpha Features
 
 Built in `features/alpha_features.py:build_alpha_features()`.
-13 features per asset (12 standard + 1 COT flag):
+13 features per asset (9 per-asset + 4 cross-asset):
 
 | Feature | Description |
 |---------|-------------|
@@ -189,10 +191,10 @@ Built in `features/alpha_features.py:build_alpha_features()`.
 | `{ASSET}_mom_63d` | 63-day momentum |
 | `{ASSET}_mom_126d` | 126-day momentum |
 | `{ASSET}_mom_252d` | 252-day momentum |
-| `{ASSET}_zscore_20` | 20-day z-score |
+| `{ASSET}_zscore_20` | 20-day z-score vs SMA |
 | `{ASSET}_vol_ratio` | Short/long-term vol ratio |
 | `{ASSET}_dow_signal` | Day-of-week encoding |
-| `{ASSET}_has_cot` | COT data availability flag (zero-filled for unlisted pairs) |
+| `{ASSET}_has_cot` | COT data availability flag (zero-filled for pairs not in CFTC data) |
 | `dxy_mom_21d` | DXY 21-day return |
 | `vix_mom_5d` | VIX 5-day return |
 | `spx_mom_5d` | SPX 5-day return |
@@ -482,13 +484,16 @@ tests/                        # Test suite
 * MT5 bridge primary data source (with yfinance fallback)
 * MT5 bridge requires Wine on Linux
 * Some FX crosses may produce incomplete first-cycle bars
-* Macro data sourced entirely from Yahoo Finance
+* Macro data sourced from Yahoo Finance (DXY, VIX, SPX, WTI, TNX)
 * Dashboard requires `yarn build` after asset list changes
 * MT5 bridge is single-threaded — concurrent requests are serialized via RLock
 * **GBPNZD** fails on `DX-Y.NYB` (DXY) data availability for certain MT5 brokers —
   trades without that macro feature; consider zero-fill or exclude from go-live
 * **AUDNZD ensemble** degraded signal quality in the pilot (IC -0.020);
   candidate for per-asset ensemble disable if paper trading confirms weakness
+* **THIN liquidity regime** is a soft warning (SL/size adjustment, no halt);
+  only **STRESSED** liquidity regime halts trading
+* **Confidence drift** halt requires 10+ signals for stable mean estimate (up from 3)
 
 ---
 

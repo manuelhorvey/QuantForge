@@ -3,15 +3,15 @@
 Seven independent governance mechanisms operating at different frequencies and granularities.
 
 | Layer | Frequency | Scope | Effect |
-|---|---|---|---|---|
+|---|---|---|---|
 | Validity state machine | Per tick | Per asset | Exposure 0–100% |
 | Feature stability | Per retrain | Per asset | Validity penalty |
 | Meta-labeling (XGBoost) | Per signal | Per asset | Continuous size scalar [0–1] |
-| 5D drift monitoring | Per tick | Per asset | Alert |
-| Shadow risk engine | Per tick | Per asset | Advisory |
 | Macro narrative | Weekly | Global | SL width, position size |
-| Liquidity regime | Per signal | Per asset | SL width, size, halt |
+| Liquidity regime | Per signal | Per asset | THIN: SL +15%, size −15% (soft)
+STRESSED: SL +30%, size −30%, halt |
 | PSI drift | Per cycle | Per asset | Validity penalty, halt at 3+ SEVERE |
+| Portfolio drawdown | Per cycle | Global | Circuit breaker at −15% |
 
 ## 1. Validity State Machine
 
@@ -49,21 +49,7 @@ A secondary confidence filter applied after the primary XGBoost signal:
 
 **Historical note:** An earlier LogisticRegression implementation (`shared/meta_labeling.py`) was superseded after AUC 0.49-0.55 validation (effectively random). The file remains on disk but is not used in production — all live meta-labeling runs through the XGBoost path in `labels/meta_labels.py`. The XGBoost replacement uses richer features and continuous sizing to avoid the hard ENTER/BLOCK switching that made the old approach fragile.
 
-## 4. 5D Drift Monitoring
-
-- Model drift (KL divergence)
-- Signal flip rate
-- PnL MAE
-- Feature set Jaccard similarity
-- Regime consistency score
-
-## 5. Shadow Risk Engine
-
-- `risk_governance.py` — Real-time risk evaluation (composite risk score, exposure multiplier)
-- `shadow_actions.py` — Corrective action recommendations (PAUSE / REDUCE / MONITOR)
-- Advisory layer — computed but not enforced (validity state machine is the enforcement layer)
-
-## 6. Macro Narrative Governance (Weekly)
+## 4. Macro Narrative Governance (Weekly)
 
 Weekly LLM-driven macro context overlay that adjusts execution parameters based on FXStreet analysis:
 
@@ -81,7 +67,7 @@ Weekly LLM-driven macro context overlay that adjusts execution parameters based 
 - **Config**: `configs/paper_trading.yaml` → `narrative_config` section
 - **Requires**: `OPENCODE_ZEN_API_KEY` env var
 
-## 7. Liquidity Regime Model (Per-Tick)
+## 5. Liquidity Regime Model (Per-Tick)
 
 Real-time liquidity proxy computed from daily OHLCV on every signal cycle:
 
@@ -97,7 +83,7 @@ Real-time liquidity proxy computed from daily OHLCV on every signal cycle:
 - **Dashboard**: LIQ THIN (yellow) / LIQ STRSD (red) badge in header with per-asset hover tooltip
 - **Config**: `configs/paper_trading.yaml` → `liquidity_config` section with threshold and pct params
 
-## 8. PSI Drift Monitoring (Per-Cycle)
+## 6. PSI Drift Monitoring (Per-Cycle)
 
 Automated distribution shift detection per feature per asset:
 

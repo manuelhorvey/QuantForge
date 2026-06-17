@@ -23,7 +23,7 @@ It is NOT a directional prediction system. It does NOT attempt to forecast price
 ### What the system does NOT do
 
 - Does NOT predict price direction with consistent accuracy across all assets
-- Does NOT use ensemble/regime routing in production (disabled by default)
+- Does NOT use ensemble/regime routing by default — enabled per-asset when regime models are trained and loaded
 - Does NOT use FRED macro data in the live pipeline
 - Does NOT operate with live capital (paper trading only)
 - Does NOT deploy every screened ticker (approximately 13 of 36+ screened RED, not promoted)
@@ -191,13 +191,13 @@ Rate_diffs are simulated from TNX yield with noise. All indices normalized to TZ
 ### 4.4 Model Training
 
 **Algorithm**: XGBoost `binary:logistic`
-**Architecture**: Single binary XGBoost per asset (no ensemble, no routing)
+**Architecture**: Single binary XGBoost per asset (ensemble + regime model optional, enabled when regime model is trained and loaded)
 **Hyperparameters**:
 
 | Parameter | Value |
 |---|---|
 | n_estimators | 300 |
-| max_depth | 2 |
+| max_depth | per-asset (2–5, from `configs/paper_trading.yaml`) |
 | learning_rate | 0.02 |
 | objective | `binary:logistic` |
 | random_state | 42 |
@@ -209,8 +209,8 @@ Rate_diffs are simulated from TNX yield with noise. All indices normalized to TZ
 **Serialization**: `model.save_model(path)` → `.json` format
 **Post-training**:
 - PSI baseline persist
-- Optional meta-label model (XGBoost)
-- Optional regime-conditional model (disabled by default)
+- Meta-label model (XGBoost)
+- Regime-conditional model (trained via `scripts/train_regime_models.py`, enables 60/40 ensemble blend)
 - Feature importance + stability logging
 
 ### 4.5 Model Files
@@ -242,9 +242,9 @@ Format: XGBoost `.json` (not pickle)
     if raw.shape[1] == 2:  # binary model
         proba = np.column_stack([1.0 - raw[:,1], zeros, raw[:,1]])
     ```
-13. Optional regime ensemble blend (disabled unless `ensemble.enabled: true`)
-14. Optional meta-label inference
-15. `FixedThresholdStrategy(threshold=0.45)` → SignalType (BUY/SELL/FLAT)
+11. Regime ensemble blend (60/40, active if regime model exists and feature names align)
+12. Meta-label inference (XGBoost, continuous size scalar)
+13. `FixedThresholdStrategy(threshold=0.45)` → SignalType (BUY/SELL/FLAT)
 16. Archetype classification → `TradeDecision(close_price, confidence, probs, ...)`
 17. DiagnosticsSnapshot enqueues model/feature snapshots off hot path via async daemon consumer (8 heavy imports removed from inference thread)
 18. `_apply_decision()` → EntryOptimizer → ExecutionPolicyLayer → PositionManager
@@ -283,7 +283,7 @@ Computed from OHLCV feature vector (no model inference):
 |---|---|---|---|---|---|
 | GC | GC=F | 7.0% | 1.00 | 4.00 | 2 |
 | USDCHF | USDCHF=X | 4.0% | 0.85 | 3.00 | 4 |
-| AUDCHF | AUDCHF=X | 5.0% | 2.75 | 3.50 | 2 |
+| AUDCHF | AUDCHF=X | 5.0% | 2.75 | 3.50 | 3 |
 | USDCAD | USDCAD=X | 5.0% | 2.50 | 2.03 | 5 |
 | ES | ES=F | 7.0% | 2.00 | 5.50 | 2 |
 | NQ | NQ=F | 7.0% | 2.50 | 5.00 | 2 |
@@ -291,13 +291,13 @@ Computed from OHLCV feature vector (no model inference):
 | GBPNZD | GBPNZD=X | 5.0% | 3.00 | 1.00 | 3 |
 | NZDCAD | NZDCAD=X | 5.0% | 2.50 | 4.00 | 2 |
 | ^DJI | ^DJI | 4.0% | 0.50 | 4.00 | 4 |
-| EURUSD | EURUSD=X | 4.0% | 3.00 | 1.50 | 3 |
+| EURUSD | EURUSD=X | 4.0% | 3.00 | 1.50 | 4 |
 | NZDUSD | NZDUSD=X | 5.0% | 2.50 | 1.50 | 5 |
-| GBPAUD | GBPAUD=X | 5.0% | 1.00 | 2.00 | 2 |
+| GBPAUD | GBPAUD=X | 5.0% | 1.00 | 2.00 | 3 |
 | NZDCHF | NZDCHF=X | 7.0% | 1.00 | 4.00 | 2 |
 | CADCHF | CADCHF=X | 5.0% | 1.00 | 4.00 | 2 |
 | AUDUSD | AUDUSD=X | 4.0% | 1.50 | 4.00 | 2 |
-| AUDNZD | AUDNZD=X | 3.0% | 2.00 | 1.00 | 2 |
+| AUDNZD | AUDNZD=X | 3.0% | 2.00 | 1.00 | 3 |
 | EURCHF | EURCHF=X | 5.0% | 1.00 | 3.00 | 4 |
 | EURCAD | EURCAD=X | 2.0% | 1.00 | 1.00 | 3 |
 | EURNZD | EURNZD=X | 3.0% | 1.50 | 2.50 | 3 |
@@ -331,8 +331,8 @@ final_size = base × governance_scalar × meta_confidence_scalar
 ### 7.1 Sources
 | Source | Data | Notes |
 |---|---|---|
-| yfinance | Daily OHLCV for all assets | Single source of truth |
-| yfinance | DXY (DX-Y.NYB), VIX (^VIX), SPX (^GSPC), WTI (CL=F), TNX (^TNX) | Macro via yfinance only |
+| MT5 (primary) / yfinance (fallback) | Daily OHLCV for all assets | MT5 bridge with yfinance fallback |
+| yfinance | DXY (DX-Y.NYB), VIX (^VIX), SPX (^GSPC), WTI (CL=F), TNX (^TNX) | Macro data |
 | FRED | Not used in production | Historical research only |
 
 ### 7.2 Index Convention
@@ -406,7 +406,7 @@ In-memory TTL cache per download type:
 1. **Paper trading only** — no live capital execution
 2. **Yahoo Finance single source** — all data via yfinance, including macro
 3. **FX cross price NaN on first cycle** — incomplete daily bar; resolves after next cycle with full bar
-4. **Ensemble disabled** — `ensemble.enabled: false` in config; experimental feature
+4. **Ensemble per-asset** — 60/40 blend active when regime model exists; not globally gated
 5. **13/34 tickers RED** — not promoted; reflects weak IC for most FX pairs
 6. **No FRED** — macro derived from yfinance tickers only; no FRED API dependency in production
 7. **JPY/CHF cross TZ issue** — fixed via UTC normalization + index deduplication in pipeline

@@ -75,9 +75,9 @@ Monitoring & Attribution
 ┌─────────────────────────────────────────────────────────────────────┐
 │                    MODEL TRAINING                                   │
 │                                                                     │
-│  fetch_asset_data()                                                 │
+│  fetch_asset_data() + fetch_asset_ohlcv()                            │
 │      ↓                                                              │
-│  build_features() (per-asset from FEATURE_REGISTRY)                 │
+│  build_alpha_features() + generate_regime_features()                │
 │      ↓                                                              │
 │  triple_barrier_labels()                                            │
 │      ↓                                                              │
@@ -85,7 +85,7 @@ Monitoring & Attribution
 │      ↓                                                              │
 │  XGBoost binary:logistic (per-asset max_depth)                      │
 │      ↓                                                              │
-│  model persistence + PSI baseline                                   │
+│  model persistence + PSI baseline + regime model training           │
 └─────────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -196,8 +196,9 @@ persist model + PSI baseline
 | Trees         | 300               |
 | Max Depth     | per-asset (2–5)   |
 | Learning Rate | 0.02              |
+| Scale Pos Weight | Imbalance ratio (n_neg/n_pos) |
 
-Per-asset max_depth from `configs/paper_trading.yaml`. No shared multi-asset model exists.
+Per-asset max_depth from `configs/paper_trading.yaml`. Regime model: 200 trees, LR=0.03, depth=2. No shared multi-asset model exists.
 
 ---
 
@@ -208,21 +209,21 @@ The live engine executes every 300 seconds.
 ## Runtime Pipeline
 
 ```text
-1. Fetch 500d OHLCV
-2. Normalize timestamps
-3. Refresh latest price
-4. Fetch macro data
-5. Build features (per-asset from FEATURE_REGISTRY)
-6. Fetch full OHLCV
-7. Compute archetype features
+1. Fetch 5y OHLCV (MT5 or yfinance)
+2. Normalize timestamps (UTC TZ-naive)
+3. Refresh latest price (MT5 or 5d fallback)
+4. Build alpha features (9 per-asset + 4 cross-asset)
+5. Generate regime features from OHLCV (7 cols)
+6. Compute archetype features (ema_spread, adx, rsi, bb_zscore)
+7. PSI drift check (rolling 21d vs baseline, skipped first cycle)
 8. Validate inference truncation
-9. Validate model hot-swap integrity
-10. Run XGBoost inference
-11. Expand binary probabilities
-12. Apply threshold strategy (THR=0.45)
-13. Generate TradeDecision
-14. Route through governance
-15. Execute position lifecycle
+9. Run XGBoost inference → 3-col proba expansion
+10. Regime ensemble blend (60/40, if regime model exists)
+11. Meta-label inference (optional, XGBoost)
+12. FixedThresholdStrategy(0.45) → BUY/SELL/FLAT
+13. Archetype classification → TradeDecision
+14. Route through governance (7 layers)
+15. Execute position lifecycle (open/close/flip/trailing)
 ```
 
 ---
@@ -235,13 +236,13 @@ QuantForge uses independently configurable governance layers with worst-wins agg
 
 | Layer                  | Scope      | Effect                    |
 | ---------------------- | ---------- | ------------------------- |
-| Exposure state machine | Per asset  | Exposure scaling          |
+| Validity state machine | Per asset  | Exposure 0–100%           |
 | Feature stability      | Per asset  | Validity penalties        |
-| Meta-labeling          | Per signal | Position scalar           |
-| Macro regime overlay   | Global     | Exposure + SL adjustments |
-| Liquidity regime       | Per asset  | Throttling + halts        |
-| PSI drift monitor      | Per asset  | Penalties + halts         |
-| Portfolio drawdown     | Global     | Portfolio throttling      |
+| Meta-labeling (XGBoost)| Per signal | Size scalar [0–1]         |
+| Macro narrative        | Global     | SL +10%, size −20%        |
+| Liquidity regime       | Per asset  | THIN: soft adjust, STRESSED: halt |
+| PSI drift              | Per asset  | Penalties + halt at 3+ SEVERE |
+| Portfolio drawdown     | Global     | Circuit breaker at −15%   |
 
 ---
 
@@ -342,13 +343,17 @@ Each asset executes independently. Failures in data ingestion, inference, govern
 
 | Action                    | Command                                       |
 | ------------------------- | --------------------------------------------- |
-| Walk-forward screening    | `python backtests/trade_analysis.py`          |
+| Start engine + dashboard  | `./monitor_all`                               |
+| Run engine only           | `python -m paper_trading.ops.monitor`         |
+| Retrain all assets        | `python scripts/retrain_all_fixed.py`         |
+| Train regime models       | `python scripts/train_regime_models.py`       |
+| Walk-forward backtest     | `python scripts/walk_forward_backtest.py`     |
 | Score tickers             | `python scripts/score_tickers.py`             |
 | Generate promotion report | `python scripts/generate_promotion_report.py` |
-| Start engine + dashboard  | `./monitor_all`                               |
-| Retrain all assets        | `python scripts/train_all_assets.py`          |
+| Daily monitoring          | `python scripts/monitor_paper_trading.py`     |
 | Run microbenchmark        | `python benchmarks/microbenchmark.py`         |
 | Run tests                 | `pytest tests/ -q --tb=short`                 |
+| Lint                      | `ruff check . && ruff format .`               |
 
 Dashboard URL: http://127.0.0.1:5000
 
@@ -357,9 +362,11 @@ Dashboard URL: http://127.0.0.1:5000
 # Known Constraints
 
 * Paper trading only (MT5 Exness demo — no live capital)
-* Ensemble disabled by default
+* Ensemble per-asset (active when regime model exists, not globally gated)
 * Some FX crosses may produce incomplete first-cycle bars
-* Macro data sourced entirely from Yahoo Finance
+* Macro data sourced from Yahoo Finance (DXY, VIX, SPX, WTI, TNX)
+* THIN liquidity regime is soft warning (SL/size adjust, no halt); only STRESSED halts
+* Confidence drift halt requires 10+ signals for stable mean estimate
 
 ---
 

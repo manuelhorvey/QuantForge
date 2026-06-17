@@ -84,6 +84,8 @@ curl http://127.0.0.1:5000/state.json | python3 -m json.tool
 - **AUDNZD ensemble**: Ensemble degrades signal quality (IC -0.020 in pilot). Monitor during paper trading; disable per-asset if confirmed.
 - **Futures (ES, NQ, GC, ^DJI)**: OHLCV-dependent features (regime) require `fetch_asset_ohlcv()` which works on all assets.
 - **SL/TP triple bug (FIXED 2026-06-16)**: Three independent issues (deactivated `atr_mult_tp`, uncalibrated `atr_mult_sl`, TP compiler convexity applied to inflated SL distance) produced TP distances up to 44%. Fixes: (1) `_atr_barriers()` now uses `atr_mult_tp` for TP vol basis, (2) `tp_compiler.py` caps R:R at `MAX_RR=5.0`. Restarted engine post-fix.
+- **THIN liquidity (FIXED 2026-06-17)**: THIN regime was routing to hard_reasons (halted all assets). Fixed: only STRESSED halts; THIN → soft_warnings (SL/size adjust, no halt).
+- **Prob drift min samples (FIXED 2026-06-17)**: Raised from 3 to 10 for stable mean estimate before confidence drift halt check activates.
 
 ## Ruff
 
