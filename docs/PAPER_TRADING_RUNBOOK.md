@@ -142,6 +142,19 @@ config:
   max_holding_days: 30    # Force-close after N calendar days (reason: time_stop)
 ```
 
+### Position Sizing Guardrail Config (Global Defaults)
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `max_position_pct_of_equity` | 15% | Per-position notional cap as % of total equity |
+| `max_risk_per_trade_pct` | 2.0% | Max SL risk per trade as % of equity |
+| `min_viable_position_pct` | 1.0% | Min viable position notional; skip if risk cap shrinks below this |
+| `size_taper_start_dd` | -5% | Drawdown starts tapering size at this level |
+| `size_taper_end_dd` | -15% | Drawdown hits min_size at this level |
+| `size_taper_min` | 50% | Minimum size multiplier when drawdown exceeds end_dd |
+| `portfolio_max_leverage` | 2.0x | Max portfolio notional leverage against equity |
+| `portfolio_leverage_tolerance` | 0.1% | Tolerance factor for backstop floating-point comparison |
+
 ---
 
 ## 1. Daily Procedure
@@ -514,7 +527,35 @@ curl http://127.0.0.1:5000/psi.json | python3 -m json.tool
 - SEVERE drift on 1-2 features: Monitor. Check if trend is INCREASING (genuine drift) or STABLE (possible data glitch).
 - SEVERE drift on 3+ features: Asset is halted by the engine. Investigate root cause — feature distribution shift may indicate a structural regime change or data pipeline issue.
 
-### 3.7 Data Feed Failure
+### 3.7 Guardrail Events (Diagnostic)
+
+The position sizing guardrails log their decisions. Monitor these in engine output:
+
+**`SIZING <asset>: eff_cap=... base=... exp=... gov=... meta=... dd=... pos_cap=... risk_cap=... lev_budget=... -> final_not=... qty=...`**
+
+Decomposed factors (paper sizing attribution):
+- `eff_cap` — effective capital (base × min(growth, 3×))
+- `base` — position_size scalar
+- `exp` — exposure_multiplier
+- `gov` — governance-derived portion (effective_cap × size_scalar / (position_size × exposure))
+- `meta` — meta-confidence multiplier
+- `dd` — drawdown taper multiplier
+- `pos_cap` — max_position_pct_of_equity cap (absolute USD)
+- `risk_cap` — max_risk_per_trade_pct cap (absolute USD)
+- `lev_budget` — remaining leverage budget (absolute USD)
+- `final_not` — final notional after all caps
+- `qty` — final quantity
+
+**`MT5_SIZING <asset>: equity=... dd=... max_pct=... risk_cap=... min_viable=... -> final_not=... qty=...`**
+
+Same decomposed factors, sized against real broker equity.
+
+**Guardrail skip reasons:**
+- `risk cap would shrink position below min viable` — risk cap clipped below min_viable_position_pct
+- `leverage budget exhausted` — portfolio leverage pool drained
+- `below min volume` — MT5 qty converts to 0 lots (below broker min_volume)
+
+### 3.8 Data Feed Failure
 
 If yfinance returns empty or stale data for any ticker:
 
@@ -651,6 +692,19 @@ Items to build after paper trading confirms the system works.
 ## 6. Execution Physics and Sizing (Hardening)
 
 Live paper trading applies **spread + impact** on entries and exits via `ExecutionBridge` (`paper_trading/execution/bridge.py`). Slippage and impact parameters are configured per-asset within `configs/paper_trading.yaml`.
+
+**Position sizing guardrails** (applied multiplicatively in `entry_service.py:_submit_to_broker()`):
+
+```
+effective_cap × position_size × exposure × governance × meta × drawdown_taper
+  → cap by max_position_pct_of_equity
+  → cap by max_risk_per_trade_pct (skip if below min_viable_position_pct)
+  → atomically decrement from portfolio leverage budget
+```
+
+Paper logs decomposed factors via `SIZING` line; MT5 logs via `MT5_SIZING` line (independent sizing from real broker equity).
+
+**MT5 independent sizing**: `_compute_mt5_qty()` in `entry_service.py` fetches the real broker equity, applies drawdown taper + risk cap, validates against broker min_volume, and submits with the MT5-computed lot size (independently of paper's position size).
 
 **Volatility dashboard** (`/volatility.json`) compares live vol to rolling baselines.
 

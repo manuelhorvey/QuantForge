@@ -132,9 +132,20 @@ Linux Host                          Wine Prefix
 
 QuantForge tickers (e.g. `GC=F`) are mapped to MT5 symbols (e.g. `XAUUSD`) via `configs/mt5_symbol_map.yaml`.
 
-## Capital Sync
+## Capital Sync & Independent Sizing
 
-When MT5 is enabled, each engine cycle syncs internal capital bases to the live Exness account equity. Position sizing uses the real account balance.
+Paper and MT5 equity are tracked independently. Paper sizing always uses the simulation's mtm_value ($100K initial capital), tracking its own peak equity and drawdown. MT5 sizing independently queries the real broker account balance at submission time for its own position size computation.
+
+Paper and MT5 positions are sized through separate guardrail chains:
+
+| Guardrail | Paper | MT5 (independent) |
+|-----------|-------|--------------------|
+| Equity basis | `sum(asset.mtm_value)` (~$100K) | `broker.get_account_summary().portfolio_value` (~$107) |
+| Drawdown taper | Paper peak equity drawdown | MT5Broker._peak_equity drawdown |
+| Per-position cap | `min(notional, max_position_pct × equity)` | Same formula with MT5 equity |
+| Risk-per-trade cap | `risk ≤ max_risk_pct × equity`; skip if below min_viable | Same with MT5 equity |
+| Leverage budget | Atomic lock decrement from shared pool | Deferred (0.01 lot minimum makes desired-vs-actual diverge) |
+| Backstop multiplier | EngineOrchestrator Phase 3 | Not applied (MT5 too small) |
 
 ---
 
@@ -260,7 +271,7 @@ ExecutionPolicyLayer
       ↓
 _can_enter()  (single entry authority)
       ↓
-PositionManager
+PositionManager → Position Sizing Chain
       ↓
 Attribution Engine
 ```
@@ -269,9 +280,23 @@ Orders route through either:
 - **PaperBroker** — simulated fills with slippage and market impact
 - **MT5Broker** — live Exness demo via Wine bridge
 
+## Entry Gates
+
 Two additional gates protect entry quality and existing winners:
 - **Entry price deviation gate** (`entry_service.py`): before submitting to MT5, compares current market price to the signal's reference price. If deviation exceeds `max_entry_slippage_pct` (default 2%), the entry is skipped — prevents entering far from the signal price due to gaps, reconnects, or execution lag.
 - **Profit lock gate** (`decision_pipeline.py`): before flipping a position, checks unrealized PnL. If it exceeds `profit_lock_threshold_pct` (default 15%), the flip is blocked — lets SL/TP/trailing stop manage the exit instead of closing a winner for a new signal.
+
+## Position Sizing Guardrails
+
+Paper positions pass through a multiplicative guardrail chain in `_submit_to_broker()`:
+
+1. **Drawdown taper** — linear taper from 1.0 to `size_taper_min` (default 50%) between `size_taper_start_dd` (-5%) and `size_taper_end_dd` (-15%)
+2. **Per-position equity cap** — notional clipped to `max_position_pct_of_equity` (default 15%) of total equity
+3. **Risk-per-trade cap** — SL risk capped at `max_risk_per_trade_pct` (default 2%) of equity; entry skipped if capped below `min_viable_position_pct` (default 1%)
+4. **Portfolio leverage budget** — atomic lock-decremented from `portfolio_max_leverage × equity` pool; skip on exhaustion
+5. **Backstop multiplier** — Phase 3 catch: ratchets down on notional breach, decays 0.9/cycle otherwise
+
+MT5 positions run the same chain independently using real broker equity (minus the leverage budget). Both paths log decomposed factors (`SIZING` and `MT5_SIZING`).
 
 ## Key Invariants
 
@@ -307,6 +332,9 @@ QuantForge uses independently configurable governance layers with worst-wins agg
 | Portfolio drawdown         | Global      | Portfolio | Global throttling                   |
 | Entry price deviation gate | Per entry   | Per asset | Skips entry if price drifted >2%    |
 | Profit lock gate           | Per flip    | Per asset | Blocks flip if PnL >15%             |
+
+Plus position sizing guardrails (see Execution Architecture above) — drawdown taper,
+per-position cap, risk-per-trade cap, portfolio leverage budget, backstop multiplier.
 
 ---
 
@@ -500,6 +528,10 @@ tests/                        # Test suite
 * **THIN liquidity regime** is a soft warning (SL/size adjustment, no halt);
   only **STRESSED** liquidity regime halts trading
 * **Confidence drift** halt requires 10+ signals for stable mean estimate (up from 3)
+* **Small MT5 account** ($107 demo) means MT5 positions always round to 0.01 lots
+  minimum — desired-vs-actual notional drifts upward. MT5 leverage budget deferred
+* **Paper/MT5 sizing divergence** is expected — paper simulates $100K equity,
+  MT5 executes on $107. Two independent sizing chains, no overlap
 
 ---
 

@@ -301,16 +301,74 @@ CHFJPY, CADJPY, CL, USDJPY, BTCUSD, EURGBP, EURJPY, GBPUSD, GBPJPY, AUDCAD, NZDJ
 
 ---
 
-## 10. POSITION SIZING CONTRACT
+## 10. POSITION SIZING CONTRACT (PAPER EQUITY)
 
-**Strategy:** Risk-parity weights via `configs/paper_trading.yaml`
-**Capital utilization cap:** `position_size` (default 0.95)
+Paper positions are sized independently from MT5 positions. Paper sizing uses the
+simulation's mtm_value ($100K capital) and its own drawdown peak.
+
 **Size scalar chain:**
 ```
-final_size = base × governance_scalar × meta_confidence_scalar
+effective_cap = capital_base × min(current_value / initial_capital, 3.0)
+size_scalar = position_size × exposure_multiplier × governance_size_scalar
+              × meta_size_multiplier × drawdown_taper
+notional = effective_cap × size_scalar
+
+1. Per-position equity cap: notional = min(notional, max_position_pct_of_equity × total_equity)
+2. Risk-per-trade cap:     risk = |entry - stop_loss| × (notional / entry_price)
+                            if risk > max_risk_per_trade_pct × total_equity:
+                              cap notional; skip if capped below min_viable_position_pct × total_equity
+3. Leverage budget:        atomic decrement from shared pool (lock-protected)
+                            if remaining budget < 0: skip
+                            notional = min(notional, remaining)
 ```
-- Governance scalar: validity state machine (GREEN=1.0, YELLOW=0.5, RED=0.0)
-- Meta-confidence scalar: `_meta_size_multiplier()` maps [threshold, 1.0] → [min_size, 1.0]
+
+**Drawdown taper:**
+```
+if dd_pct >= start_dd:  taper = 1.0
+if dd_pct <= end_dd:    taper = min_size
+else:                   linear interpolation between start_dd and end_dd
+```
+Config keys: `size_taper_start_dd` (default -0.05), `size_taper_end_dd` (default -0.15),
+`size_taper_min` (default 0.50).
+
+**Leverage budget (portfolio-level):**
+```
+leverage_budget = portfolio_max_leverage × total_equity × backstop_multiplier
+```
+Allocated per-cycle via atomic lock decrement per asset. Backstop multiplier is tracked
+by `EngineOrchestrator`: decays ×0.9 toward 1.0 on breach-free cycles; ratchets down
+when Phase 3 detects breach against `fair_budget = max_leverage × equity`.
+
+**Backstop Phase 3:**
+```
+total_entered = sum(asset._last_entry_notional) across all actors
+fair_budget = max_leverage × peak_equity
+if total_entered > fair_budget × (1 + tolerance):
+    backstop_multiplier = min(backstop_multiplier, fair_budget / total_entered)
+```
+Correction uses `fair_budget` (unmodified by backstop_multiplier) to prevent
+feedback-loop decay toward zero.
+
+### 10a. MT5 INDEPENDENT SIZING CONTRACT
+
+MT5 positions are sized independently from paper, using the real broker account equity.
+
+**MT5 sizing chain (per entry, in `_compute_mt5_qty()`):**
+```
+1. broker.get_account_summary().portfolio_value → mt5_equity
+2. current_mt5_drawdown_pct() → taper via drawdown_taper()
+3. notional = mt5_equity × max_position_pct_of_equity × drawdown_taper
+4. risk cap: similar to paper, capped at max_risk_per_trade_pct × mt5_equity
+5. min viable: skip if capped notional < min_viable_position_pct × mt5_equity
+6. min volume: _quantity_to_lots() validates against broker min_volume; skip if 0
+```
+
+MT5 does NOT share the paper leverage budget (deferred — 0.01 lot minimum makes
+desired-vs-actual notional diverge wildly for small accounts).
+
+**MT5 drawdown tracking:**
+- `MT5Broker._peak_equity` updated on every `get_account_summary()` call
+- `MT5Broker.current_mt5_drawdown_pct()` returns negative fraction from peak
 
 ---
 
@@ -332,20 +390,30 @@ final_size = base × governance_scalar × meta_confidence_scalar
 
 ## 12. GOVERNANCE CONTRACT
 
-Nine layered governance mechanisms (7 existing + 2 entry gates), each independently configurable:
+Nine layered governance mechanisms plus position sizing guardrails, each independently configurable:
 
 | Layer | Frequency | Effect | Config key |
-|---|---|---|---|
+|---|---|---|---|---|
 | Validity state machine | Per tick | Exposure 0–100% | `halt.*` |
 | Feature stability | Per retrain | Validity penalty | — |
 | Meta-labeling (XGBoost) | Per signal | Size scalar [0–1] | `meta_labeling` |
 | Macro narrative | Weekly | SL +10%, size −20% | `narrative_config` |
-| Liquidity regime | Per signal | THIN: SL +15%, size −15% (soft) |
-| | | STRESSED: SL +30%, size −30%, hard halt | `liquidity_config` |
+| Liquidity regime | Per signal | THIN: SL +15%, size −15% (soft) | `liquidity_config` |
+| | | STRESSED: SL +30%, size −30%, hard halt | |
 | PSI drift | Per cycle | Validity penalty, halt at 3+ SEVERE | — |
 | Portfolio drawdown | Per cycle | Circuit breaker at −15% | `portfolio_drawdown_limit` |
-| Entry price deviation | Per entry | Skips entry if price moved > `max_entry_slippage_pct` since signal (default 2%) | `max_entry_slippage_pct` |
-| Profit lock | Per flip | Blocks flip if unrealized PnL > `profit_lock_threshold_pct` (default 15%) | `profit_lock_threshold_pct` |
+| Entry price deviation | Per entry | Skips entry if price moved > `max_entry_slippage_pct` (def 2%) | `max_entry_slippage_pct` |
+| Profit lock | Per flip | Blocks flip if unrealized PnL > `profit_lock_threshold_pct` (def 15%) | `profit_lock_threshold_pct` |
+
+**Position sizing guardrails (multiply into final notional):**
+
+| Guardrail | Scope | Effect | Config keys |
+|-----------|-------|--------|-------------|
+| Drawdown taper | Per asset | Linear taper from 1.0 to min_size between start_dd and end_dd | `size_taper_start_dd`, `size_taper_end_dd`, `size_taper_min` |
+| Per-position equity cap | Per entry | Clip notional to `max_position_pct_of_equity` of total equity | `max_position_pct_of_equity` |
+| Risk-per-trade cap | Per entry | Clip or skip if SL risk > `max_risk_per_trade_pct` of equity | `max_risk_per_trade_pct`, `min_viable_position_pct` |
+| Portfolio leverage budget | Global | Atomic decrement from `max_leverage × equity` pool | `portfolio_max_leverage`, `portfolio_leverage_tolerance` |
+| Backstop multiplier | Global | Ratchets down on breach, decays 0.9/cycle otherwise | (no config — fixed 0.9 decay) |
 
 See `docs/GOVERNANCE_LAYER.md` for full detail.
 
@@ -371,6 +439,8 @@ See `docs/GOVERNANCE_LAYER.md` for full detail.
 
 11. **MT5 order lifecycle symmetry** — Every paper position open has a corresponding MT5 `place_order`; every paper close has a corresponding MT5 `close_position`; every SL/TP adjustment has a corresponding MT5 `modify_position`.
 12. **Paper engine is source of truth** — If an MT5 bridge operation fails (close, modify), the paper engine state is NOT rolled back. The next open cycle will detect the orphaned MT5 position and skip the duplicate order.
+13. **Independent paper/MT5 sizing** — Paper positions are sized from paper mtm_value ($100K capital) with paper-specific drawdown and leverage budget. MT5 positions are sized from the real broker account balance with MT5-specific drawdown. The two sizing paths never interfere.
+14. **No MT5 equity fetch in orchestrator** — The `EngineOrchestrator` does not fetch broker equity. MT5 sizing occurs at submission time (`_submit_mt5_order`) via `_compute_mt5_qty()`. Paper sizing uses the pre-Phase 1 equity snapshot from `sum(asset.mtm_value)`.
 
 ---
 

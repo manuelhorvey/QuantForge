@@ -108,6 +108,14 @@ Monitoring & Attribution
 │  ExecutionPolicyLayer                                               │
 │      ↓                                                              │
 │  PositionManager                                                    │
+│      ↓                                                              │
+│  Position Sizing Guardrails (drawdown taper → equity cap →         │
+│    risk cap → leverage budget → backstop)                          │
+│      ↓                                                              │
+│  EntryService (price deviation gate → submit to broker)            │
+│      ↓                                                              │
+│  PaperBroker / MT5Broker (MT5 gets independent sizing via          │
+│    _compute_mt5_qty with own equity/drawdown)                      │
 │                                                                     │
 │  Async diagnostics run off-thread                                   │
 │  via daemon consumer queue                                          │
@@ -222,15 +230,18 @@ The live engine executes every 300 seconds.
 11. Meta-label inference (optional, XGBoost)
 12. FixedThresholdStrategy(0.45) → BUY/SELL/FLAT
 13. Archetype classification → TradeDecision
-14. Route through governance (7 layers)
-15. Execute position lifecycle (open/close/flip/trailing)
+14. Route through governance (9 layers + sizing guardrails)
+15. Entry price deviation gate (skip if price drifted > max_entry_slippage_pct)
+16. Position sizing chain (drawdown taper → position cap → risk cap → leverage budget → backstop)
+17. Independent MT5 sizing (same chain with real broker equity)
+18. Execute position lifecycle (open/close/flip/trailing)
 ```
 
 ---
 
 # Governance Architecture
 
-QuantForge uses independently configurable governance layers with worst-wins aggregation.
+QuantForge uses independently configurable governance layers with worst-wins aggregation, plus position sizing guardrails.
 
 ## Governance Layers
 
@@ -243,6 +254,22 @@ QuantForge uses independently configurable governance layers with worst-wins agg
 | Liquidity regime       | Per asset  | THIN: soft adjust, STRESSED: halt |
 | PSI drift              | Per asset  | Penalties + halt at 3+ SEVERE |
 | Portfolio drawdown     | Global     | Circuit breaker at −15%   |
+| Entry price deviation  | Per entry  | Skip if price drifted >2% |
+| Profit lock            | Per flip   | Block flip if PnL >15%    |
+
+## Position Sizing Guardrails
+
+Applied multiplicatively in `EntryService._submit_to_broker()`:
+
+| Guardrail | Effect | Config |
+|-----------|--------|--------|
+| Drawdown taper | Linear 1.0→min between start_dd/end_dd | `size_taper_start_dd`, `size_taper_end_dd`, `size_taper_min` |
+| Per-position cap | Clip to `max_position_pct_of_equity` of equity | `max_position_pct_of_equity` |
+| Risk-per-trade cap | Clip or skip if SL risk exceeds `max_risk_per_trade_pct` | `max_risk_per_trade_pct`, `min_viable_position_pct` |
+| Leverage budget | Atomic lock from `max_leverage × equity` pool | `portfolio_max_leverage` |
+| Backstop multiplier | Ratchet-down on breach, 0.9 decay/cycle | (fixed) |
+
+MT5 sizing runs the same chain independently using real broker equity (via `_compute_mt5_qty()`), excluding the leverage budget.
 
 ---
 
