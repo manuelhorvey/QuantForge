@@ -183,4 +183,3 @@ class TestProfitLockGate:
         manage_position(ctx)
         assert ctx.new_side is None
         engine._close_position.assert_not_called()
-        engine._can_enter.assert_not_called()

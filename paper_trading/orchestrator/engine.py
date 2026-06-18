@@ -358,10 +358,13 @@ class EngineOrchestrator:
         # ── Phase A: Drain cleanup queues ──────────────────────────────────
         for name, actor in self._actors.items():
             engine = actor._engine
-            queue = getattr(engine, "_mt5_cleanup_queue", [])
+            db = engine.__dict__
+            queue = db.get("_mt5_cleanup_queue")
+            if queue is None:
+                continue
             if not queue:
                 continue
-            retries = getattr(engine, "_mt5_cleanup_retries", 0)
+            retries = db.get("_mt5_cleanup_retries", 0)
 
             if retries >= self.MAX_CLEANUP_RETRIES:
                 logger.error(
