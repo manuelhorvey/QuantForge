@@ -34,6 +34,7 @@ def trace_decision(
     close_price: float,
     current_side: str | None,
     halt_flags: dict,
+    current_price: float | None = None,
 ) -> None:
     _append(
         {
@@ -49,6 +50,7 @@ def trace_decision(
             "confidence_pct": confidence,
             "position_size": pos_size,
             "close_price": close_price,
+            "current_price": current_price,
             "current_position_side": current_side,
             "halted": halt_flags.get("halted", False),
             "halt_reasons": halt_flags.get("reasons", []),

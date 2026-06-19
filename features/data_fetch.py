@@ -439,7 +439,7 @@ def fetch_asset_data(
     else:
         rate_diff_series = pd.Series(0.0, index=common)
 
-    rate_diffs = pd.DataFrame({asset_name: rate_diff_series}, index=common)
+    rate_diffs = pd.DataFrame({"close": rate_diff_series}, index=common)
 
     commodities = wti.to_frame("WTI")
 

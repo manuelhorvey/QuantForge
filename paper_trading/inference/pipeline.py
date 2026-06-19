@@ -89,6 +89,28 @@ class AssetInferencePipeline:
     def _apply_async_diagnostics(self, asset) -> None:
         get_diagnostics_queue().apply_pending(asset.name, asset)
 
+
+def _detect_bar_jump(asset, bars: int) -> None:
+    """Detect significant bar-count changes and set suppression timer.
+
+    A bar jump indicates a data-source switch (yfinance↔MT5) that
+    contaminates feature vectors.  Suppress trading decisions for
+    60 minutes after detection.
+    """
+    import logging
+    logger = logging.getLogger("quantforge.pipeline")
+    threshold = 100
+    suppress_secs = 3600
+
+    last = getattr(asset, "_last_bar_count", None)
+    if last is not None and abs(bars - last) > threshold:
+        asset._suppress_until = time.time() + suppress_secs
+        logger.warning(
+            "%s: bar jump detected %d→%d (Δ=%d), suppressing decisions for %ds",
+            asset.name, last, bars, bars - last, suppress_secs,
+        )
+    asset._last_bar_count = bars
+
     def _ensure_ready(self, asset) -> None:
         asset._ensure_position_synced()
         if not asset._trained:
@@ -114,6 +136,7 @@ class AssetInferencePipeline:
         from features.data_fetch import fetch_asset_data, fetch_asset_ohlcv, fetch_cot_features
 
         hist_prices, rate_diffs, dxy, vix, spx, commodities = fetch_asset_data(asset.name, asset.ticker)
+        _detect_bar_jump(asset, len(hist_prices))
         cot_data = fetch_cot_features(hist_prices.index)
         if getattr(asset, "_truncate_inference", False):
             _trunc_rows = _MAX_INDICATOR_LOOKBACK + 50
@@ -169,7 +192,20 @@ class AssetInferencePipeline:
             raise ValueError(f"No alpha feature columns found for {asset.name}")
         x = alpha_df[available]
         features_df = pd.concat([alpha_df, archetype_df], axis=1)
+
+        self._detect_risk_off(asset, features_df)
         return alpha_df, features_df, x
+
+    def _detect_risk_off(self, asset, features_df) -> None:
+        if asset.name not in ("AUDUSD", "AUDCHF"):
+            asset._risk_off = False
+            return
+        try:
+            vix_mom = features_df["vix_mom_5d"].iloc[-1]
+            spx_mom = features_df["spx_mom_5d"].iloc[-1]
+            asset._risk_off = vix_mom > 0.0 and spx_mom < 0.0
+        except (KeyError, IndexError):
+            asset._risk_off = False
 
     def _check_archetype_nans(self, asset, features_df) -> None:
         for col in ["adx", "rsi", "bb_zscore", "ema_spread"]:
@@ -275,13 +311,13 @@ class AssetInferencePipeline:
         asset._ensemble_breakdown = {}
         try:
             latest_row = alpha_df.iloc[-1]
-            asset_name_u = asset.name.upper()
-            carry_val = latest_row.get(f"{asset_name_u}_carry_vol_adj", np.nan)
-            mom_21 = latest_row.get(f"{asset_name_u}_mom_21d", np.nan)
-            mom_63 = latest_row.get(f"{asset_name_u}_mom_63d", np.nan)
-            zscore_val = latest_row.get(f"{asset_name_u}_zscore_20", np.nan)
-            dow_val = latest_row.get(f"{asset_name_u}_dow_signal", np.nan)
-            vol_ratio = latest_row.get(f"{asset_name_u}_vol_ratio", np.nan)
+            prefix = "CLOSE"
+            carry_val = latest_row.get(f"{prefix}_carry_vol_adj", np.nan)
+            mom_21 = latest_row.get(f"{prefix}_mom_21d", np.nan)
+            mom_63 = latest_row.get(f"{prefix}_mom_63d", np.nan)
+            zscore_val = latest_row.get(f"{prefix}_zscore_20", np.nan)
+            dow_val = latest_row.get(f"{prefix}_dow_signal", np.nan)
+            vol_ratio = latest_row.get(f"{prefix}_vol_ratio", np.nan)
             asset._ensemble_breakdown = {
                 "xgb_prob": round(float(proba[-1, 2]), 4),
                 "carry_normalized": round(float(carry_val), 4) if not np.isnan(carry_val) else 0.0,
@@ -364,6 +400,7 @@ class AssetInferencePipeline:
             close_price=decision.close_price,
             current_side=asset.pos_mgr.current_side(),
             halt_flags=asset.check_halt_conditions(),
+            current_price=asset.current_price,
         )
 
         _shadow_signal_df = _w.compute_signals(proba[-1:], x.index[-1:], threshold)

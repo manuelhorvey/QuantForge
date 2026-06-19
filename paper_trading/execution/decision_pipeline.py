@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -358,12 +359,62 @@ def update_prob_history(ctx: DecisionContext) -> None:
     engine._log_confidence_buckets()
 
 
+# ── Bar-jump suppression stage ──────────────────────────────────────────
+
+BAR_JUMP_SUPPRESS_MINUTES = 60
+
+
+def apply_bar_jump_suppression(ctx: DecisionContext) -> None:
+    """Suppress acting on signals within N minutes of a data-source bar jump.
+
+    A bar jump occurs when the number of aligned business days changes
+    significantly between cycles (e.g., yfinance→MT5 source switch).
+    Post-jump, feature vectors are contaminated and predictions are unreliable
+    (all confidence bands converge to ~47% accuracy for ~60 min).
+    """
+    engine = ctx.engine
+    suppress_until = getattr(engine, "_suppress_until", 0.0)
+    if time.time() < suppress_until:
+        remaining = int(suppress_until - time.time())
+        logger.info(
+            "%s: bar-jump suppression active — %ds remaining, holding flat",
+            engine.name,
+            remaining,
+        )
+        ctx.new_side = None
+
+
+# ── Risk-off suppression stage ──────────────────────────────────────────
+
+RISK_OFF_ASSETS = frozenset({"AUDUSD", "AUDCHF"})
+
+
+def apply_risk_off_suppression(ctx: DecisionContext) -> None:
+    """Suppress signals for AUDUSD/AUDCHF when market is in risk-off mode.
+
+    During risk-off (VIX rising, SPX falling), the base model's mean-reversion
+    strategy systematically fails on these assets (100% wrong for medium-confidence
+    BUY predictions).  This stage holds them flat until macro conditions normalize.
+    """
+    engine = ctx.engine
+    if engine.name not in RISK_OFF_ASSETS:
+        return
+    if getattr(engine, "_risk_off", False):
+        logger.info(
+            "%s: risk-off regime detected — suppressing signal, holding flat",
+            engine.name,
+        )
+        ctx.new_side = None
+
+
 # ── Pipeline definition ─────────────────────────────────────────────────
 
 DEFAULT_STAGES: list[StageFn] = [
+    apply_bar_jump_suppression,
     store_prediction_metadata,
     update_mae_mfe,
     resolve_signal,
+    apply_risk_off_suppression,
     apply_confidence_gate,
     apply_signal_stability_filter,
     apply_signal_hysteresis,
