@@ -29,7 +29,7 @@ def compute_hurst(series: pd.Series, window: int = 63) -> pd.Series:
         reg = np.polyfit(np.log(lags[valid]), np.log(tau[valid]), 1)
         return reg[0]
 
-    return series.rolling(window=window).apply(hurst_calc)
+    return series.rolling(window=window).apply(hurst_calc, raw=True)
 
 
 def compute_kaufman_er(close: pd.Series, window: int = 10) -> pd.Series:
