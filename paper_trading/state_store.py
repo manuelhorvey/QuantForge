@@ -677,9 +677,9 @@ class _AnalyticsStore:
                 )
 
             n_total = len(df)
-            tp_total = int((df[reason_col] == "tp").sum())
-            sl_total = int((df[reason_col] == "sl").sum())
-            flip_total = int((df[reason_col] == "signal_flip").sum())
+            tp_total = int((df[reason_col] == "TP").sum())
+            sl_total = int((df[reason_col] == "SL").sum())
+            flip_total = int((df[reason_col] == "FLIP").sum())
             wins_total = int((df[ret_col] > 0).sum())
             profit_total = float(df[ret_col].clip(lower=0).sum())
             loss_total = float((-df[ret_col].clip(upper=0)).sum())

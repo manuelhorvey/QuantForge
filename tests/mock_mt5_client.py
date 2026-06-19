@@ -111,6 +111,17 @@ class MockMT5Client:
         self._record("realtime_mid_price", ticker)
         return self._realtime_prices.get(ticker, 100.0)
 
+    def realtime_spread(self, ticker: str) -> float | None:
+        self._record("realtime_spread", ticker)
+        price = self._realtime_prices.get(ticker, 100.0)
+        if price is None:
+            return None
+        bid = price - 0.1
+        ask = price + 0.1
+        if bid and ask and (bid + ask) > 0:
+            return (ask - bid) / ((bid + ask) / 2.0) * 10000.0
+        return None
+
     def symbol_info(self, ticker: str) -> dict | None:
         self._record("symbol_info", ticker)
         return self._symbol_infos.get(ticker, {

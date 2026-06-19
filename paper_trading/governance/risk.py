@@ -45,7 +45,7 @@ def record_trade_outcome(asset: str, reason: str) -> None:
     with _sl_hit_rate_lock:
         if asset not in _sl_hit_rates:
             _sl_hit_rates[asset] = deque(maxlen=SL_HIT_RATE_WINDOW)
-        _sl_hit_rates[asset].append(1 if reason == "SL" else 0)
+        _sl_hit_rates[asset].append(1 if reason.upper() == "SL" else 0)
 
 
 def get_sl_hit_rate(asset: str) -> float | None:
