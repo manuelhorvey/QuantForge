@@ -482,9 +482,9 @@ class AssetInferencePipeline:
         if _cfg.optimizations.get("async_diagnostics", True):
             _snap = DiagnosticsSnapshot(
                 asset_name=asset.name,
-                proba_long=float(proba[-1, 0]),
-                proba_short=float(proba[-1, 1]),
-                proba_neutral=float(proba[-1, 2]),
+                proba_long=float(proba[-1, 2]),
+                proba_short=float(proba[-1, 0]),
+                proba_neutral=float(proba[-1, 1]),
                 threshold=threshold,
                 signal=decision.signal,
                 confidence=decision.confidence,

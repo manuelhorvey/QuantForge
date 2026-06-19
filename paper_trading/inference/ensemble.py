@@ -83,10 +83,24 @@ class EnsembleSignal:
         """
         Like combine() but returns 3-column probabilities for pipeline
         compatibility: [P(SHORT), P(NEUTRAL), P(LONG)].
-        Neutral probability = 1 - max(P(LONG), P(SHORT)) to allow model uncertainty.
+
+        The signal decision is still made from binary P(LONG) using the
+        ensemble neutral band. Directional rows expose the complementary
+        short/long probabilities. Neutral-band rows intentionally set both
+        directional probabilities to zero so the downstream fixed-threshold
+        signal strategy cannot override the ensemble's neutral decision.
         """
         blended, signals = self.combine(base_p_long, regime_p_long)
         p = blended.ravel()
-        neutral = 1.0 - np.abs(p - 0.5) * 2.0
-        three_col = np.column_stack([1.0 - p - neutral / 2, neutral, p - neutral / 2])
+        three_col = np.zeros((len(p), 3), dtype=float)
+
+        long_mask = signals == 1
+        short_mask = signals == -1
+        neutral_mask = signals == 0
+
+        three_col[long_mask, 0] = 1.0 - p[long_mask]
+        three_col[long_mask, 2] = p[long_mask]
+        three_col[short_mask, 0] = 1.0 - p[short_mask]
+        three_col[short_mask, 2] = p[short_mask]
+        three_col[neutral_mask, 1] = 1.0
         return three_col, signals

@@ -31,22 +31,24 @@ def test_compute_sell_signal(strategy):
     assert result.label == 0
 
 
-def test_compute_below_threshold_is_sell(strategy):
-    """When neither long nor short exceeds threshold, signal stays 0 (SELL)."""
+def test_compute_below_threshold_is_flat(strategy):
+    """When neither long nor short exceeds threshold, signal stays 1 (FLAT)."""
     proba = np.array([[0.4, 0.2, 0.4]])
     index = pd.DatetimeIndex(["2026-01-01"])
     close = pd.Series([100.0], index=index)
     result = strategy.compute(proba, index, 0.5, close, 0.5)
-    assert result.signal_type == "SELL"
+    assert result.signal_type == "FLAT"
+    assert result.label == 1
 
 
 def test_compute_threshold_filtering_severe(strategy):
-    """Very strict threshold causes no signal to exceed it, resulting in SELL (default 0)."""
+    """Very strict threshold causes no signal to exceed it, resulting in FLAT."""
     proba = np.array([[0.1, 0.8, 0.1]])
     index = pd.DatetimeIndex(["2026-01-01"])
     close = pd.Series([100.0], index=index)
     result = strategy.compute(proba, index, 0.9, close, 0.5)
-    assert result.signal_type == "SELL"
+    assert result.signal_type == "FLAT"
+    assert result.label == 1
 
 
 def test_compute_confidence_pct(strategy):
@@ -69,12 +71,13 @@ def test_compute_dataframe_shape(strategy):
 
 
 def test_compute_threshold_filtering(strategy):
-    """Signal defaults to 0 (SELL) when neither long nor short exceeds threshold."""
+    """Signal defaults to 1 (FLAT) when neither long nor short exceeds threshold."""
     proba = np.array([[0.1, 0.8, 0.1]])
     index = pd.DatetimeIndex(["2026-01-01"])
     close = pd.Series([100.0], index=index)
     result = strategy.compute(proba, index, 0.9, close, 0.5)
-    assert result.signal_type == "SELL"
+    assert result.signal_type == "FLAT"
+    assert result.label == 1
 
 
 def test_compute_position_size_in_dataframe(strategy):

@@ -58,7 +58,7 @@ class DiagnosticsQueue:
         while True:
             snap = self._queue.get()
             try:
-                proba_list = [snap.proba_long, snap.proba_short, snap.proba_neutral]
+                proba_list = [snap.proba_short, snap.proba_neutral, snap.proba_long]
                 sig_div = diag.analyze_signal_divergence(
                     proba_list,
                     snap.threshold,
@@ -69,7 +69,7 @@ class DiagnosticsQueue:
                 )
                 mod_div = diag.analyze_model_distribution(snap.asset_name, proba_list)
                 x_row = pd.DataFrame([snap.feature_row])
-                proba_arr = np.array([[snap.proba_long, snap.proba_short, snap.proba_neutral]])
+                proba_arr = np.array([[snap.proba_short, snap.proba_neutral, snap.proba_long]])
                 feat_drivers = diag.analyze_feature_impact(
                     snap.model,
                     x_row,
