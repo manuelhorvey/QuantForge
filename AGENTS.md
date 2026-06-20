@@ -375,7 +375,7 @@ PASS on dxy_mom_21d. Mechanism: **cross-asset correlation learning failure** —
 
 PASS on CLOSE_carry_vol_adj. Mechanism: **single-asset feature dominance** — the carry feature dominates the BUY prediction, but when carry is present without supporting momentum or z-score conditions, the BUY call fails.
 
-**Single-asset note — EURAUD**: Only 1 feature (CLOSE_vol_ratio, diff=-0.071) passes threshold. EURAUD has the most balanced wrong/correct ratio (110 wrong vs 131 correct) and the weakest SHAP separation. May have a different mechanism or be a borderline case. No change to current treatment (kept in SELL_ONLY_ASSETS).
+**Single-asset note — EURAUD**: Only 1 feature (CLOSE_vol_ratio, diff=-0.071) passes threshold. EURAUD has the most balanced wrong/correct ratio (110 wrong vs 131 correct) and the weakest SHAP separation. Mechanism unconfirmed — either it shares the CHF+OTHER carry mechanism with a noisier signal (illiquid pair, wider fiat ranges) or has a different/unknown root cause that happened to be swept in by the original win-rate screen. Flagged as weakest evidence in cluster. If someone later extends a carry-feature fix to all 6 CHF+OTHER assets, EURAUD is the one that may not respond as expected. No change to current treatment (kept in SELL_ONLY_ASSETS).
 
 ### ^DJI/EURCHF/USDCHF Decision
 
@@ -396,7 +396,7 @@ No evidence of a special case for any of the 3. The existing decision (keep all 
 
 4. **Live tripwire** — If any flagged asset's SELL win rate drops **below** 65% over 20 consecutive trades, re-investigate. SELL baseline is ~77%. Tripwire threshold tightened from 50% to 65% based on actual baseline.
 
-### Falsified Hypotheses (2026-06-20 session)
+5. **Feature-level fix from SHAP mechanisms** — SHAP now identifies two concrete mechanisms (dxy_mom_21d for equities, CLOSE_carry_vol_adj for CHF+OTHER). The current SELL_ONLY filter suppresses the inverted signal; a feature-level fix could instead correct it. Candidates: (a) add DXY-equity correlation regime feature for equities, (b) add carry-direction alignment feature for CHF+OTHER, retrain, and potentially restore BUY on these assets. Not urgent — SELL_ONLY filter handles the risk — but worth tracking as a follow-up project rather than letting it silently default to permanent.
 
 ### Falsified Hypotheses (2026-06-20 session)
 
