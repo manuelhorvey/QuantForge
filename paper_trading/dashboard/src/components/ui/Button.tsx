@@ -14,7 +14,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantStyles: Record<ButtonVariant, string> = {
   primary:
-    'bg-accent-emerald/90 text-[#08090c] hover:bg-accent-emerald focus-visible:shadow-[0_0_0_2px_rgba(45,211,191,0.5)] active:scale-[0.98]',
+    'bg-accent-emerald text-[#08090c] hover:brightness-110 focus-visible:shadow-[0_0_0_2px_rgba(45,211,191,0.5)] active:scale-[0.98]',
   secondary:
     'bg-panel border border-default text-secondary hover:bg-panel-hover hover:text-primary hover:border-strong focus-visible:shadow-[0_0_0_1px_rgba(45,211,191,0.3)] active:scale-[0.98]',
   ghost:
@@ -22,7 +22,7 @@ const variantStyles: Record<ButtonVariant, string> = {
   outline:
     'border border-accent-emerald/50 text-accent-emerald hover:bg-accent-emerald/10 hover:border-accent-emerald focus-visible:shadow-[0_0_0_2px_rgba(45,211,191,0.3)] active:scale-[0.98]',
   danger:
-    'bg-gov-red/90 text-white hover:bg-gov-red focus-visible:shadow-[0_0_0_2px_rgba(239,68,68,0.5)] active:scale-[0.98]',
+    'bg-gov-red text-white hover:brightness-110 focus-visible:shadow-[0_0_0_2px_rgba(239,68,68,0.5)] active:scale-[0.98]',
 }
 
 const sizeStyles: Record<ButtonSize, string> = {
