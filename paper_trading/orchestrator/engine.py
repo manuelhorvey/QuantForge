@@ -201,9 +201,10 @@ class EngineOrchestrator:
         results["drawdown"] = dd_result
         if dd_result["halted"]:
             logger.error(
-                "DRAWDOWN CIRCUIT BREAKER TRIGGERED: dd=%.2f%% — halting all actors",
+                "DRAWDOWN CIRCUIT BREAKER TRIGGERED: dd=%.2f%% — flattening and halting all actors",
                 dd_result["drawdown"] * 100,
             )
+            self.flatten_positions(reason="drawdown_circuit_breaker")
             for actor in self._actors.values():
                 if hasattr(actor._engine, "pos_mgr"):
                     actor._engine.pos_mgr.exposure_multiplier = 0.0
@@ -327,6 +328,40 @@ class EngineOrchestrator:
     @property
     def emergency_halt(self) -> bool:
         return self._emergency_halt
+
+    def flatten_positions(self, reason: str = "circuit_breaker") -> list[str]:
+        """Close all open positions across all actors immediately.
+
+        Called by the drawdown circuit breaker before setting emergency halt.
+        Returns a list of asset names whose positions were closed.
+        """
+        from datetime import datetime, timezone
+
+        flattened: list[str] = []
+        now_iso = datetime.now(timezone.utc).isoformat()
+        for name, actor in self._actors.items():
+            engine = getattr(actor, "_engine", None)
+            if engine is None:
+                continue
+            pos_mgr = getattr(engine, "pos_mgr", None)
+            if pos_mgr is None or not pos_mgr.has_position():
+                continue
+            exit_price = getattr(engine, "current_price", None)
+            if exit_price is None or exit_price <= 0:
+                continue
+            try:
+                engine._close_position(exit_price=exit_price, exit_date=now_iso, reason=reason)
+                flattened.append(name)
+                logger.warning("%s: position closed by circuit breaker (%.4f)", name, exit_price)
+            except Exception as e:
+                logger.error("%s: circuit breaker flatten failed: %s", name, e)
+        if flattened:
+            logger.error(
+                "CIRCUIT BREAKER FLATTEN: %d position(s) closed: %s",
+                len(flattened),
+                ", ".join(flattened),
+            )
+        return flattened
 
     def reset_emergency_halt(self) -> None:
         """Reset emergency halt (e.g., after manual review)."""
