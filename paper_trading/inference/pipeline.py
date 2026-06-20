@@ -212,7 +212,7 @@ class AssetInferencePipeline:
         return alpha_df, features_df, x
 
     def _detect_risk_off(self, asset, features_df) -> None:
-        if asset.name not in ("AUDUSD", "AUDCHF"):
+        if asset.name not in ("AUDUSD",):
             asset._risk_off = False
             return
         try:

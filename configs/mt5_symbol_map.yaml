@@ -5,9 +5,9 @@
 # Comment out any symbol you don't trade via MT5.
 
 # ── Forex ─────────────────────────────────────────────────────────────────────
-AUDCHF=X: AUDCHF
+# AUDCHF=X: AUDCHF    # REMOVED from trading (directional filter diagnostic — BUY was anti-skill)
 AUDJPY=X: AUDJPY
-AUDNZD=X: AUDNZD
+# AUDNZD=X: AUDNZD    # REMOVED from trading (directional filter diagnostic — SELL was anti-skill)
 AUDUSD=X: AUDUSD
 CADCHF=X: CADCHF
 # CADJPY=X: CADJPY      # REMOVED from dashboard (PF < 1.0)

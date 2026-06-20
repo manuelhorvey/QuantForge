@@ -153,34 +153,7 @@ assets:
         trailing_activation_mult: 0.33
         trailing_distance_mult: 1.0
         min_rr_ratio: 1.5
-  AUDCHF:
-    ticker: AUDCHF=X
-    allocation: 0.05
-    sl_mult: 2.75
-    tp_mult: 3.5
-    max_depth: 3
-    regime_geometry:
-      GREEN:
-        sl_mult: 1.0
-        tp_mult: 1.0
-      YELLOW:
-        sl_mult: 0.9
-        tp_mult: 0.9
-      RED:
-        sl_mult: 0.8
-        tp_mult: 0.8
-    config:
-      shadow_sltp:
-        enabled: true
-        method: trailing
-        trailing_activation_mult: 0.33
-        trailing_distance_mult: 1.0
-      dynamic_sltp:
-        enabled: true
-        method: trailing
-        trailing_activation_mult: 0.33
-        trailing_distance_mult: 1.0
-        min_rr_ratio: 1.5
+  
   USDCAD:
     ticker: USDCAD=X
     allocation: 0.05
@@ -377,35 +350,7 @@ assets:
         trailing_activation_mult: 0.3
         trailing_distance_mult: 0.5
         min_rr_ratio: 1.5
-  EURUSD:
-    ticker: EURUSD=X
-    allocation: 0.04
-    sl_mult: 3.0
-    tp_mult: 1.5
-    spread_tier: fx_major
-    max_depth: 4
-    regime_geometry:
-      GREEN:
-        sl_mult: 1.0
-        tp_mult: 1.0
-      YELLOW:
-        sl_mult: 0.9
-        tp_mult: 0.9
-      RED:
-        sl_mult: 0.8
-        tp_mult: 0.8
-    config:
-      shadow_sltp:
-        enabled: true
-        method: trailing
-        trailing_activation_mult: 0.3
-        trailing_distance_mult: 1.0
-      dynamic_sltp:
-        enabled: true
-        method: trailing
-        trailing_activation_mult: 0.3
-        trailing_distance_mult: 1.0
-        min_rr_ratio: 1.5
+  
   NZDUSD:
     ticker: NZDUSD=X
     allocation: 0.05
@@ -548,34 +493,7 @@ assets:
         trailing_activation_mult: 1.0
         trailing_distance_mult: 0.8
         min_rr_ratio: 1.5
-  AUDNZD:
-    ticker: AUDNZD=X
-    allocation: 0.03
-    sl_mult: 2.0
-    tp_mult: 1.0
-    max_depth: 3
-    regime_geometry:
-      GREEN:
-        sl_mult: 1.0
-        tp_mult: 1.0
-      YELLOW:
-        sl_mult: 0.9
-        tp_mult: 0.9
-      RED:
-        sl_mult: 0.8
-        tp_mult: 0.8
-    config:
-      shadow_sltp:
-        enabled: true
-        method: trailing
-        trailing_activation_mult: 0.5
-        trailing_distance_mult: 1.0
-      dynamic_sltp:
-        enabled: true
-        method: trailing
-        trailing_activation_mult: 0.5
-        trailing_distance_mult: 1.0
-        min_rr_ratio: 1.5
+  
   EURCHF:
     ticker: EURCHF=X
     allocation: 0.05

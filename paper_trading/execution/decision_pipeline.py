@@ -386,7 +386,7 @@ def apply_bar_jump_suppression(ctx: DecisionContext) -> None:
 
 # ── Risk-off suppression stage ──────────────────────────────────────────
 
-RISK_OFF_ASSETS = frozenset({"AUDUSD", "AUDCHF"})
+RISK_OFF_ASSETS = frozenset({"AUDUSD"})
 
 
 def apply_risk_off_suppression(ctx: DecisionContext) -> None:

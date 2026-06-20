@@ -2,14 +2,16 @@
 
 ## Project Identity
 
-Cross-sectional multi-asset paper trading engine. 21-asset portfolio (FX, commodities, equity indices) with per-asset XGBoost models, regime-conditional ensemble (disabled 2026-06-20; see ADR-026 and PnL backtest section), 9-layer governance, position sizing guardrails, and MT5 bridge execution (Exness demo via Wine).
+Cross-sectional multi-asset paper trading engine. 19-asset portfolio (FX, commodities, equity indices) with per-asset XGBoost models, regime-conditional ensemble (disabled 2026-06-20; see ADR-026 and PnL backtest section), 9-layer governance, position sizing guardrails, and MT5 bridge execution (Exness demo via Wine).
+
+**2026-06-20: AUDNZD, EURUSD, AUDCHF removed from trading.** These 3 assets accounted for the model's confirmed directional instability failure mode (confident wrong-direction bets during trends). Removed from paper_trading.yaml assets, mt5_symbol_map, shadow analytics, risk-off suppression lists, and API commission table. 22-3=19 remaining assets. See the Walk-Forward PnL Backtest section for the full diagnostic chain.
 
 ## Architecture Quick Reference
 
 - **Models**: Per-asset XGBClassifier (base only) — regime-conditional ensemble disabled 2026-06-20 (walk-forward p=0.83; see ADR-026)
 - **Features**: 13 alpha (includes COT flag) + 7 regime (hurst, kaufman_er, adx, vol_zscore, compression, utc_hour, session_vol_profile)
 - **Labels**: Triple-barrier with per-asset pt_sl, vertical_barrier=20, gap >= vb
-- **Config**: `configs/paper_trading.yaml` — global defaults + per-asset (21 assets)
+- **Config**: `configs/paper_trading.yaml` — global defaults + per-asset (19 assets)
 - **Inference**: `paper_trading/inference/pipeline.py` — alpha features → base model → governance → execute (ensemble disabled; regime features still generated for trace logging)
 - **Training**: `paper_trading/inference/training.py` — base model only (regime model skipped when base_weight >= 1.0), scale_pos_weight, meta-labeling. Expanding-window (all history, never drops old data) — known contributor to directional instability across folds.
 - **Entry gates**: `entry_service.py` price deviation check (skips if price deviated > max_entry_slippage_pct); `decision_pipeline.py` profit lock (blocks flips when unrealized PnL > profit_lock_threshold_pct)
@@ -211,6 +213,7 @@ curl http://127.0.0.1:5000/state.json | python3 -m json.tool
 - Portfolio sharpe_adj (Lo-adjusted for autocorrelation ρ=0.68): 9.1 — **CAVEAT: R-multiple portfolio Sharpe; see note below**
 - **Top performers**: ^DJI (+712.5R), CADCHF (+867R), NZDCHF (+829R), AUDUSD (+516R)
 - **Bottom performers**: AUDNZD (-203R), EURUSD (-157.5R), NZDUSD (-46.5R), GBPNZD (-37R)
+- **Removed 2026-06-20**: AUDNZD, EURUSD, AUDCHF — three of the four bottom performers removed after directional instability diagnosis
 
 **Note on R-multiple Sharpe**: This metric is not comparable to a traditional financial Sharpe ratio. The portfolio daily R is a simple average of per-asset R-multiple changes (20 assets, equal weight regardless of position size). Cross-asset diversification artificially reduces portfolio std, inflating the Sharpe. Monthly-block Sharpe (non-overlapping) = 5.61. Adjusting for realistic FX cross-asset correlation (ρ~0.3) gives ~8.05. All values are in R-multiple space — they describe signal quality, not expected live trading Sharpe.
 
