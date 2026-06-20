@@ -15,6 +15,14 @@ _MAX_CACHE_SIZE = 500
 _sl_hit_rates: dict[str, deque] = {}
 _sl_hit_rate_lock = threading.Lock()
 
+# SELL-side win rate tracker (tripwire)
+_sell_win_rates: dict[str, deque] = {}
+_sell_win_rate_lock = threading.Lock()
+_tripwire_last_state: dict[str, bool] = {}
+
+SELL_WIN_RATE_WINDOW = 20
+TRIPWIRE_THRESHOLD = 0.65  # alert if SELL win rate drops below 65%
+
 WEIGHTS = {
     "model_drift": 0.25,
     "signal_drift": 0.20,
@@ -38,6 +46,9 @@ def reset() -> None:
         _cache.clear()
     with _sl_hit_rate_lock:
         _sl_hit_rates.clear()
+    with _sell_win_rate_lock:
+        _sell_win_rates.clear()
+    _tripwire_last_state.clear()
 
 
 def record_trade_outcome(asset: str, reason: str) -> None:
@@ -61,6 +72,58 @@ def get_sl_hit_rate_all() -> dict[str, float]:
     """Return SL hit rate for all tracked assets."""
     with _sl_hit_rate_lock:
         return {a: sum(dq) / len(dq) for a, dq in _sl_hit_rates.items() if len(dq) >= 5}
+
+
+def record_sell_side_outcome(asset: str, reason: str, side: str) -> None:
+    if side != "short":
+        return
+    if reason.upper() not in ("TP", "SL"):
+        return
+
+    with _sell_win_rate_lock:
+        if asset not in _sell_win_rates:
+            _sell_win_rates[asset] = deque(maxlen=SELL_WIN_RATE_WINDOW)
+        _sell_win_rates[asset].append(1 if reason.upper() == "TP" else 0)
+
+        dq = _sell_win_rates[asset]
+        n = len(dq)
+        win_rate = sum(dq) / n if n >= 5 else None
+
+    if win_rate is not None and win_rate < TRIPWIRE_THRESHOLD:
+        prev = _tripwire_last_state.get(asset, False)
+        if not prev:
+            logger.warning(
+                "SELL tripwire TRIPPED for %s: win_rate=%.1f%% (%d trades, threshold=%.0f%%). "
+                "Re-investigate: model may have flipped or calibration shifted.",
+                asset,
+                win_rate * 100,
+                n,
+                TRIPWIRE_THRESHOLD * 100,
+            )
+        _tripwire_last_state[asset] = True
+    else:
+        if _tripwire_last_state.get(asset, False):
+            logger.info(
+                "SELL tripwire CLEARED for %s: win_rate=%.1f%%",
+                asset,
+                win_rate * 100 if win_rate is not None else 0,
+            )
+        _tripwire_last_state[asset] = False
+
+
+def get_sell_win_rate(asset: str) -> float | None:
+    """Return SELL win rate over the last N trades, or None if <5 trades."""
+    with _sell_win_rate_lock:
+        dq = _sell_win_rates.get(asset)
+        if dq is None or len(dq) < 5:
+            return None
+        return sum(dq) / len(dq)
+
+
+def get_sell_tripwire_state(asset: str, sell_only: bool = False) -> dict:
+    win_rate = get_sell_win_rate(asset)
+    tripped = sell_only and win_rate is not None and win_rate < TRIPWIRE_THRESHOLD
+    return {"win_rate": win_rate, "tripped": tripped}
 
 
 def evaluate(asset: str) -> dict:

@@ -44,6 +44,7 @@ Cross-sectional multi-asset paper trading engine. 19-asset portfolio (FX, commod
 | `LIVE_CONTRACT.md` | Immutable system contract (update when architecture changes) |
 | `scripts/backtest_pnl.py` | PnL backtest from OOS signal parquets (R-multiples, autocorrelation-adj Sharpe) |
 | `scripts/compare_ensemble.py` | Ensemble vs base PnL comparison with per-fold sign test |
+| `paper_trading/governance/risk.py` | Risk evaluation, SL hit rate, drift scoring, **SELL tripwire** (per-asset deque, TP=1/SL=0, win, 20-trade window, 65% threshold, WARNING log on trip) |
 
 ## Position Sizing Chain
 
@@ -394,7 +395,7 @@ No evidence of a special case for any of the 3. The existing decision (keep all 
 
 3. **Path A (rolling window backtest)** — Completed 2026-06-20. Result: expanding-vs-rolling discrepancy is **unobservable** at current data depth (~848 bars / 2.3 years per asset). With `rolling_window_bars=3*252=756`, no training fold is large enough for truncation to fire. Expanding and rolling output bit-for-bit identical metrics (total_R=316.6, sharpe_adj=10.95). The original question (does backtest methodology match live training?) is not answered — it cannot be tested with existing data. Revisit when any asset crosses 3+ years of clean history, or test with a deliberately small window (e.g., 252 bars) for a mechanism check (does rolling vs expanding ever matter for this model class). The latter is a cheap mechanism question about the model family, not a validation of the production config. Low priority.
 
-4. **Live tripwire** — If any flagged asset's SELL win rate drops **below** 65% over 20 consecutive trades, re-investigate. SELL baseline is ~77%. Tripwire threshold tightened from 50% to 65% based on actual baseline.
+4. **Live tripwire (DONE 2026-06-20)**: `record_sell_side_outcome()` in `risk.py` tracks SELL-only TP/SL outcomes per asset (deque maxlen=20, win=TP/loss=SL, BUY and non-TP/SL exits skipped). `get_sell_tripwire_state(asset, sell_only)` returns `{"win_rate": ..., "tripped": bool}`. Trips at 65% threshold, logs WARNING on trip + INFO on clear (state transition tracked via `_tripwire_last_state`). Wired into `state.json` via `engine_state_service.py` — replaces hardcoded `False`. Dashboard red TRIPWIRE badge now real. Call site in `position_service.py:close_position` records every SELL trade exit alongside existing SL hit rate. Tripwire only applies when `sell_only=True` — non-flagged assets can accumulate SELL win-rate data but never trip.
 
 5. **Feature-level fix from SHAP mechanisms** — SHAP now identifies two concrete mechanisms (dxy_mom_21d for equities, CLOSE_carry_vol_adj for CHF+OTHER). The current SELL_ONLY filter suppresses the inverted signal; a feature-level fix could instead correct it. Candidates: (a) add DXY-equity correlation regime feature for equities, (b) add carry-direction alignment feature for CHF+OTHER, retrain, and potentially restore BUY on these assets. Not urgent — SELL_ONLY filter handles the risk — but worth tracking as a follow-up project rather than letting it silently default to permanent.
 

@@ -7,6 +7,7 @@ import pytz
 
 from paper_trading.config_manager import get_config
 from paper_trading.execution.decision_pipeline import SELL_ONLY_ASSETS
+from paper_trading.governance.risk import get_sell_tripwire_state
 from paper_trading.ops.experiment_context import ExperimentContext
 from paper_trading.ops.simulation_snapshot import build_asset_snapshot
 from paper_trading.state_store import EngineSnapshot
@@ -78,7 +79,7 @@ class EngineStateService:
                 "feature_stability_jaccard": feat_stab.get("jaccard_top_10"),
                 "feature_stability_spearman": feat_stab.get("spearman_rank_corr"),
                 "sell_only": name in SELL_ONLY_ASSETS,
-                "tripwire_active": False,
+                "tripwire_active": get_sell_tripwire_state(name, sell_only=name in SELL_ONLY_ASSETS)["tripped"],
                 "liquidity_regime": asset.governance._liquidity_regime,
                 "liquidity_sl_mult": asset.governance._liquidity_sl_mult,
                 "liquidity_size_scalar": asset.governance._liquidity_size_scalar,
