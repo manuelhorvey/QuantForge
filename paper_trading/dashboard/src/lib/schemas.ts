@@ -145,9 +145,12 @@ export const WeeklyReviewByAssetSchema = z.object({
 })
 
 export const WeeklyReviewExitBreakdownSchema = z.object({
-  tp: z.number(),
-  sl: z.number(),
-  signal_flip: z.number(),
+  SL: z.number(),
+  TP: z.number(),
+  BREAKEVEN: z.number(),
+  FLIP: z.number(),
+  EXPIRY: z.number(),
+  MANUAL: z.number(),
   other: z.number(),
 })
 

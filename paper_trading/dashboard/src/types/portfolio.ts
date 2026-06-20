@@ -195,3 +195,77 @@ export interface VolRegime {
   ratio: number
   status: 'green' | 'amber' | 'red'
 }
+
+export interface WeeklyReviewSummary {
+  n_trades: number
+  total_pnl: number
+  total_return_pct: number
+  win_rate: number
+  tp_rate: number
+  sl_rate: number
+  signal_flip_rate: number
+  profit_factor: number | null
+  avg_r: number
+  best_r_multiple: number
+  worst_r_multiple: number
+}
+
+export interface WeeklyReviewByAsset {
+  asset: string
+  n_trades: number
+  win_rate: number
+  tp_rate: number
+  sl_rate: number
+  avg_r: number
+  profit_factor: number | null
+  pnl: number
+}
+
+export interface WeeklyReviewExitBreakdown {
+  SL: number
+  TP: number
+  BREAKEVEN: number
+  FLIP: number
+  EXPIRY: number
+  MANUAL: number
+  other: number
+}
+
+export interface WeeklyReviewStopOut {
+  stop_out_cooldowns_triggered: number
+  estimated_churn_prevented: number
+  assets_in_cooldown: string[]
+}
+
+export interface WeeklyReviewGovernance {
+  halted_assets: string[]
+  most_common_validity: string
+}
+
+export interface WeeklyReviewRegimeCorrelation {
+  regime: string
+  n_trades: number
+  win_rate: number
+  sl_rate: number
+}
+
+export interface WeeklyReviewVsPrior {
+  pnl_change: number
+  win_rate_change: number
+  sl_rate_change: number
+  tp_rate_change: number
+}
+
+export interface WeeklyReview {
+  week_label: string
+  generated_at: string
+  summary: WeeklyReviewSummary
+  by_asset: WeeklyReviewByAsset[]
+  top_winners: Record<string, unknown>[]
+  top_losers: Record<string, unknown>[]
+  exit_reason_breakdown: WeeklyReviewExitBreakdown
+  stop_out_cooldowns: WeeklyReviewStopOut
+  governance_summary: WeeklyReviewGovernance
+  regime_correlation: WeeklyReviewRegimeCorrelation[]
+  vs_prior_week: WeeklyReviewVsPrior | null
+}
