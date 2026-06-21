@@ -277,12 +277,12 @@ export const FeatureStabilitySchema = z.object({
 })
 
 export const AssetExitReasonsSchema = z.object({
-  tp_rate: z.number(),
-  sl_rate: z.number(),
-  breakeven_rate: z.number(),
-  flip_rate: z.number(),
-  expiry_rate: z.number(),
-  avg_r: z.number(),
+  tp_rate: z.number().optional().default(0),
+  sl_rate: z.number().optional().default(0),
+  breakeven_rate: z.number().optional().default(0),
+  flip_rate: z.number().optional().default(0),
+  expiry_rate: z.number().optional().default(0),
+  avg_r: z.number().optional().default(0),
 })
 
 export const ArchetypeStatsEntrySchema = z.object({
@@ -480,7 +480,7 @@ export const EngineSnapshotSchema = z.object({
   timestamp: z.string(),
   portfolio: PortfolioSummarySchema,
   assets: z.record(z.string(), AssetStateSchema),
-  open_positions: z.record(z.string(), OpenPositionStateSchema).optional(),
+  open_positions: z.record(z.string(), OpenPositionStateSchema).nullable().optional(),
   engine_status: EngineStatusSchema,
   halt_conditions: HaltConditionsSchema.optional().default({
     drawdown: 0,

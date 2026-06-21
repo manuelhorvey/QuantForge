@@ -195,7 +195,24 @@ class EngineStateService:
                 account = None
                 try:
                     if is_connected:
-                        account = broker.get_account_summary()
+                        raw = broker.get_account_summary()
+                        account = {
+                            "total_cash": raw.total_cash,
+                            "buying_power": raw.buying_power,
+                            "portfolio_value": raw.portfolio_value,
+                            "positions": [
+                                {
+                                    "asset": p.asset,
+                                    "quantity": p.quantity,
+                                    "avg_entry_price": p.avg_entry_price,
+                                    "current_price": p.current_price,
+                                    "unrealized_pnl": p.unrealized_pnl,
+                                    "realized_pnl": p.realized_pnl,
+                                    "position_id": p.position_id,
+                                }
+                                for p in raw.positions
+                            ],
+                        }
                 except Exception:
                     pass
                 set_mt5_status(
