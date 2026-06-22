@@ -112,10 +112,10 @@ class TestTickerToMt5Symbol:
         assert broker.ticker_to_mt5_symbol("GBPNZD") == "GBPNZD"
 
 
-# ── PositionService.close_position() — orphan on failure ───────────────
+# ── PositionService.close_position() — atomic close (MT5 before paper) ──
 
 
-class TestPositionServiceOrphan:
+class TestPositionServiceAtomicClose:
     @pytest.fixture
     def pos_service(self, mock_asset_engine, broker):
         from paper_trading.services.position_service import PositionService
@@ -148,8 +148,8 @@ class TestPositionServiceOrphan:
         )
         return svc
 
-    def test_orphan_queued_on_close_failure(self, pos_service, broker, mock_client, mock_asset_engine):
-        """When MT5 close fails, mt5_orphan is returned in mutations."""
+    def test_aborts_paper_close_on_mt5_failure(self, pos_service, broker, mock_client, mock_asset_engine):
+        """When MT5 close fails, paper close is aborted — empty mutations returned."""
         mock_client._close_result = {"error": "close failed: market closed"}
         mutations = pos_service.close_position(
             exit_price=1.0500,
@@ -170,13 +170,11 @@ class TestPositionServiceOrphan:
             last_macro_dir=None,
             last_blend_dir=None,
         )
-        assert "mt5_orphan" in mutations
-        mt5_symbol, ticket = mutations["mt5_orphan"]
-        assert mt5_symbol == "EURUSD.fx"
-        assert ticket == 12345
+        assert mutations == {}
+        pos_service.pos_mgr.close.assert_not_called()
 
-    def test_no_orphan_on_successful_close(self, pos_service, broker, mock_client, mock_asset_engine):
-        """When MT5 close succeeds, no orphan in mutations."""
+    def test_paper_close_on_mt5_success(self, pos_service, broker, mock_client, mock_asset_engine):
+        """When MT5 close succeeds, paper close proceeds."""
         mock_client._close_result = {"result": {"retcode": 10009, "ticket": 12345}}
         mutations = pos_service.close_position(
             exit_price=1.0500,
@@ -198,9 +196,10 @@ class TestPositionServiceOrphan:
             last_blend_dir=None,
         )
         assert "mt5_orphan" not in mutations
+        pos_service.pos_mgr.close.assert_called_once()
 
-    def test_no_orphan_on_already_closed(self, pos_service, broker, mock_client, mock_asset_engine):
-        """When MT5 ticket is already closed (not found), no orphan queued."""
+    def test_paper_close_on_already_closed(self, pos_service, broker, mock_client, mock_asset_engine):
+        """When MT5 position is already closed (not found), paper close proceeds."""
         mock_client._close_result = {"error": "Position 12345 not found"}
         mutations = pos_service.close_position(
             exit_price=1.0500,
@@ -222,6 +221,7 @@ class TestPositionServiceOrphan:
             last_blend_dir=None,
         )
         assert "mt5_orphan" not in mutations
+        pos_service.pos_mgr.close.assert_called_once()
 
 
 # ── EngineOrchestrator._reconcile_mt5_orphans() — Phase A ────────────────
