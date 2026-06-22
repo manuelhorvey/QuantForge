@@ -230,6 +230,14 @@ export interface LastSignal {
   close_price: number
 }
 
+export interface Layer {
+  entry_price: number
+  size: number
+  timestamp: string
+  signal_id: string
+  pnl_at_time: number
+}
+
 export interface Position {
   side: 'long' | 'short'
   entry: number
@@ -239,6 +247,7 @@ export interface Position {
   unrealized_pnl: number
   sl_mult?: number
   tp_mult?: number
+  layers?: Layer[]
 }
 
 export interface AssetHaltConfig {
