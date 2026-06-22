@@ -34,7 +34,7 @@ USDCHF=X: USDCHF
 # EURNZD=X:  EURNZD     # FAIL — negative expectancy
 # GBPAUD=X:  GBPAUD     # WEAK — low consistency
 # GBPJPY=X:  GBPJPY     # WEAK — fragile
-# GBPUSD=X:  GBPUSD     # FAIL — near-zero trades
+GBPUSD=X:  GBPUSD
 # NZDCHF=X:  NZDCHF     # WEAK — low consistency
 # NZDJPY=X:  NZDJPY     # WEAK — near-zero trades
 
@@ -58,6 +58,3 @@ CL=F: USOIL
 # BTC-USD:  BTCUSD     # FAIL — negative expectancy, inconsistent
 # ETH-USD:   ETHUSD
 
-# ── Non-MT5 Assets (yfinance only) ───────────────────────────────────────────
-# These are tracked in the dashboard but fetched via yfinance, not MT5:
-# ^VIX, IWM

@@ -545,7 +545,7 @@ def generate_summary(
     lines.append("CRISIS REPLAY REPORT")
     lines.append("=" * 72)
     lines.append("Data range: Oct 2024 - May 2026")
-    lines.append("Assets analyzed: current 18-asset portfolio")
+    lines.append("Assets analyzed: current 19-asset portfolio (incl. GBPUSD)")
     lines.append(f"Crisis windows: {len(results)}")
     lines.append("")
 
