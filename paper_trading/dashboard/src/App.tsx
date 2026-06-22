@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { usePortfolioState } from './hooks/usePortfolioState'
 import { SelectedAssetContext } from './hooks/useSelectedAsset'
-import { getFlag } from './lib/featureFlags'
 import Header from './components/Header'
 import PortfolioSummary from './components/PortfolioSummary'
 import AssetGrid from './components/AssetGrid'
@@ -24,24 +23,105 @@ import TradeExecutionTable from './components/execution/TradeExecutionTable'
 import MonitoringDashboard from './components/monitor/MonitoringDashboard'
 import GovernanceRadar from './components/governance/GovernanceRadar'
 import StatisticalMetricsTable from './components/StatisticalMetricsTable'
+import CalibrationCurve from './components/CalibrationCurve'
 import WeeklyReviewModal from './components/WeeklyReviewModal'
 import AssetDetailPanel from './components/AssetDetailPanel'
 import AssetDeepDive from './components/AssetDeepDive'
+import ExecutionFeed from './components/ExecutionFeed'
 
 import Sidebar from './components/layout/Sidebar'
 import ErrorBoundary from './components/ErrorBoundary'
+
+type TabId = 'dashboard' | 'trading' | 'execution' | 'research' | 'risk'
 
 export default function App() {
   const { data: state, isPending, isError } = usePortfolioState()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [selectedAsset, setSelectedAsset] = useState<string | null>(null)
   const [deepDiveAsset, setDeepDiveAsset] = useState<string | null>(null)
-  const enableDetailPanel = getFlag('ENABLE_DETAIL_PANEL')
+  const [activeTab, setActiveTab] = useState<TabId>('dashboard')
 
   if (isPending) return <LoadingScreen />
   if (isError) return <ErrorScreen />
 
   const detailAsset = selectedAsset && state?.assets?.[selectedAsset]
+
+  const tabContent: Record<TabId, React.ReactNode> = {
+    dashboard: (
+      <div className="space-y-6 sm:space-y-8">
+        <MonitoringDashboard />
+        <PortfolioSummary />
+        <HaltConditions />
+      </div>
+    ),
+    trading: (
+      <div className="space-y-6 sm:space-y-8">
+        <Section id="signals" errorTitle="Signals">
+          <div className="grid grid-cols-1 xl:grid-cols-5 gap-5 sm:gap-6">
+            <div className="xl:col-span-3 min-w-0">
+              <SignalsTable />
+            </div>
+            <div className="xl:col-span-2 min-w-0">
+              <EquityChart />
+            </div>
+          </div>
+        </Section>
+        <Section id="trades" errorTitle="Trades">
+          <TradeOutcomes />
+          <TradeFeed />
+        </Section>
+        <Section id="execution-feed" errorTitle="Execution Feed">
+          <ExecutionFeed />
+        </Section>
+      </div>
+    ),
+    execution: (
+      <div className="space-y-6 sm:space-y-8">
+        <Section id="execution-quality" errorTitle="Execution Quality" className="space-y-5 sm:space-y-6">
+          <ExecutionQualityStrip />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6">
+            <div className="lg:col-span-2 min-w-0">
+              <SlippageHistogram />
+            </div>
+            <div className="lg:col-span-1 min-w-0">
+              <FillQualityGauge />
+            </div>
+          </div>
+          <TradeExecutionTable />
+        </Section>
+        <Section id="trade-attribution" errorTitle="Trade Attribution" className="space-y-5 sm:space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6">
+            <AttributionBreakdownCard />
+            <PnLWaterfall />
+          </div>
+          <MaeMfeScatter />
+        </Section>
+      </div>
+    ),
+    research: (
+      <div className="space-y-6 sm:space-y-8">
+        <Section id="calibration" errorTitle="Calibration">
+          <CalibrationCurve />
+        </Section>
+        <Section id="statistics" errorTitle="Statistical Metrics">
+          <StatisticalMetricsTable />
+        </Section>
+      </div>
+    ),
+    risk: (
+      <div className="space-y-6 sm:space-y-8">
+        <Section id="portfolio-risk" errorTitle="Portfolio Risk">
+          <HealthScores />
+        </Section>
+        <Section id="governance" errorTitle="Governance Constraints">
+          <GovernanceRadar />
+        </Section>
+        <Section id="asset-grid" errorTitle="All Assets">
+          <AssetGrid />
+        </Section>
+      </div>
+    ),
+  }
 
   return (
     <ErrorBoundary title="Application">
@@ -50,65 +130,14 @@ export default function App() {
           <Header onMenuClick={() => setSidebarOpen(prev => !prev)} />
 
           <div className="flex-1 flex relative max-w-[90rem] mx-auto w-full">
-            <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+            <Sidebar open={sidebarOpen} activeTab={activeTab} onTabChange={setActiveTab} onClose={() => setSidebarOpen(false)} />
 
-            <main className="flex-1 min-w-0 px-4 sm:px-7 py-5 sm:py-7 space-y-6 sm:space-y-8 animate-fade-in">
-              <Section id="monitor" errorTitle="Monitor">
-                <MonitoringDashboard />
-              </Section>
-
-              <Section id="portfolio" errorTitle="Portfolio">
-                <PortfolioSummary />
-                {!enableDetailPanel && <AssetGrid />}
-                <HaltConditions />
-              </Section>
-
-              <Section id="signals" errorTitle="Signals">
-                <div className="grid grid-cols-1 xl:grid-cols-5 gap-5 sm:gap-6">
-                  <div className="xl:col-span-3 min-w-0">
-                    <SignalsTable />
-                  </div>
-                  <div className="xl:col-span-2 min-w-0">
-                    <EquityChart />
-                  </div>
-                </div>
-              </Section>
-
-              <Section id="execution" errorTitle="Execution" className="space-y-5 sm:space-y-6">
-                <ExecutionQualityStrip />
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6">
-                  <AttributionBreakdownCard />
-                  <PnLWaterfall />
-                </div>
-                <MaeMfeScatter />
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 sm:gap-6">
-                  <div className="lg:col-span-2 min-w-0">
-                    <SlippageHistogram />
-                  </div>
-                  <div className="lg:col-span-1 min-w-0">
-                    <FillQualityGauge />
-                  </div>
-                </div>
-                <TradeExecutionTable />
-              </Section>
-
-              <Section id="trades" errorTitle="Trades">
-                <TradeOutcomes />
-                <TradeFeed />
-              </Section>
-
-              <Section id="statistics" errorTitle="Statistical Metrics">
-                <StatisticalMetricsTable />
-              </Section>
-
-              <Section id="risk" errorTitle="Risk" className="space-y-6">
-                <HealthScores />
-                <GovernanceRadar />
-              </Section>
+            <main className="flex-1 min-w-0 px-4 sm:px-7 py-5 sm:py-7 animate-fade-in">
+              {tabContent[activeTab]}
             </main>
           </div>
         </div>
-        {enableDetailPanel && detailAsset && (
+        {detailAsset && (
           <AssetDetailPanel
             asset={detailAsset}
             name={selectedAsset!}

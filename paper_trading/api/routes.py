@@ -401,6 +401,40 @@ def handle_ping(path: str, query: dict) -> str:
     return json_dumps({"status": "ok"}, indent=2)
 
 
+def handle_engine_health(path: str, query: dict) -> str:
+    """Lightweight liveness check. Never cached — called every 5s by frontend."""
+    import time
+    from pathlib import Path
+
+    state_path = Path(_STORE.state_path) if hasattr(_STORE, "state_path") else None
+    state_file_age = -1
+    state_exists = False
+    status = "ok"
+
+    if state_path and state_path.exists():
+        state_exists = True
+        state_file_age = time.time() - state_path.stat().st_mtime
+        if state_file_age > 120:
+            status = "stale"
+    else:
+        status = "no_state"
+
+    snapshot = _STORE.load_snapshot()
+    seq = snapshot.sequence_id if snapshot else None
+
+    return json_dumps(
+        {
+            "status": status,
+            "server_time": datetime.now(ET).isoformat(),
+            "state_exists": state_exists,
+            "state_file_age_s": round(state_file_age, 1),
+            "state_sequence_id": seq,
+            "engine_alive": status == "ok" and state_file_age < 120,
+        },
+        indent=2,
+    )
+
+
 def handle_narrative_confirm(body: bytes) -> tuple[str, int]:
     ok = confirm_pending_narrative()
     if ok:
@@ -792,6 +826,45 @@ def handle_asset_detail(path: str, query: dict) -> tuple[str, int]:
     return data, 200
 
 
+def handle_wal_asset(path: str, query: dict) -> tuple[str, int]:
+    """Return WAL causal-boundary events for a given asset."""
+    asset_name = path[len("/wal/") : -len(".json")]
+    wal_path = os.path.join("data", "live", "wal", "engine.jsonl")
+    if not os.path.exists(wal_path):
+        return json_dumps({"error": "No WAL file found"}), 404
+
+    max_events = int(query.get("max", "100"))
+    events: list[dict] = []
+    try:
+        with open(wal_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                ev = json.loads(line)
+                payload = ev.get("payload", {})
+                if payload.get("asset") == asset_name:
+                    event_type = ev.get("event_type", "")
+                    if event_type in {"features_snapshot", "inference_output", "decision_output"}:
+                        events.append(
+                            {
+                                "sequence": ev.get("sequence"),
+                                "timestamp": ev.get("timestamp"),
+                                "event_type": event_type,
+                                "payload": payload,
+                            }
+                        )
+    except (json.JSONDecodeError, OSError) as exc:
+        return json_dumps({"error": f"WAL read error: {exc}"}), 500
+
+    if not events:
+        return json_dumps({"events": []}), 200
+
+    events.sort(key=lambda e: e["sequence"], reverse=True)
+    events = events[:max_events]
+    return json_dumps({"events": events, "total": len(events), "asset": asset_name}), 200
+
+
 GET_ROUTES: dict[str, tuple] = {
     "/state.json": (handle_state, False),
     "/trades.json": (handle_trades, False),
@@ -822,12 +895,14 @@ GET_ROUTES: dict[str, tuple] = {
     "/analytics/snapshot.json": (handle_analytics_snapshot, False),
     "/mt5/status.json": (handle_mt5_status, False),
     "/ping": (handle_ping, False),
+    "/health": (handle_engine_health, False),
 }
 
 GET_ROUTES_PREFIX: list[tuple[str, object, bool]] = [
     ("/risk/", handle_risk_asset, False),
     ("/shadow-actions/", handle_shadow_actions_asset, False),
     ("/health/", handle_health_asset, False),
+    ("/wal/", handle_wal_asset, False),
     ("/asset/", handle_asset_detail, False),
 ]
 

@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { Search, ExternalLink } from 'lucide-react'
 import { usePortfolioState } from '../hooks/usePortfolioState'
 import { useSelectedAsset } from '../hooks/useSelectedAsset'
-import { getFlag } from '../lib/featureFlags'
 import { confidenceToPercent, formatAssetPrice } from '../utils/format'
 import DataTable, { type ColumnDef } from './ui/DataTable'
 import Panel from './ui/Panel'
@@ -22,6 +21,12 @@ interface SignalRow {
   dd: number
   sellOnly: boolean
   tripwireActive: boolean
+  halted: boolean
+  haltReasons: string[]
+  gatesPassed: string | null
+  finalSize: string | null
+  unrealizedPnl: number | null
+  tradeDuration: string | null
   tpPct: number | null
   slPct: number | null
 }
@@ -30,7 +35,6 @@ export default function SignalsTable() {
   const [search, setSearch] = useState('')
   const { data, isPending } = usePortfolioState()
   const { setSelectedAsset, setDeepDiveAsset } = useSelectedAsset()
-  const enableDetailPanel = getFlag('ENABLE_DETAIL_PANEL')
 
   const rows = useMemo(() => {
     if (!data?.assets) return []
@@ -43,6 +47,7 @@ export default function SignalsTable() {
         const m = asset.metrics
         const alloc = data.portfolio?.allocations?.[name] ?? 0
         const pos = m?.position
+        const openPos = data?.open_positions?.[name]
         let tpPct: number | null = null
         let slPct: number | null = null
         if (pos?.entry && pos?.tp && pos?.sl) {
@@ -54,6 +59,28 @@ export default function SignalsTable() {
             slPct = ((pos.sl - pos.entry) / pos.entry) * 100
           }
         }
+
+        // Determine gates trace summary
+        const gt = asset.gates_trace
+        const gatesAborted = gt ? Object.entries(gt).filter(([, v]) => !v).map(([k]) => k) : []
+        const gatesPassed = gatesAborted.length === 0 ? 'PASS' : `BLOCKED:${gatesAborted.join(',')}`
+
+        // Determine sizing result
+        const sc = asset.sizing_chain
+        const finalSize = sc?.final_pct != null ? `${(Number(sc.final_pct) * 100).toFixed(1)}%` : null
+
+        // Determine trade duration
+        const probHist = openPos?.prob_history
+        let tradeDuration: string | null = null
+        if (probHist && probHist.length > 0 && pos) {
+          const entryDate = probHist[0]?.date
+          if (entryDate) {
+            const elapsed = Date.now() - new Date(entryDate).getTime()
+            const hours = Math.floor(elapsed / 3600000)
+            tradeDuration = hours < 24 ? `${hours}h` : `${Math.floor(hours / 24)}d`
+          }
+        }
+
         return {
           name,
           signal: asset.final_signal ?? sig?.signal ?? 'FLAT',
@@ -64,6 +91,12 @@ export default function SignalsTable() {
           dd: m?.drawdown ?? 0,
           sellOnly: asset.sell_only ?? false,
           tripwireActive: asset.tripwire_active ?? false,
+          halted: asset.halt?.halted ?? false,
+          haltReasons: asset.halt?.reasons ?? [],
+          gatesPassed,
+          finalSize,
+          unrealizedPnl: pos?.unrealized_pnl != null ? pos.unrealized_pnl : null,
+          tradeDuration,
           tpPct,
           slPct,
         }
@@ -79,7 +112,12 @@ export default function SignalsTable() {
       render: r => (
         <span className="flex items-center gap-1.5">
           <span className="font-semibold text-primary text-xs font-mono">{r.name}</span>
-          {r.sellOnly && (
+          {r.halted && (
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none bg-gov-red-muted text-gov-red border border-gov-red/20">
+              HALT
+            </span>
+          )}
+          {!r.halted && r.sellOnly && (
             <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none ${
               r.tripwireActive
                 ? 'bg-gov-red-muted text-gov-red border border-gov-red/20 animate-pulse'
@@ -95,7 +133,7 @@ export default function SignalsTable() {
       key: 'signal',
       label: 'Signal',
       sortable: true,
-      minWidth: '80px',
+      minWidth: '70px',
       render: r => {
         const { variant, icon } = signalToBadge(r.signal)
         return <Badge variant={variant} icon={icon}>{r.signal === 'BUY' ? 'LONG' : r.signal === 'SELL' ? 'SHORT' : 'FLAT'}</Badge>
@@ -124,20 +162,60 @@ export default function SignalsTable() {
       ),
     },
     {
+      key: 'gatesPassed',
+      label: 'Gates',
+      sortable: true,
+      minWidth: '80px',
+      sortKey: r => r.gatesPassed === 'PASS' ? 1 : 0,
+      render: r => (
+        <span className={`text-[10px] font-mono font-semibold ${r.gatesPassed === 'PASS' ? 'text-gov-green' : 'text-gov-red'}`}>
+          {r.gatesPassed === 'PASS' ? '✓ PASS' : r.gatesPassed ?? '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'finalSize',
+      label: 'Size',
+      align: 'right',
+      sortable: true,
+      sortKey: r => r.finalSize ? parseFloat(r.finalSize) : -1,
+      render: r => (
+        <span className={`font-mono tabular-nums text-[10px] ${r.finalSize ? 'text-primary' : 'text-tertiary'}`}>
+          {r.finalSize ?? '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'unrealizedPnl',
+      label: 'uPnL',
+      align: 'right',
+      sortable: true,
+      sortKey: r => r.unrealizedPnl ?? 0,
+      render: r => (
+        <span className={`font-mono tabular-nums ${r.unrealizedPnl != null ? (r.unrealizedPnl >= 0 ? 'text-gov-green' : 'text-gov-red') : 'text-tertiary'}`}>
+          {r.unrealizedPnl != null ? `${r.unrealizedPnl >= 0 ? '+' : ''}${r.unrealizedPnl.toFixed(2)}%` : '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'tradeDuration',
+      label: 'Age',
+      align: 'right',
+      sortable: true,
+      sortKey: r => r.tradeDuration ? (r.tradeDuration.endsWith('d') ? parseInt(r.tradeDuration) * 24 : parseInt(r.tradeDuration)) : -1,
+      render: r => (
+        <span className="font-mono tabular-nums text-tertiary text-[10px]">
+          {r.tradeDuration ?? '—'}
+        </span>
+      ),
+    },
+    {
       key: 'price',
       label: 'Price',
       align: 'right',
       sortable: true,
       sortKey: r => r.price,
       render: r => <span className="font-mono text-secondary tabular-nums">{formatAssetPrice(r.price)}</span>,
-    },
-    {
-      key: 'alloc',
-      label: 'Alloc',
-      align: 'right',
-      sortable: true,
-      sortKey: r => r.alloc,
-      render: r => <span className="font-mono text-tertiary tabular-nums">{(r.alloc * 100).toFixed(0)}%</span>,
     },
     {
       key: 'ret',
@@ -158,30 +236,6 @@ export default function SignalsTable() {
       sortable: true,
       sortKey: r => r.dd,
       render: r => <span className={`font-mono tabular-nums ${governanceText[ddToState(r.dd)]}`}>{r.dd.toFixed(2)}</span>,
-    },
-    {
-      key: 'tpPct',
-      label: 'TP%',
-      align: 'right',
-      sortable: true,
-      sortKey: r => r.tpPct ?? -Infinity,
-      render: r => (
-        <span className={`font-mono tabular-nums ${r.tpPct != null ? 'text-gov-green' : 'text-tertiary'}`}>
-          {r.tpPct != null ? `${r.tpPct.toFixed(1)}%` : '—'}
-        </span>
-      ),
-    },
-    {
-      key: 'slPct',
-      label: 'SL%',
-      align: 'right',
-      sortable: true,
-      sortKey: r => r.slPct ?? -Infinity,
-      render: r => (
-        <span className={`font-mono tabular-nums ${r.slPct != null ? 'text-gov-red' : 'text-tertiary'}`}>
-          {r.slPct != null ? `${r.slPct.toFixed(1)}%` : '—'}
-        </span>
-      ),
     },
     {
       key: 'actions',
@@ -244,7 +298,7 @@ export default function SignalsTable() {
           defaultSortKey="confidence"
           defaultSortDir="desc"
           storageKey="signals"
-          onRowClick={enableDetailPanel ? r => setSelectedAsset(r.name) : undefined}
+          onRowClick={r => setSelectedAsset(r.name)}
         />
       )}
     </Panel>

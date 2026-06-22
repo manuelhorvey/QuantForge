@@ -81,11 +81,19 @@ cleanup() {
     echo "  Shutting down..."
     kill "$MONITOR_PID" 2>/dev/null; wait "$MONITOR_PID" 2>/dev/null
     sleep 1
-    [ -n "$LAUNCHED_BRIDGE" ] && { kill "$LAUNCHED_BRIDGE" 2>/dev/null; wait "$LAUNCHED_BRIDGE" 2>/dev/null; }
-    [ -n "$LAUNCHED_TERM" ]   && { kill "$LAUNCHED_TERM" 2>/dev/null;   wait "$LAUNCHED_TERM" 2>/dev/null;   }
+    [ -n "$LAUNCHED_BRIDGE" ]       && { kill "$LAUNCHED_BRIDGE" 2>/dev/null;       wait "$LAUNCHED_BRIDGE" 2>/dev/null;       }
+    [ -n "$LAUNCHED_TERM" ]         && { kill "$LAUNCHED_TERM" 2>/dev/null;         wait "$LAUNCHED_TERM" 2>/dev/null;         }
+    [ -n "${SLACK_ALERTER_PID:-}" ] && { kill "$SLACK_ALERTER_PID" 2>/dev/null;     wait "$SLACK_ALERTER_PID" 2>/dev/null;     }
     echo "  Done."
 }
 trap cleanup EXIT INT TERM
+
+# ── Slack alerter (optional) ─────────────────────────────────
+if [ -n "${SLACK_WEBHOOK_URL:-}" ]; then
+    python -m paper_trading.ops.slack_alerter &
+    SLACK_ALERTER_PID=$!
+    echo "  Slack alerter started (PID $SLACK_ALERTER_PID)"
+fi
 
 # ── Engine + Dashboard ──────────────────────────────────────
 python -m paper_trading.ops.monitor &

@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import threading
 import time
@@ -169,6 +170,56 @@ def get_vol_baselines() -> dict:
 
     cfg = get_config()
     return cfg.vol_baselines or _FALLBACK_VOL_BASELINES
+
+
+# ── Authentication ──────────────────────────────────────────────────────────
+
+_AUTH_TOKEN: str | None = None  # None = not yet loaded, "" = no auth configured
+
+
+def _load_auth_token() -> str:
+    global _AUTH_TOKEN
+    if _AUTH_TOKEN is None:
+        from paper_trading.config_manager import get_config
+
+        cfg = get_config()
+        _AUTH_TOKEN = cfg.api_token or ""
+        if _AUTH_TOKEN:
+            logging.getLogger("quantforge.auth").info(
+                "API auth enabled (token from %s)",
+                "env QUANTFORGE_API_TOKEN" if os.environ.get("QUANTFORGE_API_TOKEN") else "config file",
+            )
+        else:
+            logging.getLogger("quantforge.auth").warning(
+                "No API auth token configured. Set QUANTFORGE_API_TOKEN env var or api_token in config. "
+                "All API endpoints are accessible without authentication."
+            )
+    return _AUTH_TOKEN
+
+
+def require_auth(headers: dict) -> bool:
+    """Check Authorization header against configured token.
+
+    Returns True if no auth is configured (open access) or token is valid.
+    Returns False if auth is configured but token is missing or invalid.
+    """
+    token = _load_auth_token()
+    if not token:
+        return True  # no auth configured — open access
+    provided = headers.get("Authorization", "")
+    if provided.startswith("Bearer "):
+        return provided[7:] == token
+    return False
+
+
+def auth_headers() -> dict:
+    """Return CORS and auth-related headers for responses."""
+    return {
+        "Access-Control-Allow-Origin": "http://127.0.0.1:3000",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Authorization, Content-Type",
+        "Access-Control-Expose-Headers": "Authorization",
+    }
 
 
 STATIC_ROUTES_VANILLA = {

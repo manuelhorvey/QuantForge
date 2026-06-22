@@ -79,7 +79,12 @@ Log lines: `SIZING` (paper) and `MT5_SIZING` (MT5) with all decomposed factors.
 PYTHONPATH=$PYTHONPATH:. python paper_trading/ops/monitor.py
 ```
 
-### Full Launcher (MT5 + Dashboard)
+### Slack Alerter (optional, requires SLACK_WEBHOOK_URL env var)
+```bash
+PYTHONPATH=$PYTHONPATH:. python paper_trading/ops/slack_alerter.py
+```
+
+### Full Launcher (MT5 + Dashboard + Slack Alerter)
 ```bash
 ./monitor_all
 ```
@@ -131,6 +136,16 @@ curl http://127.0.0.1:5000/state.json | python3 -m json.tool
 | Trades executed | ≥10 across portfolio | MT5 terminal |
 
 6/7 pass → go live at 50% position size for 2 weeks, then full size if live Sharpe tracks within 0.2 of backtest Sharpe.
+
+## Security
+
+The dashboard HTTP server (`paper_trading/serve.py`) supports optional bearer-token authentication.
+
+- **Config**: Set `QUANTFORGE_API_TOKEN` env var, or `api_token` in `configs/paper_trading.yaml`. Env var takes precedence.
+- **Behavior**: If a token is configured, all JSON API endpoints and POST endpoints require `Authorization: Bearer <token>`. Static files (HTML/CSS/JS) are accessible without auth.
+- **Default**: No token configured = open access (safe because the server binds to 127.0.0.1 by default).
+- **Bind address**: Override with `QUANTFORGE_BIND` env var. Warning is logged if binding to anything other than 127.0.0.1.
+- **CORS**: Restricted to `http://127.0.0.1:3000` (Vite dev server) and same-origin. No wildcard.
 
 ## Known Issues
 
@@ -494,6 +509,9 @@ New handlers in `replay/runner.py`:
 | `quantforge/domain/entities/signal.py` | `TradeDecision.feature_hash` field added |
 | `scripts/retrain_counterfactual.py` | **NEW** — feature ablation walk-forward test |
 | `scripts/check_chf_correlation.py` | **NEW** — CHF cluster independence verification |
+| `paper_trading/ops/slack_alerter.py` | **NEW** — WAL-tailing Slack alert daemon |
+| `paper_trading/dashboard/src/hooks/useEngineHealth.ts` | **NEW** — 5s health poll for liveness indicator |
+| `paper_trading/dashboard/src/components/WalTimeline.tsx` | **NEW** — per-asset WAL causal-boundary event timeline |
 
 ## Barrier Symmetry Audit (2026-06-20)
 

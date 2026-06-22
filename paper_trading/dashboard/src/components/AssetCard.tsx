@@ -1,7 +1,6 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react'
 import { usePortfolioState } from '../hooks/usePortfolioState'
 import { useSelectedAsset } from '../hooks/useSelectedAsset'
-import { getFlag } from '../lib/featureFlags'
 import { confidenceToPercent, formatAssetPrice } from '../utils/format'
 import {
   confToState,
@@ -21,7 +20,6 @@ interface Props {
 const AssetCard: React.FC<Props> = React.memo(({ name }) => {
   const { data } = usePortfolioState()
   const { setSelectedAsset } = useSelectedAsset()
-  const enableDetailPanel = getFlag('ENABLE_DETAIL_PANEL')
   const asset = data?.assets?.[name]
 
   const prevEntryRef = useRef<number | null>(null)
@@ -86,11 +84,11 @@ const AssetCard: React.FC<Props> = React.memo(({ name }) => {
 
   return (
     <div
-      role={enableDetailPanel ? 'button' : undefined}
-      tabIndex={enableDetailPanel ? 0 : undefined}
-      onClick={enableDetailPanel ? () => setSelectedAsset(name) : undefined}
-      onKeyDown={enableDetailPanel ? (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedAsset(name) } } : undefined}
-      className={`relative bg-panel border border-default rounded-lg px-4 py-3 overflow-hidden group shadow-panel transition-all duration-200 hover:border-strong hover:shadow-card border-l-2 ${enableDetailPanel ? 'cursor-pointer' : ''} ${governanceBorder[cardState]} ${governanceBgMuted[cardState]}`}>
+      role="button"
+      tabIndex={0}
+      onClick={() => setSelectedAsset(name)}
+      onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedAsset(name) } }}
+      className={`relative bg-panel border border-default rounded-lg px-4 py-3 overflow-hidden group shadow-panel transition-all duration-200 hover:border-strong hover:shadow-card cursor-pointer border-l-2 ${governanceBorder[cardState]} ${governanceBgMuted[cardState]}`}>
       <div className="flex items-center gap-2 mb-2">
         <span className="font-semibold text-sm text-primary">{name}</span>
         {info.sellOnly && (

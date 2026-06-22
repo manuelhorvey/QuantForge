@@ -63,6 +63,7 @@ class EngineConfig:
     retrain_freq: str = "annual"
     retrain_window: int = 5
     research_mode: bool = False
+    api_token: str = ""
     halt: dict = field(default_factory=_default_halt)
     assets: dict = field(default_factory=dict)
     vol_baselines: dict = field(default_factory=dict)
@@ -101,6 +102,8 @@ class EngineConfig:
         execution = data.get("execution", {})
         governance = execution.get("governance", {})
 
+        api_token = os.environ.get("QUANTFORGE_API_TOKEN", data.get("api_token", ""))
+
         return cls(
             capital=data.get("capital", 100_000),
             position_size=data.get("position_size", 0.95),
@@ -108,6 +111,7 @@ class EngineConfig:
             retrain_freq=data.get("retrain_freq", "annual"),
             retrain_window=data.get("retrain_window", 5),
             research_mode=data.get("research_mode", False),
+            api_token=api_token,
             halt=halt,
             assets=data.get("assets", {}),
             vol_baselines=data.get("vol_baselines", {}),

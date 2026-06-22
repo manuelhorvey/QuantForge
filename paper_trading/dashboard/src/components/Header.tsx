@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react'
 import { Menu, RefreshCw, TrendingUp } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { usePortfolioState } from '../hooks/usePortfolioState'
-import { useMT5Status } from '../hooks/useMT5Status'
+import { useEngineHealth } from '../hooks/useEngineHealth'
 import ThemeToggle from './ui/ThemeToggle'
+import MT5Status from './MT5Status'
 import { formatTimeAgo } from '../utils/format'
 
 interface HeaderProps {
@@ -12,19 +13,31 @@ interface HeaderProps {
 
 export default function Header({ onMenuClick }: HeaderProps) {
   const { data, isError, dataUpdatedAt } = usePortfolioState()
+  const health = useEngineHealth()
   const queryClient = useQueryClient()
-  const { data: mt5 } = useMT5Status()
   const [refreshing, setRefreshing] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const lastServerUpdate = data?.portfolio?.last_update ?? data?.engine_status?.last_update ?? data?.timestamp
   const lastClientUpdate = dataUpdatedAt ? new Date(dataUpdatedAt).toISOString() : ''
-  const freshnessLabel = isError
+  const freshnessLabel = lastServerUpdate
+    ? `Updated ${formatTimeAgo(lastServerUpdate)}`
+    : lastClientUpdate
+      ? `Fetched ${formatTimeAgo(lastClientUpdate)}`
+      : ''
+
+  const engineAlive = health.data?.engine_alive ?? false
+  const healthLabel = health.isError
     ? 'Disconnected'
-    : lastServerUpdate
-      ? `Updated ${formatTimeAgo(lastServerUpdate)}`
-      : lastClientUpdate
-        ? `Fetched ${formatTimeAgo(lastClientUpdate)}`
-        : 'Connected'
+    : health.isLoading
+      ? '...'
+      : engineAlive
+        ? 'Live'
+        : 'Stale'
+  const healthDot = health.isError
+    ? 'bg-gov-red'
+    : engineAlive
+      ? 'bg-gov-green'
+      : 'bg-gov-yellow'
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 10)
@@ -67,32 +80,20 @@ export default function Header({ onMenuClick }: HeaderProps) {
         <div className="flex items-center gap-2">
           <span className="hidden sm:inline-flex items-center gap-1.5 text-2xs text-tertiary font-mono tabular-nums">
             <span
-              className={`relative inline-flex w-2 h-2 rounded-full ${isError ? 'bg-gov-red' : 'bg-gov-green'}`}
-              title={freshnessLabel}
-              aria-label={freshnessLabel}
+              className={`relative inline-flex w-2 h-2 rounded-full ${healthDot}`}
+              title={`Engine: ${healthLabel}${freshnessLabel ? ` — ${freshnessLabel}` : ''}`}
+              aria-label={`Engine: ${healthLabel}${freshnessLabel ? ` — ${freshnessLabel}` : ''}`}
             />
-            {freshnessLabel}
+            {healthLabel}
           </span>
           <span
-            className={`sm:hidden relative inline-flex w-2 h-2 rounded-full ${isError ? 'bg-gov-red' : 'bg-gov-green'}`}
-            title={freshnessLabel}
-            aria-label={freshnessLabel}
+            className={`sm:hidden relative inline-flex w-2 h-2 rounded-full ${healthDot}`}
+            title={`Engine: ${healthLabel}${freshnessLabel ? ` — ${freshnessLabel}` : ''}`}
+            aria-label={`Engine: ${healthLabel}${freshnessLabel ? ` — ${freshnessLabel}` : ''}`}
           />
 
           <ThemeToggle />
-
-          <span
-            className="relative inline-flex w-2 h-2 rounded-full shrink-0"
-            title={`MT5: ${mt5?.status ?? '...'}`}
-            aria-label={`MT5: ${mt5?.status ?? '...'}`}
-            style={{
-              backgroundColor:
-                mt5?.status === 'CONNECTED' ? 'var(--color-gov-green, #22c55e)' :
-                mt5?.status === 'DISCONNECTED' ? 'var(--color-gov-yellow, #eab308)' :
-                mt5?.status === 'ERROR' ? 'var(--color-gov-red, #ef4444)' :
-                'var(--color-tertiary, #6b7280)',
-            }}
-          />
+          <MT5Status />
 
           <button
             type="button"

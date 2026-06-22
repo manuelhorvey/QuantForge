@@ -1,7 +1,6 @@
 const FLAG_KEY = 'qf_feature_flags'
 
 interface FeatureFlags {
-  ENABLE_DETAIL_PANEL?: boolean
   ENABLE_MAE_MFE_SCATTER?: boolean
 }
 

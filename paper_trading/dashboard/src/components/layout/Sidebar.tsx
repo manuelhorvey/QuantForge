@@ -1,7 +1,6 @@
 import { useCallback, useRef } from 'react'
 import { X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { useActiveSection } from '../../hooks/useActiveSection'
 import { usePortfolioState } from '../../hooks/usePortfolioState'
 import Divider from '../ui/Divider'
 import {
@@ -9,56 +8,42 @@ import {
   TrendingUp,
   Zap,
   BarChart3,
-  Activity,
   Heart,
   Sigma,
 } from 'lucide-react'
 
+type TabId = 'dashboard' | 'trading' | 'execution' | 'research' | 'risk'
+
 interface NavItem {
-  id: string
+  id: TabId
   label: string
   icon: LucideIcon
+  desc: string
 }
 
-interface NavGroup {
-  title: string
-  icon: LucideIcon
-  items: NavItem[]
-}
-
-const NAV_GROUPS: NavGroup[] = [
+const NAV_GROUPS: { title: string; icon: LucideIcon; items: NavItem[] }[] = [
   {
-    title: 'Monitor',
+    title: 'Overview',
     icon: LayoutDashboard,
-    items: [{ id: 'monitor', label: 'System Monitor', icon: LayoutDashboard }],
-  },
-  {
-    title: 'Portfolio',
-    icon: TrendingUp,
-    items: [{ id: 'portfolio', label: 'Portfolio', icon: TrendingUp }],
-  },
-  {
-    title: 'Signals & Execution',
-    icon: Zap,
     items: [
-      { id: 'signals', label: 'Signals', icon: Zap },
-      { id: 'execution', label: 'Execution', icon: BarChart3 },
+      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, desc: 'Health + alerts + portfolio summary' },
     ],
   },
   {
-    title: 'Trades',
-    icon: Activity,
-    items: [{ id: 'trades', label: 'Trades', icon: Activity }],
+    title: 'Trading',
+    icon: TrendingUp,
+    items: [
+      { id: 'trading', label: 'Trading', icon: Zap, desc: 'Signals, fills, open trades' },
+      { id: 'execution', label: 'Execution', icon: BarChart3, desc: 'Slippage, quality, attribution' },
+    ],
   },
   {
-    title: 'Research',
+    title: 'Analysis',
     icon: Sigma,
-    items: [{ id: 'statistics', label: 'Statistical Metrics', icon: Sigma }],
-  },
-  {
-    title: 'Governance',
-    icon: Heart,
-    items: [{ id: 'risk', label: 'System Health', icon: Heart }],
+    items: [
+      { id: 'research', label: 'Research', icon: Sigma, desc: 'Sharpe, PSR, calibration' },
+      { id: 'risk', label: 'Risk', icon: Heart, desc: 'Health scores, governance, constraints' },
+    ],
   },
 ]
 
@@ -66,22 +51,18 @@ const allItems = NAV_GROUPS.flatMap(g => g.items)
 
 interface SidebarProps {
   open: boolean
+  activeTab: TabId
+  onTabChange: (tab: TabId) => void
   onClose: () => void
 }
 
-export default function Sidebar({ open, onClose }: SidebarProps) {
-  const active = useActiveSection()
+export default function Sidebar({ open, activeTab, onTabChange, onClose }: SidebarProps) {
   const navRef = useRef<HTMLElement>(null)
   const { data: state } = usePortfolioState()
 
   const engine = state?.engine_status
   const isRunning = engine?.initialized && !engine?.market_closed
   const engineLabel = engine?.market_closed ? 'CLOSED' : engine?.initialized ? 'RUNNING' : 'OFF'
-
-  const scrollTo = useCallback((id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
-    onClose()
-  }, [onClose])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent, currentId: string) => {
     const currentIndex = allItems.findIndex(item => item.id === currentId)
@@ -116,6 +97,11 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
       }
     }
   }, [onClose])
+
+  const handleNav = useCallback((id: TabId) => {
+    onTabChange(id)
+    onClose()
+  }, [onTabChange, onClose])
 
   return (
     <>
@@ -178,7 +164,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               </p>
               <div className="space-y-0.5 ml-1">
                 {group.items.map(item => {
-                  const isActive = active === item.id
+                  const isActive = activeTab === item.id
                   return (
                     <button
                       key={item.id}
@@ -186,7 +172,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                       role="treeitem"
                       aria-current={isActive ? 'page' : undefined}
                       tabIndex={isActive ? 0 : -1}
-                      onClick={() => scrollTo(item.id)}
+                      onClick={() => handleNav(item.id)}
                       onKeyDown={e => handleKeyDown(e, item.id)}
                       className={`
                         w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium
@@ -201,7 +187,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-4 bg-accent-emerald rounded-full shadow-[0_0_4px_rgba(20,184,166,0.4)]" />
                       )}
                       <item.icon className="w-3.5 h-3.5 shrink-0" strokeWidth={1.5} />
-                      <span className="truncate">{item.label}</span>
+                      <div className="flex flex-col min-w-0">
+                        <span className="truncate">{item.label}</span>
+                        <span className="text-[9px] text-tertiary/60 truncate">{item.desc}</span>
+                      </div>
                     </button>
                   )
                 })}

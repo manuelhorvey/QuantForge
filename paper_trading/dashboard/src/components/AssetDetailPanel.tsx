@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { X, Shield, Sliders, Activity, BarChart3, ChevronDown, ChevronRight } from 'lucide-react'
+import { X, Shield, Sliders, Activity, BarChart3, ChevronDown, ChevronRight, List } from 'lucide-react'
 import type { AssetState } from '../types/portfolio'
 import { governanceText } from './ui/governance'
+import WalTimeline from './WalTimeline'
 
-type TabId = 'overview' | 'governance' | 'sizing' | 'diagnostics'
+type TabId = 'overview' | 'governance' | 'sizing' | 'diagnostics' | 'wal'
 
 interface Props {
   asset: AssetState
@@ -53,6 +54,7 @@ const TABS: { id: TabId; label: string; icon: typeof Shield }[] = [
   { id: 'governance', label: 'Governance', icon: Shield },
   { id: 'sizing', label: 'Sizing', icon: Sliders },
   { id: 'diagnostics', label: 'Diagnostics', icon: Activity },
+  { id: 'wal', label: 'WAL', icon: List },
 ]
 
 export default function AssetDetailPanel({ asset, name, onClose }: Props) {
@@ -106,6 +108,7 @@ export default function AssetDetailPanel({ asset, name, onClose }: Props) {
         {tab === 'governance' && <GovernanceTab asset={asset} />}
         {tab === 'sizing' && <SizingTab asset={asset} />}
         {tab === 'diagnostics' && <DiagnosticsTab asset={asset} />}
+        {tab === 'wal' && <WalTimeline assetName={name} />}
       </div>
     </div>
   )

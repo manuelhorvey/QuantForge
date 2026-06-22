@@ -612,6 +612,7 @@ def run_decision_pipeline(
                 "asset": engine.name,
                 "final_signal": final_signal,
                 "gates_aborted": ctx.abort,
+                "gates_trace": ctx.gates_trace,
                 "feature_hash": ctx.feature_hash,
                 "model_hash": getattr(engine, "_model_hash", "unknown"),
             },
