@@ -146,8 +146,10 @@ class EngineStateService:
         )
         # FIXED 2026-06-22: was sum(a.capital_base) which got overwritten by
         # rebalancing, making denominator chase numerator → return ≈ 0%.
-        # Now uses get_config().capital (the immutable config baseline).
-        tc = get_config().capital or 1.0
+        # Now uses sum(a.initial_capital) — set once at init, never overwritten.
+        # Use get_config().capital only if no assets have initial_capital yet.
+        deployed = sum(a.initial_capital for a in engine.assets.values())
+        tc = deployed if deployed > 0 else (get_config().capital or 1.0)
 
         mtm_total = self.compute_mtm_total()
 
