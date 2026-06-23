@@ -119,6 +119,14 @@ class PurgedWalkForwardFolds(BaseCrossValidator):
 
             train_idx = idx[:train_end]  # expanding (all history)
 
+            # Purge previous folds' test data (with gap) from training set
+            for j in range(1, i):
+                prev_test_start = j * fold_size
+                prev_test_end = min(prev_test_start + fold_size, n)
+                purge_start = prev_test_start
+                purge_end = min(prev_test_end + self.gap, n)
+                train_idx = [t for t in train_idx if t < purge_start or t >= purge_end]
+
             # Rolling window: truncate to last N bars
             if self.window_type == "rolling":
                 max_bars = self.rolling_window_bars or (fold_size * self.n_folds)

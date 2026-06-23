@@ -131,17 +131,21 @@ class AssetTrainingPipeline:
         x_binary = x.loc[y_binary.index]
         y_vals = y_binary.values
 
-        from sklearn.model_selection import train_test_split
+        # ── Time-based validation split ──────────────────────────────────
+        # Use the last 20% as validation with a vertical_barrier embargo
+        # to prevent label lookahead (training label windows must not reach
+        # into validation data).  Falls back to a simple tail split when
+        # insufficient data for the embargo.
+        n = len(x_binary)
+        n_valid = max(int(n * 0.2), 1)
+        train_end = n - n_valid - vb
+        if train_end < 50:
+            train_end = n - n_valid
 
-        min_class = y_binary.value_counts().min()
-        strat = y_binary if min_class >= 2 else None
-        x_tr, x_ev, y_tr, y_ev = train_test_split(
-            x_binary,
-            y_vals,
-            test_size=0.2,
-            random_state=42,
-            stratify=strat,
-        )
+        x_tr = x_binary.iloc[:train_end]
+        y_tr = y_vals[:train_end]
+        x_ev = x_binary.iloc[-n_valid:]
+        y_ev = y_vals[-n_valid:]
 
         n0 = (y_tr == 0).sum()
         n1 = (y_tr == 1).sum()
@@ -160,7 +164,7 @@ class AssetTrainingPipeline:
             tree_method="hist",
             verbosity=0,
         )
-        model.fit(x_tr, y_tr, eval_set=[(x_ev, y_ev)], verbose=False)
+        model.fit(x_tr, y_tr, eval_set=[(x_ev, y_ev)], verbose=False, early_stopping_rounds=50)
 
         asset.model = model
         asset._trained = True

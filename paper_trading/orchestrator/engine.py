@@ -68,6 +68,7 @@ class EngineOrchestrator:
         self._max_workers = max_workers or len(actors) * 2
         self._persist_buffer: list[dict] = []
         self._peak_portfolio_value: float | None = None
+        self._last_pnl_date: datetime.date | None = None
         self._emergency_halt: bool = False
         self._wal = wal_writer
         self._last_health: dict | None = None
@@ -145,11 +146,9 @@ class EngineOrchestrator:
         defaults = get_config().defaults or {}
         max_leverage = defaults.get("portfolio_max_leverage", 2.0)
         total_equity = sum(a._engine.mtm_value for a in self._actors.values() if hasattr(a._engine, "mtm_value"))
-        if self._peak_portfolio_value is None or total_equity > self._peak_portfolio_value:
-            self._peak_portfolio_value = total_equity
         current_dd = (
             (total_equity - self._peak_portfolio_value) / max(self._peak_portfolio_value, 1.0)
-            if self._peak_portfolio_value
+            if self._peak_portfolio_value is not None and self._peak_portfolio_value > 0
             else 0.0
         )
         # Leverage budget: max_leverage × equity × backstop_multiplier.
@@ -271,7 +270,10 @@ class EngineOrchestrator:
         if prev_value is None:
             prev_value = total_value
         if total_value < prev_value:
-            self._circuit_breaker.record_daily_pnl(total_value - prev_value)
+            today = datetime.now(timezone.utc).date()
+            if self._last_pnl_date != today:
+                self._circuit_breaker.record_daily_pnl(total_value - prev_value)
+                self._last_pnl_date = today
         self._prev_portfolio_value = total_value
 
         breaker_result = self._circuit_breaker.check(
