@@ -20,6 +20,12 @@ ensemble:
 meta_labeling:
   confidence_threshold: 0.4
   threshold_reduced: 0.4
+calibration:
+  enabled: false
+  method: binned
+  n_bins: 10
+  min_samples_per_bin: 5
+  model_dir: paper_trading/models/calibration
 portfolio_drawdown_limit: -0.15
 defaults:
   churn_ratio_threshold: 0.35

@@ -41,6 +41,7 @@ from paper_trading.services.position_service import PositionService
 from paper_trading.shadow.engine import ShadowSLTPEngine
 from paper_trading.state_store import _SKIP_JOURNAL
 from quantforge.domain.entities.position import OrderType
+from shared.calibration.registry import CalibrationRegistry
 from shared.registry import StrategyRegistry
 
 logger = logging.getLogger("quantforge.asset_engine")
@@ -116,6 +117,9 @@ class AssetEngine:
         self.model_path = os.path.join(BASE, "paper_trading", "models", f"{contract.name}_model.json")
         self._wal_writer = wal_writer
         self._model_hash = self._load_model_hash()
+        self._calibration_registry: CalibrationRegistry | None = None
+        self._calibration_applied = False
+        self._load_calibration_registry()
 
         # ── Infrastructure dependencies ──────────────────────────────
         self.execution_bridge = ctx.get_execution_bridge()
@@ -298,6 +302,17 @@ class AssetEngine:
             with open(self.model_path, "rb") as f:
                 return hashlib.sha256(f.read()).hexdigest()[:16]
         return "unknown"
+
+    def _load_calibration_registry(self) -> None:
+        cal_dir = os.path.join(os.path.dirname(self.model_path), "calibration")
+        registry = CalibrationRegistry()
+        n_loaded = registry.load_all(cal_dir)
+        if n_loaded > 0:
+            self._calibration_registry = registry
+            logger.info("%s: loaded calibration registry (%d assets)", self.name, n_loaded)
+        else:
+            self._calibration_registry = None
+            logger.debug("%s: no calibration models found in %s", self.name, cal_dir)
 
     def set_experiment_context(self, experiment_id: str, export_dir: str | None = None) -> None:
         self._attribution_export_dir = _AttributionService.set_experiment_context(
@@ -551,6 +566,7 @@ class AssetEngine:
 
     def train(self, force=False):
         self._training.train(force=force)
+        self._load_calibration_registry()
 
     def generate_signal(self, threshold=0.45):
         halt = self.check_halt_conditions()

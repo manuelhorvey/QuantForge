@@ -25,6 +25,7 @@ from paper_trading.ops.tracer import (
     shadow_compare_sizing,
     trace_decision,
 )
+from shared.calibration.registry import CalibrationRegistry
 
 logger = logging.getLogger("quantforge.inference_pipeline")
 
@@ -71,6 +72,26 @@ class AssetInferencePipeline:
 
         _t_infer = time.perf_counter()
         proba, _infer_idx = self._run_inference(asset, x, features_df, feature_hash)
+
+        # ── Calibrate probabilities ──────────────────────────────────
+        cal_registry: CalibrationRegistry | None = getattr(asset, "_calibration_registry", None)
+        if cal_registry is not None:
+            _cal_cfg = get_config().defaults.get("calibration", {})
+            if _cal_cfg.get("enabled", False):
+                try:
+                    raw_p_long = proba[:, 2].copy()
+                    cal_p_long = cal_registry.calibrate(asset.name, raw_p_long)
+                    proba[:, 2] = cal_p_long
+                    proba[:, 0] = 1.0 - cal_p_long
+                    asset._calibration_applied = True
+                except Exception as e:
+                    logger.debug("%s: calibration inference failed: %s", asset.name, e)
+                    asset._calibration_applied = False
+            else:
+                asset._calibration_applied = False
+        else:
+            asset._calibration_applied = False
+
         result, pos_size = self._compute_sizing_and_signal(asset, df, proba, _infer_idx, threshold)
 
         self._log_ensemble_breakdown(asset, alpha_df, proba, result)

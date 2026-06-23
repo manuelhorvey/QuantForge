@@ -114,6 +114,10 @@ class EngineStateService:
                 "last_regime_features": getattr(asset, "_last_regime_features", None),
                 "gates_trace": getattr(asset, "_last_gates_trace", None),
                 "sizing_chain": getattr(asset, "_last_sizing_chain", None),
+                "calibration": {
+                    "applied": bool(getattr(asset, "_calibration_applied", False)),
+                    "registry_loaded": getattr(asset, "_calibration_registry", None) is not None,
+                },
             }
         total_value = self.compute_mtm_total()
         rp_weights = {}
