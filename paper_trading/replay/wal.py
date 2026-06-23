@@ -90,21 +90,31 @@ class WalWriter:
         os.makedirs(os.path.dirname(self._path), exist_ok=True)
 
     def write(self, event_type: str, payload: dict) -> WalEvent:
-        """Append a single event to the WAL. Returns the created event."""
+        """Append a single event to the WAL. Returns the created event.
+
+        Lock scope is minimized to sequence increment + event construction
+        only. File I/O (open/write/flush/fsync) runs outside the lock so a
+        hung fsync on one thread cannot block other actors from writing.
+        """
         with self._lock:
             self._seq += 1
+            seq = self._seq
             event = WalEvent(
-                sequence=self._seq,
+                sequence=seq,
                 source=self._source,
                 event_type=event_type,
                 timestamp=datetime.now(timezone.utc).isoformat(),
                 payload=payload,
             )
             line = json.dumps(event.to_dict(), default=str) + "\n"
-            with open(self._path, "a") as f:
-                f.write(line)
-                f.flush()
+
+        with open(self._path, "a") as f:
+            f.write(line)
+            f.flush()
+            try:
                 os.fsync(f.fileno())
+            except OSError:
+                logger.exception("WAL fsync failed for %s seq=%d", event_type, seq)
         return event
 
     @property
