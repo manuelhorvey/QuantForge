@@ -10,7 +10,6 @@ Covers:
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, PropertyMock
 
 import pytest
 
@@ -21,7 +20,6 @@ from paper_trading.governance.drawdown_controls import (
 )
 from paper_trading.orchestrator.actor import AssetActor
 from paper_trading.orchestrator.engine import EngineOrchestrator
-
 
 # ── Mock helpers ────────────────────────────────────────────────────────────────
 
@@ -57,11 +55,13 @@ class _MockAssetEngine:
         self.last_signal = None
 
     def _close_position(self, exit_price: float, exit_date: str, reason: str):
-        self.closed_positions.append({
-            "exit_price": exit_price,
-            "exit_date": exit_date,
-            "reason": reason,
-        })
+        self.closed_positions.append(
+            {
+                "exit_price": exit_price,
+                "exit_date": exit_date,
+                "reason": reason,
+            }
+        )
         self.pos_mgr = _MockPosMgr(has_pos=False)
 
     def refresh_price(self):
@@ -97,6 +97,13 @@ class TestComputeDrawdown:
     def test_zero_value_handling(self):
         assert compute_drawdown(0.0, 100.0) == -1.0
 
+    def test_negative_current_value(self):
+        dd = compute_drawdown(-50.0, 100.0)
+        assert dd < 0.0
+
+    def test_both_zero_returns_zero(self):
+        assert compute_drawdown(0.0, 0.0) == 0.0
+
 
 class TestComputeExposureMultiplier:
     def test_exactly_at_hard_limit_defaults(self):
@@ -112,6 +119,13 @@ class TestComputeExposureMultiplier:
     def test_partial_at_custom_limits(self):
         mult, halted = compute_exposure_multiplier(-0.075, drawdown_limit=-0.10, soft_limit=-0.05)
         assert mult == pytest.approx(0.5)
+        assert not halted
+
+    def test_soft_limit_equals_hard_limit(self):
+        # When soft == hard, the >= soft_limit check fires first: drawdown at
+        # limit gets full exposure (1.0). Drawdown below limit => halted (0.0).
+        mult, halted = compute_exposure_multiplier(-0.10, drawdown_limit=-0.10, soft_limit=-0.10)
+        assert mult == 1.0
         assert not halted
 
 
@@ -213,7 +227,7 @@ class TestDrawdownBreakerIntegration:
             eng.mtm_value = 85.0
         orch = _make_orchestrator(engines)
         # Manually set peak to trigger 15% drawdown
-        orch._peak_portfolio_value = (100.0 + 100.0)  # 200 peak
+        orch._peak_portfolio_value = 100.0 + 100.0  # 200 peak
         results = orch.run_once()
         assert results["drawdown"]["halted"]
         assert results["circuit_breaker"]["triggered"]
@@ -343,3 +357,113 @@ class TestCorrelatedAUDSyntheticCascade:
         # Cycle succeeds — drawdown is now 0% since mtm == peak
         assert r2["circuit_breaker"] is None
         assert not r2["drawdown"]["halted"]
+
+
+class TestSequentialCascade:
+    """Assets drop across multiple cycles, testing cumulative drawdown tracking."""
+
+    def test_sequential_drop_crosses_threshold_on_second_cycle(self):
+        engines = {
+            "AUDUSD": _MockAssetEngine("AUDUSD", mtm_value=100.0, has_position=True),
+            "EURUSD": _MockAssetEngine("EURUSD", mtm_value=100.0, has_position=True),
+        }
+        orch = _make_orchestrator(engines)
+        orch._peak_portfolio_value = 200.0
+
+        # Cycle 1: AUDUSD drops 10% (cumulative portfolio -5%), no trip
+        engines["AUDUSD"].mtm_value = 90.0
+        engines["AUDUSD"].current_value = 90.0
+        r1 = orch.run_once()
+        assert not r1["drawdown"]["halted"]
+        assert r1["drawdown"]["drawdown"] == pytest.approx(-0.05)
+        assert len(engines["AUDUSD"].closed_positions) == 0
+
+        # Cycle 2: EURUSD drops 10% (cumulative portfolio -10%), still below -15% hard limit
+        engines["EURUSD"].mtm_value = 90.0
+        engines["EURUSD"].current_value = 90.0
+        r2 = orch.run_once()
+        assert not r2["drawdown"]["halted"]
+        assert r2["drawdown"]["drawdown"] == pytest.approx(-0.10)
+        assert len(engines["AUDUSD"].closed_positions) == 0
+
+        # Cycle 3: AUDUSD drops another 10% (cumulative portfolio -15%), triggers breaker
+        engines["AUDUSD"].mtm_value = 80.0
+        engines["AUDUSD"].current_value = 80.0
+        r3 = orch.run_once()
+        assert r3["drawdown"]["halted"]
+        assert r3["drawdown"]["drawdown"] == pytest.approx(-0.15)
+        assert r3["circuit_breaker"]["triggered"]
+        assert len(engines["AUDUSD"].closed_positions) == 1
+
+    def test_recovery_between_drops_does_not_reset_peak(self):
+        engines = {
+            "AUDUSD": _MockAssetEngine("AUDUSD", mtm_value=95.0, has_position=True),
+            "EURUSD": _MockAssetEngine("EURUSD", mtm_value=95.0, has_position=True),
+        }
+        orch = _make_orchestrator(engines)
+        orch._peak_portfolio_value = 200.0
+
+        # Cycle 1: portfolio at 190 (190/200 = -5%)
+        r1 = orch.run_once()
+        assert r1["drawdown"]["drawdown"] == pytest.approx(-0.05)
+        assert not r1["drawdown"]["halted"]
+
+        # Cycle 2: partial recovery to 195 (still -2.5% from original peak)
+        engines["AUDUSD"].mtm_value = 100.0
+        engines["AUDUSD"].current_value = 100.0
+        r2 = orch.run_once()
+        assert r2["drawdown"]["drawdown"] == pytest.approx(-0.025)
+        assert not r2["drawdown"]["halted"]
+
+        # Cycle 3: drop again to 170 (cumulative -15% from original peak)
+        engines["AUDUSD"].mtm_value = 75.0
+        engines["AUDUSD"].current_value = 75.0
+        engines["EURUSD"].mtm_value = 95.0
+        engines["EURUSD"].current_value = 95.0
+        r3 = orch.run_once()
+        assert r3["drawdown"]["halted"]
+        assert r3["drawdown"]["drawdown"] == pytest.approx(-0.15)
+        assert r3["circuit_breaker"]["triggered"]
+
+
+class TestSingleAssetConcentratedDrop:
+    """Single large position can trigger the breaker independently."""
+
+    def test_large_position_drop_triggers_breaker(self):
+        """One asset at 60% of portfolio value drops 25% → portfolio -15%."""
+        engines = {
+            "GC": _MockAssetEngine("GC", mtm_value=300.0, has_position=True),
+            "AUDUSD": _MockAssetEngine("AUDUSD", mtm_value=100.0, has_position=True),
+            "EURUSD": _MockAssetEngine("EURUSD", mtm_value=100.0, has_position=True),
+        }
+        orch = _make_orchestrator(engines)
+        orch._peak_portfolio_value = 500.0
+
+        # GC drops 25%: 300 → 225, portfolio: 425/500 = -15%
+        engines["GC"].mtm_value = 225.0
+        engines["GC"].current_value = 225.0
+        results = orch.run_once()
+        assert results["drawdown"]["halted"]
+        assert results["drawdown"]["drawdown"] == pytest.approx(-0.15)
+        assert results["circuit_breaker"]["triggered"]
+        # All positions get flattened regardless of which asset triggered
+        assert len(engines["GC"].closed_positions) == 1
+        assert len(engines["AUDUSD"].closed_positions) == 1
+        assert len(engines["EURUSD"].closed_positions) == 1
+
+    def test_concentrated_drop_below_threshold_no_trip(self):
+        """One asset drops 15% but portfolio drawdown is only -5% due to diversification."""
+        engines = {
+            "GC": _MockAssetEngine("GC", mtm_value=300.0, has_position=True),
+            "AUDUSD": _MockAssetEngine("AUDUSD", mtm_value=100.0, has_position=True),
+            "EURUSD": _MockAssetEngine("EURUSD", mtm_value=100.0, has_position=True),
+        }
+        orch = _make_orchestrator(engines)
+        orch._peak_portfolio_value = 500.0
+
+        engines["GC"].mtm_value = 255.0  # -15% on GC = -9% portfolio hit
+        engines["GC"].current_value = 255.0
+        results = orch.run_once()
+        assert not results["drawdown"]["halted"]
+        assert results["drawdown"]["drawdown"] == pytest.approx(-0.09)
+        assert len(engines["GC"].closed_positions) == 0

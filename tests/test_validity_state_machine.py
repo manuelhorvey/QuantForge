@@ -1,7 +1,7 @@
-import pytest
-import pandas as pd
 import numpy as np
-from monitoring.validity_state_machine import ValidityStateMachine, ValidityState, compute_allocation_statistics
+import pandas as pd
+
+from monitoring.validity_state_machine import ValidityState, ValidityStateMachine, compute_allocation_statistics
 
 
 class TestValidityStateMachine:
@@ -62,7 +62,7 @@ class TestValidityStateMachine:
             regime_lock_periods=3,
         )
         for i in range(3):
-            sm.transition(0.85, pd.Timestamp(f"2020-01-{i+1}"))
+            sm.transition(0.85, pd.Timestamp(f"2020-01-{i + 1}"))
         sm.transition(0.85, pd.Timestamp("2020-01-04"), pd.Series([0.85] * 3))
         assert sm.current_state == ValidityState.GREEN
 
@@ -191,13 +191,15 @@ class TestComputeAllocationStatistics:
         assert result == {}
 
     def test_state_distribution(self):
-        df = pd.DataFrame({
-            "state": ["GREEN", "GREEN", "YELLOW", "RED"],
-            "exposure": [1.0, 1.0, 0.5, 0.0],
-            "transition_occurred": [True, False, True, False],
-            "lock_active": [False, False, True, False],
-            "periods_in_state": [3, 4, 2, 1],
-        })
+        df = pd.DataFrame(
+            {
+                "state": ["GREEN", "GREEN", "YELLOW", "RED"],
+                "exposure": [1.0, 1.0, 0.5, 0.0],
+                "transition_occurred": [True, False, True, False],
+                "lock_active": [False, False, True, False],
+                "periods_in_state": [3, 4, 2, 1],
+            }
+        )
         result = compute_allocation_statistics(df)
         assert result["state_distribution"]["GREEN"] == 0.5
         assert result["state_distribution"]["YELLOW"] == 0.25
@@ -249,6 +251,35 @@ class TestCircuitBreaker:
         result = cb.check(portfolio_value=106.0)
         assert not result.trip
 
+    def test_trip_on_drawdown(self):
+        from paper_trading.orchestrator.health import CircuitBreaker
+
+        cb = CircuitBreaker(max_drawdown_pct=0.20, vol_spike_threshold=99.0, max_consecutive_losses=99)
+        # First call establishes peak at 100
+        cb.check(portfolio_value=100.0)
+        # Drop to 79 crosses the 20% threshold
+        result = cb.check(portfolio_value=79.0)
+        assert result.trip
+        assert "dd" in result.reason
+        assert result.severity == "critical"
+
+    def test_no_trip_on_drawdown_below_threshold(self):
+        from paper_trading.orchestrator.health import CircuitBreaker
+
+        cb = CircuitBreaker(max_drawdown_pct=0.20)
+        cb.check(portfolio_value=100.0)
+        result = cb.check(portfolio_value=81.0)
+        assert not result.trip
+
+    def test_peak_value_updates_on_new_high(self):
+        from paper_trading.orchestrator.health import CircuitBreaker
+
+        cb = CircuitBreaker(max_drawdown_pct=0.20)
+        cb.check(portfolio_value=100.0)  # peak=100
+        cb.check(portfolio_value=110.0)  # peak=110
+        result = cb.check(portfolio_value=90.0)  # dd=18.2% < 20%
+        assert not result.trip
+
 
 class TestCorrelationMonitor:
     def test_empty_report_with_single_asset(self):
@@ -280,9 +311,7 @@ class TestCorrelationMonitor:
     def test_cluster_alert_same_side(self):
         from paper_trading.orchestrator.correlation import CorrelationMonitor
 
-        cm = CorrelationMonitor(
-            correlation_threshold=0.8, cluster_same_side_threshold=2, min_periods=3
-        )
+        cm = CorrelationMonitor(correlation_threshold=0.8, cluster_same_side_threshold=2, min_periods=3)
         for i, d in enumerate([f"2025-01-{d:02d}" for d in range(1, 11)]):
             cm.update({"A": 100 + i, "B": 100 + i + 0.3, "C": 100 - i}, {}, d)
         positions = {
