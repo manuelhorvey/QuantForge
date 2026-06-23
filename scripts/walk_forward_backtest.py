@@ -31,6 +31,7 @@ from features.data_fetch import fetch_asset_data, fetch_asset_ohlcv, fetch_cot_f
 from features.regime_features import generate_regime_features
 from labels.compat import PurgedWalkForwardFolds, triple_barrier_labels
 from labels.trend_adjusted_labels import trend_adjusted_labels
+from labels.triple_barrier import apply_triple_barrier
 from paper_trading.inference.ensemble import EnsembleSignal
 from paper_trading.inference.regime_model import RegimeConditionalModel
 
@@ -89,22 +90,24 @@ def _tag_path(filename: str, tag: str) -> str:
 
 def compute_labels(
     prices: pd.DataFrame,
+    ohlcv: pd.DataFrame,
     pt_sl: tuple[float, float] = (2.0, 2.0),
     vertical_barrier: int = 20,
     label_type: str = "standard",
 ) -> pd.Series:
-    """Compute triple-barrier labels aligned to prices index.
-
-    Args:
-        label_type: "standard" (legacy EWM vol) or "trend_adjusted"
-            (per-timestep pt_sl based on trend strength).
-    """
     if label_type == "trend_adjusted":
         return trend_adjusted_labels(
             prices,
             pt_sl=pt_sl,
             vertical_barrier=vertical_barrier,
         )
+    if not ohlcv.empty:
+        labeled = apply_triple_barrier(
+            ohlcv,
+            pt_sl=list(pt_sl),
+            vertical_barrier=vertical_barrier,
+        )
+        return labeled["label"].reindex(prices.index).fillna(0).astype(int)
     return triple_barrier_labels(
         prices,
         pt_sl=pt_sl,
@@ -125,7 +128,7 @@ def run_walk_forward(
     ticker: str,
     window_years: int = 3,
     step_years: int = 1,
-    n_folds: int = 5,
+    n_folds: int = 3,
     gap: int = 5,
     ensemble_weight: float = 0.6,
     ensemble_threshold: float = 0.15,
@@ -144,17 +147,18 @@ def run_walk_forward(
     if prices.empty or len(prices) < 100:
         logger.warning("SKIP: %s (%s) — no data or insufficient rows", asset_name, ticker)
         return None
+    # Fetch OHLCV for labels (matching production apply_triple_barrier)
+    ohlcv = fetch_asset_ohlcv(ticker)
     # Use vertical_barrier=20 by default (matches FEATURE_REGISTRY), gap >= barrier
-    labels = compute_labels(prices, pt_sl=pt_sl, vertical_barrier=20, label_type=label_type)
+    labels = compute_labels(prices, ohlcv, pt_sl=pt_sl, vertical_barrier=20, label_type=label_type)
     gap = max(gap, 20)
     cot_data = fetch_cot_features(prices.index)
     alpha_df = build_alpha_features(prices, rate_diffs, dxy=dxy, vix=vix, spx=spx, commodities=commodities, cot_data=cot_data)
 
-    alpha_df["label"] = labels.reindex(alpha_df.index).astype(int)
+    alpha_df["label"] = labels.reindex(alpha_df.index).fillna(0).astype(int)
     alpha_df = alpha_df.dropna()
 
     # Build regime features (matching production pipeline)
-    ohlcv = fetch_asset_ohlcv(ticker)
     regime_ok = not ohlcv.empty
     regime_cols: list[str] = []
     alpha_cols = [c for c in alpha_df.columns if c != "label"]
@@ -209,17 +213,41 @@ def run_walk_forward(
             logger.warning("  fold %d: only one class in train, skipping", fold)
             continue
 
+        # ── scale_pos_weight (matching production training) ──
+        n0 = (y_tr == 0).sum()
+        n1 = (y_tr == 1).sum()
+        imbalance_ratio = n0 / max(n1, 1)
+
+        # ── Time-based validation split with vb embargo (matching production) ──
+        vb = 20
+        n = len(y_tr)
+        n_valid = max(int(n * 0.2), 1)
+        tr_end = n - n_valid - vb
+        if tr_end < 50:
+            tr_end = n - n_valid
+
+        X_tr_val = X_tr.iloc[:tr_end]
+        y_tr_val = y_tr.iloc[:tr_end]
+        X_ev = X_tr.iloc[-n_valid:]
+        y_ev = y_tr.iloc[-n_valid:]
+
         model = xgb.XGBClassifier(
             n_estimators=300,
             max_depth=max_depth,
             learning_rate=0.02,
             objective="binary:logistic",
+            scale_pos_weight=imbalance_ratio,
             random_state=42,
             n_jobs=1,
             tree_method="hist",
+            early_stopping_rounds=50,
             verbosity=0,
         )
-        model.fit(X_tr[alpha_cols], y_tr)
+        model.fit(
+            X_tr_val[alpha_cols], y_tr_val,
+            eval_set=[(X_ev[alpha_cols], y_ev)],
+            verbose=False,
+        )
 
         base_p_long = model.predict_proba(X_te[alpha_cols])[:, 1]
 
