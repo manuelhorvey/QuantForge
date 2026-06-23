@@ -12,6 +12,7 @@ mlruns/
 logs/
 .env
 paper_trading/models/
+!paper_trading/models/*_hash.txt
 *.pkl
 data/live/
 data/shadow_memory/
