@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { X, Activity, DollarSign, TrendingUp, Zap } from 'lucide-react'
 import { useSystemSnapshot } from '../hooks/useSystemSnapshot'
+import { systemSelectors } from '../selectors/system'
 import { useMonitorAlerts } from '../hooks/useMonitorAlerts'
 import { useSystemHealthModal } from '../hooks/useSystemHealthModal'
 import HealthSnapshotCard from './monitor/HealthSnapshotCard'
@@ -17,9 +18,8 @@ function avgHealth(health: { assets: Record<string, { health_score: number }> } 
 
 export default function SystemHealthModal() {
   const { isOpen, close } = useSystemHealthModal()
-  const { data: bundle } = useSystemSnapshot()
-  const state = bundle?.snapshot
-  const health = bundle?.live?.health
+  const { data: state } = useSystemSnapshot(systemSelectors.snapshot)
+  const { data: health } = useSystemSnapshot(systemSelectors.health)
   const alerts = useMonitorAlerts()
   const modalRef = useRef<HTMLDivElement>(null)
 

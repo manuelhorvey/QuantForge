@@ -1,12 +1,12 @@
 import { useMemo } from 'react'
 import { Check, X, AlertTriangle } from 'lucide-react'
 import { useSystemSnapshot } from '../hooks/useSystemSnapshot'
+import { systemSelectors } from '../selectors/system'
 import { MetricCardSkeleton } from './ui/Skeleton'
 import { governanceDot, governanceText } from './ui/governance'
 
 export default function HaltConditions() {
-  const { data: bundle, isPending } = useSystemSnapshot()
-  const data = bundle?.snapshot
+  const { data, isPending } = useSystemSnapshot(systemSelectors.snapshot)
 
   const status = useMemo(() => {
     const hc = data?.halt_conditions

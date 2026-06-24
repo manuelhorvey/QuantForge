@@ -1,9 +1,9 @@
 import { useSystemSnapshot } from '../hooks/useSystemSnapshot'
+import { systemSelectors } from '../selectors/system'
 import { Wifi, WifiOff, AlertTriangle, Loader2 } from 'lucide-react'
 
 export default function MT5Status() {
-  const { data: bundle, isPending, isError } = useSystemSnapshot()
-  const data = bundle?.live?.mt5
+  const { data, isPending, isError } = useSystemSnapshot(systemSelectors.mt5)
 
   const connected = data?.status === 'CONNECTED'
   const status = data?.status ?? 'UNKNOWN'

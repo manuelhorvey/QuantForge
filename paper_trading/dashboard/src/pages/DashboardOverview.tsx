@@ -1,7 +1,7 @@
 import { memo } from 'react'
 import { useSystemSnapshot } from '../hooks/useSystemSnapshot'
+import { systemSelectors } from '../selectors/system'
 import { useMonitorAlerts } from '../hooks/useMonitorAlerts'
-import { selectPortfolioSummary } from '../selectors/portfolio'
 import PortfolioSummary from '../components/PortfolioSummary'
 import HaltConditions from '../components/HaltConditions'
 import Panel from '../components/ui/Panel'
@@ -23,8 +23,7 @@ function StatCard({ label, value, icon }: { label: string; value: string; icon: 
 }
 
 const QuickStatsGrid = memo(function QuickStatsGrid() {
-  const { data: bundle } = useSystemSnapshot()
-  const portfolio = selectPortfolioSummary(bundle)
+  const { data: portfolio } = useSystemSnapshot(systemSelectors.portfolio)
   const alerts = useMonitorAlerts()
   const criticalAlerts = alerts.filter(a => a.severity === 'critical').length
 

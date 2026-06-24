@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useSystemSnapshot } from '../hooks/useSystemSnapshot'
+import { systemSelectors } from '../selectors/system'
 import StatCard from './ui/StatCard'
 import Panel from './ui/Panel'
 import EmptyState from './ui/EmptyState'
@@ -7,10 +8,9 @@ import { MetricCardSkeleton } from './ui/Skeleton'
 import { formatTimeAgo } from '../utils/format'
 
 export default function PortfolioSummary() {
-  const { data: bundle, isPending, isError } = useSystemSnapshot()
-  const data = bundle?.snapshot
-  const p = data?.portfolio
-  const lastUpdate = p?.last_update ?? data?.engine_status?.last_update ?? data?.timestamp
+  const { data: snapshot, isPending, isError } = useSystemSnapshot(systemSelectors.snapshot)
+  const p = snapshot?.portfolio
+  const lastUpdate = p?.last_update ?? snapshot?.engine_status?.last_update ?? snapshot?.timestamp
 
   const cards = useMemo(() => {
     if (!p) return []
