@@ -1,19 +1,13 @@
-import { useCallback, useRef } from 'react'
+import { memo, useCallback } from 'react'
 import { NavLink } from 'react-router-dom'
-import { X, TrendingUp } from 'lucide-react'
+import { X, TrendingUp, LayoutDashboard, Zap, BarChart3, Heart } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { useSystemSnapshot } from '../../hooks/useSystemSnapshot'
+import { useEngineHealth } from '../../hooks/useEngineHealth'
 import Divider from '../ui/Divider'
-import {
-  LayoutDashboard,
-  Zap,
-  BarChart3,
-  Heart,
-} from 'lucide-react'
 
 type TabId = 'dashboard' | 'trading' | 'execution' | 'risk'
 
-interface NavItem {
+interface NavItemDef {
   id: TabId
   to: string
   label: string
@@ -21,7 +15,13 @@ interface NavItem {
   desc: string
 }
 
-const NAV_GROUPS: { title: string; icon: LucideIcon; items: NavItem[] }[] = [
+interface NavGroupDef {
+  title: string
+  icon: LucideIcon
+  items: NavItemDef[]
+}
+
+const NAV_GROUPS: NavGroupDef[] = [
   {
     title: 'Overview',
     icon: LayoutDashboard,
@@ -53,15 +53,63 @@ interface SidebarProps {
   onClose: () => void
 }
 
-export default function Sidebar({ open, onClose }: SidebarProps) {
-  const navRef = useRef<HTMLElement>(null)
-  const { data: bundle } = useSystemSnapshot()
-  const state = bundle?.snapshot
+interface NavItemProps {
+  item: NavItemDef
+  onClose: () => void
+  onKeyDown: (e: React.KeyboardEvent, id: string) => void
+}
 
-  const engine = state?.engine_status
-  const isRunning = engine?.initialized && !engine?.market_closed
-  const engineLabel = engine?.market_closed ? 'CLOSED' : engine?.initialized ? 'RUNNING' : 'OFF'
+const EngineBadge = memo(function EngineBadge() {
+  const health = useEngineHealth()
+  const engineAlive = health.data?.engine_alive ?? false
+  const label = health.isError ? 'OFF' : health.isLoading ? '...' : engineAlive ? 'RUNNING' : 'OFF'
+  const isRunning = !health.isError && engineAlive
 
+  return (
+    <div className="flex items-center gap-1.5 min-w-0">
+      <span className={`inline-block w-1.5 h-1.5 rounded-full ${isRunning ? 'bg-gov-green' : 'bg-gov-red'} ${isRunning ? '' : 'animate-pulse'}`} />
+      <span className={`text-[10px] font-semibold font-mono tracking-tight ${isRunning ? 'text-gov-green' : 'text-gov-red'}`}>
+        {label}
+      </span>
+    </div>
+  )
+})
+
+const NavItem = memo(function NavItem({ item, onClose, onKeyDown }: NavItemProps) {
+  return (
+    <NavLink
+      id={`nav-${item.id}`}
+      to={item.to}
+      end
+      role="treeitem"
+      onClick={onClose}
+      onKeyDown={e => onKeyDown(e, item.id)}
+      className={({ isActive }) =>
+        `w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium
+        transition-all duration-150 relative focus-ring ${
+          isActive
+            ? 'bg-accent-emerald/8 text-accent-emerald border border-accent-emerald/20 shadow-[inset_0_0_0_1px_rgba(20,184,166,0.08)]'
+            : 'text-tertiary hover:text-secondary hover:bg-panel/60 border border-transparent'
+        }`
+      }
+    >
+      {({ isActive }) => (
+        <>
+          {isActive && (
+            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-4 bg-accent-emerald rounded-full shadow-[0_0_4px_rgba(20,184,166,0.4)]" />
+          )}
+          <item.icon className="w-3.5 h-3.5 shrink-0" strokeWidth={1.5} />
+          <div className="flex flex-col min-w-0">
+            <span className="truncate">{item.label}</span>
+            <span className="text-[9px] text-tertiary/60 truncate">{item.desc}</span>
+          </div>
+        </>
+      )}
+    </NavLink>
+  )
+})
+
+function Sidebar({ open, onClose }: SidebarProps) {
   const handleKeyDown = useCallback((e: React.KeyboardEvent, currentId: string) => {
     const currentIndex = allItems.findIndex(item => item.id === currentId)
     if (currentIndex === -1) return
@@ -96,10 +144,6 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
     }
   }, [onClose])
 
-  const handleNav = useCallback(() => {
-    onClose()
-  }, [onClose])
-
   return (
     <>
       {open && (
@@ -123,18 +167,13 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
           ${open ? 'translate-x-0' : '-translate-x-full'}
         `}
       >
-        {/* Engine Status */}
+        {/* Region 1: Engine status strip (light dynamic — useEngineHealth only) */}
         <div className="shrink-0 flex items-center justify-between gap-2 px-3 py-2.5 border-b border-default">
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-6 h-6 rounded-md bg-accent-emerald/85 flex items-center justify-center shrink-0">
               <TrendingUp className="w-3 h-3 text-[#08090c]" strokeWidth={2.25} />
             </div>
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className={`inline-block w-1.5 h-1.5 rounded-full ${isRunning ? 'bg-gov-green' : 'bg-gov-red'} ${isRunning ? '' : 'animate-pulse'}`} />
-              <span className={`text-[10px] font-semibold font-mono tracking-tight ${isRunning ? 'text-gov-green' : 'text-gov-red'}`}>
-                {engineLabel}
-              </span>
-            </div>
+            <EngineBadge />
           </div>
           <button
             type="button"
@@ -146,9 +185,8 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
           </button>
         </div>
 
-        {/* Navigation */}
+        {/* Region 2: Navigation shell (static — no data dependencies) */}
         <nav
-          ref={navRef}
           role="tree"
           aria-label="Dashboard sections"
           className="flex-1 overflow-y-auto py-3 px-2 space-y-1 scrollbar-thin"
@@ -161,38 +199,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               </p>
               <div className="space-y-0.5 ml-1">
                 {group.items.map(item => (
-                  <NavLink
-                    key={item.id}
-                    id={`nav-${item.id}`}
-                    to={item.to}
-                    end
-                    role="treeitem"
-                    aria-current={undefined}
-                    tabIndex={undefined}
-                    onClick={handleNav}
-                    onKeyDown={e => handleKeyDown(e, item.id)}
-                    className={({ isActive }) =>
-                      `w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium
-                      transition-all duration-150 relative focus-ring ${
-                        isActive
-                          ? 'bg-accent-emerald/8 text-accent-emerald border border-accent-emerald/20 shadow-[inset_0_0_0_1px_rgba(20,184,166,0.08)]'
-                          : 'text-tertiary hover:text-secondary hover:bg-panel/60 border border-transparent'
-                      }`
-                    }
-                  >
-                    {({ isActive }) => (
-                      <>
-                        {isActive && (
-                          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-4 bg-accent-emerald rounded-full shadow-[0_0_4px_rgba(20,184,166,0.4)]" />
-                        )}
-                        <item.icon className="w-3.5 h-3.5 shrink-0" strokeWidth={1.5} />
-                        <div className="flex flex-col min-w-0">
-                          <span className="truncate">{item.label}</span>
-                          <span className="text-[9px] text-tertiary/60 truncate">{item.desc}</span>
-                        </div>
-                      </>
-                    )}
-                  </NavLink>
+                  <NavItem key={item.id} item={item} onClose={onClose} onKeyDown={handleKeyDown} />
                 ))}
               </div>
               {gi < NAV_GROUPS.length - 1 && <Divider className="my-1.5 mx-2" />}
@@ -203,3 +210,5 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
     </>
   )
 }
+
+export default memo(Sidebar)

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useState, useCallback, type ReactNode } from 'react'
 import { useSystemSnapshot } from '../../hooks/useSystemSnapshot'
 import { useSnapshotReconciler } from '../../hooks/useSnapshotReconciler'
 import { useSystemIntegrity } from '../../hooks/useSystemIntegrity'
@@ -18,11 +18,13 @@ export default function AppShell({ children }: AppShellProps) {
   useSnapshotReconciler(bundle)
   const integrity = useSystemIntegrity(bundle)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const toggleSidebar = useCallback(() => setSidebarOpen(prev => !prev), [])
+  const closeSidebar = useCallback(() => setSidebarOpen(false), [])
 
   if (integrity.shouldBlockRender) {
     return (
       <>
-        {!integrity.isBroken && <Header onMenuClick={() => setSidebarOpen(prev => !prev)} />}
+        {!integrity.isBroken && <Header onMenuClick={toggleSidebar} />}
         <ErrorScreen
           title="System Unavailable"
           message="The engine snapshot could not be loaded. The system may be restarting."
@@ -33,11 +35,11 @@ export default function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="min-h-screen bg-app text-secondary flex flex-col">
-      <Header onMenuClick={() => setSidebarOpen(prev => !prev)} />
+      <Header onMenuClick={toggleSidebar} />
       <SystemDegradedBanner integrity={integrity} />
 
       <div className="flex-1 flex relative max-w-[90rem] mx-auto w-full">
-        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <Sidebar open={sidebarOpen} onClose={closeSidebar} />
 
         <div className="flex-1 flex flex-col min-w-0">
           <div className="shrink-0 border-b border-default">
