@@ -206,6 +206,7 @@ class EngineStateService:
 
     def _compute_factor_exposures(self) -> dict:
         from shared.factor_model import summary as factor_summary
+
         try:
             rw = getattr(self.engine, "_rebalance_weights", None)
             if rw:
