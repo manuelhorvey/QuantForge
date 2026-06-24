@@ -44,8 +44,10 @@ const QuickStatsBar = memo(function QuickStatsBar() {
   const { data: portfolio } = useSystemSnapshot(systemSelectors.portfolio)
   if (!portfolio) return null
 
-  const pnl = portfolio.mtm_value - portfolio.capital
-  const pnlPct = portfolio.capital > 0 ? (pnl / portfolio.capital) * 100 : 0
+  // Use the backend's total_return (deployed-capital denominator) rather than
+  // recomputing (mtm_value − capital)/capital — that denom-mismatch treats
+  // undeployed cash as a permanent loss and freezes the readout near −16%.
+  const totalReturn = portfolio.total_return ?? 0
 
   return (
     <div className="hidden md:flex items-center gap-4 text-2xs font-mono tabular-nums">
@@ -55,8 +57,8 @@ const QuickStatsBar = memo(function QuickStatsBar() {
           {portfolio.mtm_value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
         </span>
       </div>
-      <span className={`${pnlPct >= 0 ? 'text-gov-green' : 'text-gov-red'}`}>
-        {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
+      <span className={`${totalReturn >= 0 ? 'text-gov-green' : 'text-gov-red'}`}>
+        {totalReturn >= 0 ? '+' : ''}{totalReturn.toFixed(2)}%
       </span>
       <span className="text-tertiary">
         {portfolio.open_positions} pos

@@ -36,8 +36,7 @@ const QuickStatsGrid = memo(function QuickStatsGrid() {
     )
   }
 
-  const pnl = portfolio.mtm_value - portfolio.capital
-  const pnlPct = portfolio.capital > 0 ? (pnl / portfolio.capital) * 100 : 0
+  const totalReturn = portfolio.total_return ?? 0
 
   return (
     <EntranceAnimator>
@@ -49,8 +48,8 @@ const QuickStatsGrid = memo(function QuickStatsGrid() {
         />
         <StatCard
           label="Total Return"
-          value={`${portfolio.total_return.toFixed(2)}%`}
-          icon={pnlPct >= 0 ? <TrendingUp className="w-5 h-5 text-gov-green" strokeWidth={1.5} /> : <TrendingDown className="w-5 h-5 text-gov-red" strokeWidth={1.5} />}
+          value={`${totalReturn.toFixed(2)}%`}
+          icon={totalReturn >= 0 ? <TrendingUp className="w-5 h-5 text-gov-green" strokeWidth={1.5} /> : <TrendingDown className="w-5 h-5 text-gov-red" strokeWidth={1.5} />}
         />
         <StatCard
           label="Open Positions"
