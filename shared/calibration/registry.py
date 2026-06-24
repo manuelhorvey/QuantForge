@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +36,31 @@ class CalibrationRegistry:
         registry.load_all(MODEL_DIR / "calibration")
         registry.calibrate("EURUSD", raw_p_long)
     """
+
+    _instances: dict[str, CalibrationRegistry] = {}
+    _lock = threading.Lock()
+
+    @classmethod
+    def get_or_load(cls, directory: str | Path) -> CalibrationRegistry:
+        """Return cached registry for *directory*, loading once on first call."""
+        key = str(Path(directory).resolve())
+
+        # Fast path — already loaded.
+        if key in cls._instances:
+            return cls._instances[key]
+
+        # Double-checked locking — avoid double-load under concurrent init.
+        with cls._lock:
+            if key in cls._instances:
+                return cls._instances[key]
+
+            t0 = time.perf_counter()
+            reg = cls()
+            reg.load_all(key)
+            elapsed_ms = (time.perf_counter() - t0) * 1000
+            logger.info("Loaded %d calibrators from %s in %.1fms", len(reg._calibrators), key, elapsed_ms)
+            cls._instances[key] = reg
+            return reg
 
     def __init__(self):
         self._calibrators: dict[str, CalibrationMethod] = {}
@@ -74,11 +101,11 @@ class CalibrationRegistry:
                 asset = fpath.stem  # filename (without .json) = asset name
                 self._calibrators[asset] = cal
                 count += 1
-                logger.info("Loaded %s for %s (type=%s)", fpath.name, asset, cal_type)
+                logger.debug("Loaded %s for %s (type=%s)", fpath.name, asset, cal_type)
             except Exception as e:
                 logger.warning("Failed to load calibrator %s: %s", fpath.name, e)
 
-        logger.info("Loaded %d calibrators from %s", count, directory)
+        logger.debug("Loaded %d calibrators from %s", count, directory)
         return count
 
     def save_all(self, directory: str | Path) -> int:

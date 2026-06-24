@@ -306,11 +306,10 @@ class AssetEngine:
 
     def _load_calibration_registry(self) -> None:
         cal_dir = os.path.join(os.path.dirname(self.model_path), "calibration")
-        registry = CalibrationRegistry()
-        n_loaded = registry.load_all(cal_dir)
-        if n_loaded > 0:
+        registry = CalibrationRegistry.get_or_load(cal_dir)
+        if registry.available_assets():
             self._calibration_registry = registry
-            logger.info("%s: loaded calibration registry (%d assets)", self.name, n_loaded)
+            logger.info("%s: calibration registry ready (%d assets)", self.name, len(registry.available_assets()))
         else:
             self._calibration_registry = None
             logger.debug("%s: no calibration models found in %s", self.name, cal_dir)

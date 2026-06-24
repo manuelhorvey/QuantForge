@@ -6,8 +6,8 @@
   "scripts": {
     "build:tokens": "tsx scripts/generate-tokens.ts",
     "build:dtcg": "tsx scripts/generate-dtcg.ts",
-    "dev": "npm run build:tokens && vite --port 3000",
-    "build": "npm run build:tokens && tsc -b && vite build",
+    "dev": "tsx scripts/generate-tokens.ts && vite --port 3000",
+    "build": "tsx scripts/generate-tokens.ts && tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
