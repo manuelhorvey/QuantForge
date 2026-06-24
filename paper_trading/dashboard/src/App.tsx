@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { usePortfolioState } from './hooks/usePortfolioState'
+import { useSystemSnapshot } from './hooks/useSystemSnapshot'
+import { useSystemIntegrity } from './hooks/useSystemIntegrity'
 import { SelectedAssetContext } from './hooks/useSelectedAsset'
 import Header from './components/Header'
 import PortfolioSummary from './components/PortfolioSummary'
@@ -12,6 +14,7 @@ import HealthScores from './components/HealthScores'
 import TradeOutcomes from './components/TradeOutcomes'
 import LoadingScreen from './components/ui/LoadingScreen'
 import ErrorScreen from './components/ui/ErrorScreen'
+import { SystemDegradedBanner } from './components/ui/SystemDegradedBanner'
 import Section from './components/ui/Section'
 import ExecutionQualityStrip from './components/execution/ExecutionQualityStrip'
 import AttributionBreakdownCard from './components/attribution/AttributionBreakdownCard'
@@ -35,6 +38,8 @@ type TabId = 'dashboard' | 'trading' | 'execution' | 'risk'
 
 export default function App() {
   const { data: state, isPending, isError } = usePortfolioState()
+  const { data: bundle } = useSystemSnapshot()
+  const integrity = useSystemIntegrity(bundle)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [selectedAsset, setSelectedAsset] = useState<string | null>(null)
   const [deepDiveAsset, setDeepDiveAsset] = useState<string | null>(null)
@@ -42,6 +47,7 @@ export default function App() {
 
   if (isPending) return <LoadingScreen />
   if (isError) return <ErrorScreen />
+  if (integrity.shouldBlockRender) return <ErrorScreen title="System Unavailable" message="The engine snapshot could not be loaded. The system may be restarting." />
 
   const detailAsset = selectedAsset && state?.assets?.[selectedAsset]
 
@@ -112,11 +118,12 @@ export default function App() {
     ),
   }
 
-  return (
+      return (
     <ErrorBoundary title="Application">
       <SelectedAssetContext.Provider value={{ selectedAsset, setSelectedAsset, deepDiveAsset, setDeepDiveAsset }}>
         <div className="min-h-screen bg-app text-secondary flex flex-col">
           <Header onMenuClick={() => setSidebarOpen(prev => !prev)} />
+          <SystemDegradedBanner integrity={integrity} />
 
           <div className="flex-1 flex relative max-w-[90rem] mx-auto w-full">
             <Sidebar open={sidebarOpen} activeTab={activeTab} onTabChange={setActiveTab} onClose={() => setSidebarOpen(false)} />

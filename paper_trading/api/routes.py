@@ -6,6 +6,7 @@ from datetime import datetime
 import pytz
 
 from features.fxstreet_fetcher import confirm_pending_narrative, get_narrative_status
+from paper_trading.api.bundle import handle_state_bundle
 from paper_trading.api.common import (
     _STORE,
     CONFIDENCE_PATH,
@@ -866,6 +867,7 @@ def handle_wal_asset(path: str, query: dict) -> tuple[str, int]:
 
 
 GET_ROUTES: dict[str, tuple] = {
+    "/state-bundle.json": (handle_state_bundle, False),
     "/state.json": (handle_state, False),
     "/trades.json": (handle_trades, False),
     "/equity_history.json": (handle_equity_history, False),
