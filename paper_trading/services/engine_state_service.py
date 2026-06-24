@@ -185,7 +185,7 @@ class EngineStateService:
             "runtime_hours": round(delta.total_seconds() / 3600, 1),
             "start_date": engine.start_date.strftime("%Y-%m-%d"),
             "start_datetime": engine.start_date.isoformat(),
-            "last_update": engine.last_update.strftime("%Y-%m-%d %H:%M:%S") if engine.last_update else None,
+            "last_update": engine.last_update.isoformat() if engine.last_update else None,
             "capital": get_config().capital,
             "allocations": {n: a.allocation for n, a in engine.assets.items()},
             "deployment_cleared": True,
@@ -271,7 +271,7 @@ class EngineStateService:
             open_positions={},
             engine_status={
                 "initialized": True,
-                "last_update": engine.last_update.strftime("%Y-%m-%d %H:%M:%S") if engine.last_update else None,
+                "last_update": engine.last_update.isoformat() if engine.last_update else None,
                 "start_time": engine.start_date.isoformat(),
             },
             halt_conditions=state.get("halt_conditions"),
