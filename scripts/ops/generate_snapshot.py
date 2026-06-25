@@ -136,10 +136,10 @@ def main():
         "",
     ]
 
-    out_path = os.path.join(BASE, "BASELINE_SNAPSHOT.md")
+    out_path = os.path.join(BASE, "docs/BASELINE_SNAPSHOT.md")
     with open(out_path, "w") as f:
         f.write("\n".join(lines) + "\n")
-    print(f"BASELINE_SNAPSHOT.md written ({len(model_files)} models, {len(cfg.get('assets', {}))} assets)")
+    print(f"docs/BASELINE_SNAPSHOT.md written ({len(model_files)} models, {len(cfg.get('assets', {}))} assets)")
 
 
 if __name__ == "__main__":

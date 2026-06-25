@@ -14,7 +14,6 @@ include = [
     "paper_trading*",
     "portfolio*",
     "quantforge*",
-    "research*",
     "risk*",
     "shared*",
     "signals*",
@@ -24,7 +23,7 @@ exclude = ["tests*", "archive*", "notebooks*"]
 [tool.setuptools.package-data]
 configs = ["*.yaml"]
 data = ["processed/*.parquet", "processed/*.csv", "research/*.json", "research/*.yaml", "research/*.parquet"]
-research = ["phase_h/outputs/**/*.json", "phase_h/outputs/**/*.yaml"]
+
 
 [project]
 name = "quantforge"
@@ -78,12 +77,10 @@ extend-exclude = [
     "data",
     "diagnostics",
     "docs",
-    "adr",
     "equity",
     "models",
     "notebooks",
     "paper_trading/dashboard",
-    "research",
     "scripts",
     "signals",
     "tests",
@@ -109,7 +106,6 @@ select = ["I", "E", "F", "W", "UP", "N", "SIM"]
 "labels/meta_labels.py" = ["N803", "N806"]
 # Research scripts use uppercase X for ML feature matrix convention
 "scripts/*.py" = ["N806", "N803"]
-"research/**/*.py" = ["N806", "N803"]
 "tests/*.py" = ["N806", "N803"]
 "shared/*.py" = ["N806", "N803"]
 # Pre-existing line length issues (grandfathered)
@@ -118,9 +114,7 @@ select = ["I", "E", "F", "W", "UP", "N", "SIM"]
 "paper_trading/risk_governance.py" = ["E501"]
 "paper_trading/shadow_learning.py" = ["E501"]
 "paper_trading/simulation_snapshot.py" = ["E501"]
-# Research scripts: pre-existing line length violations in print/log formatting
-"research/execution_surface/compare_strategies.py" = ["E501"]
-"research/execution_surface/replay_engine.py" = ["E501"]
+
 
 [tool.ruff.format]
 quote-style = "double"

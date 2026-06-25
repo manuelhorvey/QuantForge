@@ -5,7 +5,7 @@ historical crisis windows within the available OOS data (Aug 2024 - May 2026).
 
 Usage:
     PYTHONPATH=$PYTHONPATH:. python scripts/crisis_replay.py
-    PYTHONPATH=$PYTHONPATH:. python scripts/crisis_replay.py --output-dir crisis_reports
+    PYTHONPATH=$PYTHONPATH:. python scripts/crisis_replay.py --output-dir data/crisis_reports
 """
 
 from __future__ import annotations

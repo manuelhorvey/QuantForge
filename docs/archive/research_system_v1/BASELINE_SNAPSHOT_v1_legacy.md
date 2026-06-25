@@ -1,6 +1,6 @@
 # LIVE SYSTEM BASELINE SNAPSHOT — V1 LEGACY
 
-> **⚠ ARCHIVED — Superseded by auto-generated `BASELINE_SNAPSHOT.md`**
+> **⚠ ARCHIVED — Superseded by auto-generated `docs/BASELINE_SNAPSHOT.md`**
 >
 > Key divergences from the current system:
 > - **Serialization:** pickle/`.pkl` → XGBoost native `.json` via `model.save_model()`

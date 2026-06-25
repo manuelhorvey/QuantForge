@@ -9,7 +9,7 @@ cross-asset correlation structure.
 
 Usage:
     PYTHONPATH=$PYTHONPATH:. python scripts/monte_carlo_drawdown.py
-    PYTHONPATH=$PYTHONPATH:. python scripts/monte_carlo_drawdown.py --n-sim 50000 --output mc_results.json
+    PYTHONPATH=$PYTHONPATH:. python scripts/monte_carlo_drawdown.py --n-sim 50000 --output data/mc_results.json
 """
 
 from __future__ import annotations
