@@ -55,10 +55,14 @@ class SlippageModel:
         return float(stop_price * total)
 
     def take_profit_slippage(self, target_price: float, config: ExecutionConfig) -> float:
-        """Neutral slippage on take-profit fills (limit orders) — deterministic.
+        """Slightly adverse slippage on take-profit fills (limit orders) — deterministic.
 
-        Returns a signed slippage factor in price units.
-        Always non-negative (neutral), never favorable.
+        Returns a small non-negative slippage factor in price units.
+        Always adverse (never favorable, never zero), but much smaller than
+        entry or stop-loss slippage (0.1x spread vs 1.0x/1.5x).
+
+        Note: the docstring says 'neutral' but this is a documentation imprecision
+        from an earlier version.  The function has always been degradation-only.
         """
         base_bps = config.base_spread_bps * 0.1
         slip_decimal = base_bps / 10000.0

@@ -559,7 +559,8 @@ class EntryService:
         )
 
         max_pos_pct = cfg.get("max_position_pct_of_equity", 0.15)
-        notional = mt5_equity * max_pos_pct * dd_taper
+        kelly_mult = getattr(asset, "_kelly_multiplier", 1.0)
+        notional = mt5_equity * max_pos_pct * dd_taper * kelly_mult
 
         # ── Risk-per-trade cap ────────────────────────────────────────
         sl_dist = abs(intent_sl - entry_price)
@@ -615,11 +616,12 @@ class EntryService:
                 return 0.0
 
         logger.info(
-            "MT5_SIZING %s: equity=%.2f dd=%.2f max_pct=%.2f%% risk_cap=%.2f "
+            "MT5_SIZING %s: equity=%.2f dd=%.2f kelly=%.4f max_pct=%.2f%% risk_cap=%.2f "
             "lev_budget=%.2f min_viable=%.2f -> final_not=%.2f qty=%.6f",
             asset.name,
             mt5_equity,
             dd_taper,
+            kelly_mult,
             max_pos_pct * 100,
             max_risk_usd if mt5_equity > 0 else 0.0,
             leverage_budget_total,

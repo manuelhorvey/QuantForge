@@ -206,6 +206,11 @@ def apply_kelly_sizing(ctx: DecisionContext) -> None:
     Kelly multiplier on the engine for the sizing chain to consume.
 
     Stage position: after signal/gates decide direction, before entry sizing.
+
+    Safety: skips Kelly if probability calibration was not applied upstream.
+    Using raw XGBoost softmax in Kelly produces unreliable edge estimates
+    because XGBoost probabilities are not well-calibrated (see the BUY
+    inversion discovery — raw p_long=0.57 had 0% win rate).
     """
     if ctx.new_side is None:
         return
@@ -215,6 +220,18 @@ def apply_kelly_sizing(ctx: DecisionContext) -> None:
 
     kelly_cfg = engine.config.get("kelly", {})
     if not kelly_cfg.get("enabled", False):
+        return
+
+    # ── Guard: calibration must have been applied ────────────────────
+    # If not, Kelly would consume raw XGBoost softmax which is miscalibrated
+    # (see BUY inversion discovery).  Fall through — Kelly is disabled
+    # by default, so this is defence-in-depth for when it is enabled.
+    if not getattr(engine, "_calibration_applied", False):
+        logger.warning(
+            "%s: Kelly skipped — calibration was not applied upstream, "
+            "raw XGBoost softmax is unreliable for edge computation",
+            engine.name,
+        )
         return
 
     fraction = float(kelly_cfg.get("fraction", 0.25))
@@ -426,13 +443,12 @@ def _projected_risk_for_stack(ctx: DecisionContext, stack_size: float) -> float:
     if pos.is_long:
         new_effective = max(existing_effective, stack_sl) if stack_sl > 0 else existing_effective
     else:
-        new_effective = (
-            min(existing_effective, stack_sl)
-            if existing_effective > 0 and stack_sl > 0
-            else stack_sl
-            if stack_sl > 0
-            else existing_effective
-        )
+        if existing_effective > 0 and stack_sl > 0:
+            new_effective = min(existing_effective, stack_sl)
+        elif stack_sl > 0:
+            new_effective = stack_sl
+        else:
+            new_effective = existing_effective
 
     # Total notional after stacking
     total_after = pos.total_size + stack_size
@@ -445,10 +461,14 @@ def _projected_risk_for_stack(ctx: DecisionContext, stack_size: float) -> float:
 
 
 def _should_stack(ctx: DecisionContext) -> bool:
-    """8-gate stacking approval with all invariants enforced.
+    """10-gate stacking approval with all invariants enforced.
 
-    Returns True only if ALL 8 invariants pass.
+    Returns True only if ALL 10 invariants pass.
     Logs the first failing gate for dry-run validation.
+
+    Extended from 8->10 gates (2026-06-25) to address a code review finding:
+    stacking bypassed engine._can_enter(), missing pending-entry conflicts
+    and stopout cooldown enforcement. Gates 9-10 close this gap.
     """
     engine = ctx.engine
     cfg = engine.config.get("stacking", {})
@@ -518,6 +538,23 @@ def _should_stack(ctx: DecisionContext) -> bool:
     if projected_risk > current_risk:
         _log_stack_rejection(ctx, "RISK_INVARIANT", projected_risk, current_risk)
         return False
+
+    # ── Gate 9: Pending entry conflict ────────────────
+    # Prevents stacking while a deferred entry for the same side is pending.
+    side = ctx.new_side.value if hasattr(ctx.new_side, "value") else ctx.new_side
+    pending = getattr(engine, "_pending_entries", {})
+    if side in pending:
+        _log_stack_rejection(ctx, "PENDING_ENTRY", float(len(pending)), 0.0)
+        return False
+
+    # ── Gate 10: Stopout cooldown ─────────────────────
+    last_stop_out_cycle = getattr(engine, "_last_stop_out_cycle", None)
+    if last_stop_out_cycle is not None:
+        cross_cooldown = engine.config.get("stopout_cross_side_cooldown_cycles", 1)
+        elapsed = engine._cycle_counter - last_stop_out_cycle
+        if elapsed < cross_cooldown:
+            _log_stack_rejection(ctx, "STOPOUT_COOLDOWN", float(elapsed), float(cross_cooldown))
+            return False
 
     return True
 

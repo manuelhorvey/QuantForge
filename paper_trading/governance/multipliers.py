@@ -34,7 +34,12 @@ def compute_effective_multipliers(
     geom = regime_geometry.get(validity_state, {"sl_mult": 1.0, "tp_mult": 1.0})
     effective_sl = base_sl * geom.get("sl_mult", 1.0) * narrative_sl_mult * liquidity_sl_mult
     effective_sl = min(effective_sl, 10.0)
-    effective_tp = base_tp * geom.get("tp_mult", 1.0) * narrative_sl_mult * liquidity_sl_mult
+    effective_tp = base_tp * geom.get("tp_mult", 1.0)
+    # Intentionally NOT scaled by narrative_sl_mult or liquidity_sl_mult.
+    # These are SL-specific governance multipliers (widen SL during risk-off).
+    # Propagating them to TP would silently widen take-profit targets whenever
+    # governance adjusts SL, contradicting the invariant that meta-governance
+    # only modifies SL geometry (see AGENTS.md 2026-06-25 review findings).
     effective_tp = min(effective_tp, 20.0)
     effective_size = max(narrative_size_scalar * liquidity_size_scalar, min_size_floor)
     return effective_sl, effective_tp, effective_size

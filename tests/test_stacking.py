@@ -74,6 +74,9 @@ def _mock_engine(config=None, has_position=True, position=None, current_price=10
     engine.current_price = current_price
     engine.config = config or {}
     engine._bar_counter = 42
+    engine._cycle_counter = 100
+    engine._last_stop_out_cycle = None
+    engine._pending_entries = {}
     engine._realized_volatility = 0.15
     engine._close_position = MagicMock(return_value=True)
     engine._can_enter = MagicMock(return_value=(True, "ok"))
@@ -87,7 +90,7 @@ def _mock_engine(config=None, has_position=True, position=None, current_price=10
     pos_mgr.position_size = 1.0
     n_layers = len(position.layers) if position and position.layers else 0
     pos_mgr.stack_layer_count.return_value = max(0, n_layers - 1)  # real code excludes base layer
-    pos_mgr.max_layers_reached.return_value = n_layers >= 3 if position else True
+    pos_mgr.max_layers_reached.return_value = n_layers >= 3 if position else False
     pos_mgr.position_pnl.return_value = 5.0
     engine.pos_mgr = pos_mgr
 
@@ -489,6 +492,45 @@ class TestShouldStack:
         engine.pos_mgr.stack_layer_count.return_value = 0
         engine.pos_mgr.max_layers_reached.return_value = False
         assert _should_stack(ctx) is False
+
+    def test_gate_9_pending_entry_conflict_fails(self):
+        """Gate 9: pending entry for same side blocks stacking."""
+        pos = _pos_long(entry=100.0, vol=0.02, size=1.0)
+        ctx = self._make_context(pos, current_price=105.0)
+        ctx.engine._pending_entries = {"long": MagicMock()}
+        assert _should_stack(ctx) is False
+
+    def test_gate_9_no_pending_entry_passes(self):
+        """Gate 9: no pending entry does not block stacking."""
+        pos = _pos_long(entry=100.0, vol=0.02, size=1.0)
+        ctx = self._make_context(pos, current_price=105.0)
+        ctx.engine._pending_entries = {}
+        assert _should_stack(ctx) is True
+
+    def test_gate_10_stopout_cooldown_fails(self):
+        """Gate 10: recent cross-side stopout within cooldown blocks stacking."""
+        pos = _pos_long(entry=100.0, vol=0.02, size=1.0)
+        ctx = self._make_context(pos, current_price=105.0)
+        ctx.engine._cycle_counter = 100
+        ctx.engine._last_stop_out_cycle = 99  # 1 cycle ago, cooldown=1
+        ctx.engine.config["stopout_cross_side_cooldown_cycles"] = 3
+        assert _should_stack(ctx) is False
+
+    def test_gate_10_stopout_cooldown_expired_passes(self):
+        """Gate 10: stopout cooldown expired allows stacking."""
+        pos = _pos_long(entry=100.0, vol=0.02, size=1.0)
+        ctx = self._make_context(pos, current_price=105.0)
+        ctx.engine._cycle_counter = 100
+        ctx.engine._last_stop_out_cycle = 96  # 4 cycles ago, cooldown=3
+        ctx.engine.config["stopout_cross_side_cooldown_cycles"] = 3
+        assert _should_stack(ctx) is True
+
+    def test_gate_10_no_stopout_passes(self):
+        """Gate 10: no stopout history allows stacking."""
+        pos = _pos_long(entry=100.0, vol=0.02, size=1.0)
+        ctx = self._make_context(pos, current_price=105.0)
+        ctx.engine._last_stop_out_cycle = None
+        assert _should_stack(ctx) is True
 
 
 # ── _update_position_protection ────────────────────────────────────────────
