@@ -120,7 +120,7 @@ def apply_signal_stability_filter(ctx: DecisionContext) -> None:
     prob_short = ctx.decision.prob_short
     max_prob = max(prob_long, prob_short)
     margin = max_prob - 0.5
-    if margin < 0.15:
+    if margin < 0.00:  # effectively disabled — threshold=0.00 per portfolio sweep (see AGENTS.md)
         logger.debug(
             "%s: signal too close to boundary (margin=%.4f, max_prob=%.4f) — holding flat",
             engine.name,
