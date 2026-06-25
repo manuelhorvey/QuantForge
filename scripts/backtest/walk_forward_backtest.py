@@ -138,6 +138,7 @@ def run_walk_forward(
     window_type: str = "expanding",
     rolling_window_bars: int | None = None,
     label_type: str = "standard",
+    invert_labels: bool = False,
 ) -> pd.DataFrame | None:
     import xgboost as xgb
 
@@ -185,6 +186,15 @@ def run_walk_forward(
         return None
 
     X_all = X_all.loc[y_all.index]
+
+    # ── Label inversion (diagnostic test A) ──
+    # When set, flip training labels so the model learns P(DOWN) instead of P(UP).
+    # The OOS parquet saves both the inverted label (what the model predicts)
+    # and the original label (for computing BUY WR against ground truth).
+    y_original = y_all.copy()
+    if invert_labels:
+        y_all = 1 - y_all
+        logger.info("%s: labels inverted (training on DOWN=1, UP=0)", asset_name)
 
     cv = PurgedWalkForwardFolds(
         n_folds=n_folds, gap=gap, min_train=100,
@@ -285,6 +295,11 @@ def run_walk_forward(
             index=X_te.index,
         )
         oos_df["asset"] = asset_name
+        if invert_labels:
+            # Recover original labels (pre-inversion) for diagnostic evaluation
+            label_original = y_original.loc[y_te.index]
+            oos_df["label_original"] = label_original.values
+            oos_df.attrs["invert_labels"] = True
         all_oos_signals.append(oos_df)
 
         logger.info(
@@ -357,6 +372,9 @@ def main():
     parser.add_argument("--label-type", type=str, default="standard",
                         choices=["standard", "trend_adjusted"],
                         help="Label type: standard (legacy triple-barrier) or trend_adjusted (per-timestep pt_sl)")
+    parser.add_argument("--invert-labels", action="store_true", default=False,
+                        help="Flip training labels (y -> 1-y) so model learns P(DOWN) instead of P(UP). "
+                             "For diagnostic use only — tests whether BUY signal is recoverable by label reorientation.")
     args = parser.parse_args()
 
     # Load per-asset pt_sl from production config
@@ -424,6 +442,7 @@ def main():
             window_type=args.window_type,
             rolling_window_bars=args.rolling_window_bars,
             label_type=args.label_type,
+            invert_labels=args.invert_labels,
         )
         if result is not None:
             all_summaries.append(result)
