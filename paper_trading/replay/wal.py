@@ -77,24 +77,37 @@ class WalWriter:
     """Thread-safe, append-only WAL writer.
 
     Writes one JSON object per line (JSONL format).
-    Each event is flushed to disk immediately for crash safety.
+    Events are buffered in memory and flushed to disk in batches,
+    reducing fsync calls from O(events) to O(flushes).
+
+    Set ``batch_size=1`` (default) to preserve flush-per-event semantics
+    equivalent to crash-safe mode. Higher values (e.g. 32) batch writes
+    for lower I/O overhead, with a small risk of losing the last batch
+    on a hard crash.
+
     Past events are never mutated (invariant I3).
     """
 
-    def __init__(self, base_dir: str, source: str = "engine"):
+    def __init__(self, base_dir: str, source: str = "engine", batch_size: int = 1):
         self._base_dir = base_dir
         self._source = source
+        self._batch_size = max(batch_size, 1)
         self._seq = 0
         self._lock = threading.Lock()
+        self._buffer: list[str] = []
         self._path = os.path.join(base_dir, WAL_DIR, f"{source}.jsonl")
         os.makedirs(os.path.dirname(self._path), exist_ok=True)
 
     def write(self, event_type: str, payload: dict) -> WalEvent:
-        """Append a single event to the WAL. Returns the created event.
+        """Append a single event to the WAL buffer. Returns the created event.
+
+        Buffer is flushed to disk when ``batch_size`` events have accumulated.
+        Call ``flush()`` explicitly at cycle boundaries to guarantee durability
+        without waiting for the batch threshold.
 
         Lock scope is minimized to sequence increment + event construction
-        only. File I/O (open/write/flush/fsync) runs outside the lock so a
-        hung fsync on one thread cannot block other actors from writing.
+        only. File I/O (``flush()``) runs outside the lock so a hung fsync on
+        one thread cannot block other actors from writing.
         """
         with self._lock:
             self._seq += 1
@@ -107,15 +120,34 @@ class WalWriter:
                 payload=payload,
             )
             line = json.dumps(event.to_dict(), default=str) + "\n"
+            self._buffer.append(line)
+            buf_size = len(self._buffer)
 
+        if buf_size >= self._batch_size:
+            self.flush()
+        return event
+
+    def flush(self) -> None:
+        """Flush buffered events to disk (write + fsync).
+
+        Safe to call multiple times — no-op when buffer is empty.
+        """
+        with self._lock:
+            lines = self._buffer
+            self._buffer = []
+            if not lines:
+                return
+
+        seq_low = self._seq - len(lines) + 1  # approximate for logging
         with open(self._path, "a") as f:
-            f.write(line)
+            f.writelines(lines)
             f.flush()
             try:
                 os.fsync(f.fileno())
             except OSError:
-                logger.exception("WAL fsync failed for %s seq=%d", event_type, seq)
-        return event
+                logger.exception(
+                    "WAL batch fsync failed for %s seq=%d", self._source, seq_low
+                )
 
     @property
     def current_sequence(self) -> int:

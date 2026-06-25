@@ -18,6 +18,9 @@ logger = logging.getLogger("quantforge.pnl_controller")
 
 ET = pytz.timezone("US/Eastern")
 
+# Cap per-asset trade history to prevent unbounded memory growth.
+_MAX_TRADES = 10_000
+
 
 def _sync_broker_sltp(asset) -> None:
     """Push current SL/TP to the real broker (MT5) after in-memory adjustment."""
@@ -382,6 +385,8 @@ class AssetPnlController:
         asset.current_value = asset.pos_mgr.current_value
         asset.peak_value = asset.pos_mgr.peak_value
         if direction != 0:
+            if len(asset.trades) >= _MAX_TRADES:
+                asset.trades.pop(0)
             asset.trades.append(
                 {
                     "date": last_bar,

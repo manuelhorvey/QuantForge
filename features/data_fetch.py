@@ -284,7 +284,10 @@ def fetch_cot_features(
         from data.loaders.cot_loader import FX_COT_CONTRACTS, align_cot_to_daily, get_contract_series, load_cot_weekly
         from features.cot_features import build_cot_features
 
-        cot_weekly = load_cot_weekly()
+        cot_weekly = _get_cycle_cached("cot_weekly_raw")
+        if cot_weekly is None:
+            cot_weekly = load_cot_weekly()
+            _set_cycle_cache("cot_weekly_raw", cot_weekly)
         if cot_weekly.empty:
             return pd.DataFrame()
 
@@ -473,15 +476,24 @@ def fetch_asset_ohlcv(
     Uses the MT5 data provider (when installed) via data_fetcher.fetch_live(),
     falling back to yfinance automatically.
 
+    Results are cached per ticker within the current engine cycle
+    (see ``bump_cycle_id``).
+
     Returns DataFrame with columns: open, high, low, close, volume.
     Index is DatetimeIndex with UTC timezone, normalized to midnight.
     Fetches 500 trading days (~2 years) instead of the legacy 10 years.
     """
+    cache_key = f"ohlcv:{ticker}"
+    cached = _get_cycle_cached(cache_key)
+    if cached is not None:
+        return cached
+
     try:
         df = _provider_fetch_live(ticker, min_days=_FETCH_WARMUP_BUFFER)
         if df.empty:
             raise ValueError("empty DataFrame")
         df.index = _normalize_index(df.index)
+        _set_cycle_cache(cache_key, df)
         return df
     except Exception as exc:
         logger.debug(
@@ -508,4 +520,5 @@ def fetch_asset_ohlcv(
         }
     )
     df.index = _normalize_index(df.index)
+    _set_cycle_cache(cache_key, df)
     return df

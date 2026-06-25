@@ -168,7 +168,7 @@ class AssetInferencePipeline:
         return df
 
     def _build_feature_set(self, asset, df):
-        from features.alpha_features import build_alpha_features
+        from features.alpha_features import _compute_shared_features, build_alpha_features
         from features.data_fetch import fetch_asset_data, fetch_asset_ohlcv, fetch_cot_features
 
         hist_prices, rate_diffs, dxy, vix, spx, commodities = fetch_asset_data(asset.name, asset.ticker)
@@ -187,6 +187,18 @@ class AssetInferencePipeline:
             if not cot_data.empty:
                 cot_data = cot_data.iloc[-_trunc_rows:]
 
+        # Cross-asset features (DXY, VIX, SPX, commodities) computed once per
+        # asset call and shared — avoids recomputing for every row in the loop.
+        # COT features are handled separately by build_alpha_features (has its own
+        # shift(3) lag logic), so cot_data is intentionally omitted here.
+        shared_features = _compute_shared_features(
+            dxy=dxy,
+            vix=vix,
+            spx=spx,
+            commodities=commodities,
+            index=hist_prices.index,
+        )
+
         alpha_df = build_alpha_features(
             hist_prices,
             rate_diffs,
@@ -195,6 +207,7 @@ class AssetInferencePipeline:
             spx=spx,
             commodities=commodities,
             cot_data=cot_data,
+            shared_features=shared_features,
         )
         alpha_idx = alpha_df.index
 

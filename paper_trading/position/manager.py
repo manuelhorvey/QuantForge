@@ -8,6 +8,9 @@ from paper_trading.entry.decision import PositionIntent
 
 logger = logging.getLogger("quantforge.position_manager")
 
+# Cap trade_log to prevent unbounded memory growth.
+_MAX_TRADE_LOG = 10_000
+
 
 class PositionManager:
     """
@@ -101,6 +104,8 @@ class PositionManager:
             "partial_closes": list(self._partial_closes),
             "fraction_closed": fraction,
         }
+        if len(self.trade_log) >= _MAX_TRADE_LOG:
+            self.trade_log.pop(0)
         self.trade_log.append(trade)
         self.current_value += pnl
         self.position = None

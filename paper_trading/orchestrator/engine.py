@@ -27,7 +27,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any
 
-from paper_trading.governance.drawdown_controls import check_drawdown_circuit_breaker
+from paper_trading.config_manager import get_config
+from paper_trading.governance.drawdown_controls import check_drawdown_circuit_breaker, compute_exposure_multiplier
 from paper_trading.orchestrator.actor import (
     AssetActor,
     AssetResult,
@@ -186,11 +187,10 @@ class EngineOrchestrator:
         # All actors see the same total_equity and drawdown derived from
         # end-of-previous-cycle values, avoiding intra-cycle races.  The
         # leverage budget is decremented atomically via Lock.
-        from paper_trading.config_manager import get_config
-
         defaults = get_config().defaults or {}
         max_leverage = defaults.get("portfolio_max_leverage", 2.0)
         total_equity = sum(a._engine.mtm_value for a in self._actors.values() if hasattr(a._engine, "mtm_value"))
+        self._cycle_total_equity = total_equity
         current_dd = (
             (total_equity - self._peak_portfolio_value) / max(self._peak_portfolio_value, 1.0)
             if self._peak_portfolio_value is not None and self._peak_portfolio_value > 0
@@ -212,9 +212,7 @@ class EngineOrchestrator:
 
         # Exposure multiplier: computed from current drawdown BEFORE entries
         # so Phase 2 sizing uses the correct multiplier (not one cycle late).
-        from paper_trading.governance.drawdown_controls import compute_exposure_multiplier as _compute_exp_mult
-
-        exp_mult, _ = _compute_exp_mult(current_dd)
+        exp_mult, _ = compute_exposure_multiplier(current_dd)
 
         for actor in self._actors.values():
             actor._engine._cycle_total_equity = total_equity
@@ -250,13 +248,24 @@ class EngineOrchestrator:
 
         # ── Phase 2: Validity updates (parallel) ────────────────────────
         results["phasetimestamps"][EnginePhase.VALIDITY] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-        for name, actor in self._actors.items():
+
+        def _run_validity(name: str, actor: AssetActor) -> str | None:
             if actor.health == actor.health.HALTED:
-                continue
+                return None
             try:
                 actor._engine.update_validity()
+                return None
             except Exception as e:
-                logger.warning("%s validity update failed: %s", name, e)
+                return f"{name}: {e}"
+
+        validity_futures = {
+            self._pool.submit(_run_validity, n, a): n
+            for n, a in self._actors.items()
+        }
+        for future in as_completed(validity_futures):
+            err = future.result()
+            if err is not None:
+                logger.warning("%s validity update failed: %s", err.split(":")[0], err)
 
         # ── Phase 3: Portfolio health aggregation ────────────────────────
         results["phasetimestamps"][EnginePhase.PORTFOLIO] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
@@ -414,8 +423,6 @@ class EngineOrchestrator:
         if total_positions > 0:
             long_ratio = long_count / total_positions
             skew = max(long_ratio, 1.0 - long_ratio)
-            from paper_trading.config_manager import get_config
-
             threshold = (get_config().defaults or {}).get("net_short_concentration_threshold", 0.75)
             if skew > threshold:
                 side_label = "LONG" if long_ratio > 0.5 else "SHORT"
@@ -635,7 +642,9 @@ class EngineOrchestrator:
         if self._peak_portfolio_value is None or self._peak_portfolio_value <= 0:
             return
 
-        total_equity = sum(a._engine.mtm_value for a in self._actors.values() if hasattr(a._engine, "mtm_value"))
+        total_equity = getattr(self, "_cycle_total_equity", None)
+        if total_equity is None:
+            total_equity = sum(a._engine.mtm_value for a in self._actors.values() if hasattr(a._engine, "mtm_value"))
         current_dd = (total_equity - self._peak_portfolio_value) / self._peak_portfolio_value
 
         if current_dd >= DRAWDOWN_AUTO_UNHALT_THRESHOLD:
