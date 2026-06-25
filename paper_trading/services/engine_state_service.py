@@ -321,6 +321,9 @@ class EngineStateService:
                     "peak_value": asset.pos_mgr.peak_value,
                     "running_mae": getattr(asset, "_running_mae", None),
                     "running_mfe": getattr(asset, "_running_mfe", None),
+                    "bars_at_entry": getattr(asset, "_bars_at_entry", 0),
+                    "initial_sl": getattr(asset, "_initial_sl", None),
+                    "initial_tp": getattr(asset, "_initial_tp", None),
                     "trade_log": asset.pos_mgr.trade_log,
                     "prob_history": asset.prob_history,
                 }

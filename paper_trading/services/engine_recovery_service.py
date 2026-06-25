@@ -37,6 +37,15 @@ class EngineRecoveryService:
         asset.trade_log = pos_data.get("trade_log", [])
         asset.pos_mgr.trade_log = list(pos_data.get("trade_log", []))
         asset.prob_history = pos_data.get("prob_history", [])
+        asset._bars_at_entry = pos_data.get("bars_at_entry", 0)
+        if "initial_sl" in pos_data:
+            asset._initial_sl = pos_data["initial_sl"]
+        if "initial_tp" in pos_data:
+            asset._initial_tp = pos_data["initial_tp"]
+        if "running_mae" in pos_data:
+            asset._running_mae = pos_data["running_mae"]
+        if "running_mfe" in pos_data:
+            asset._running_mfe = pos_data["running_mfe"]
 
     def restore_positions(self, saved_positions: dict) -> None:
         engine = self.engine
