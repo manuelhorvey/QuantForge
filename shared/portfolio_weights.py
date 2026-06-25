@@ -38,16 +38,18 @@ WeightMethod = Literal[
     "conviction_weighted_v1",
 ]
 
-WEIGHT_METHOD_VERSIONS = frozenset({
-    "equal_v1",
-    "risk_parity_v1",
-    "risk_parity_v2",
-    "risk_parity_v3",
-    "hrp_v1",
-    "factor_constrained_v1",
-    "factor_constrained_v2",
-    "conviction_weighted_v1",
-})
+WEIGHT_METHOD_VERSIONS = frozenset(
+    {
+        "equal_v1",
+        "risk_parity_v1",
+        "risk_parity_v2",
+        "risk_parity_v3",
+        "hrp_v1",
+        "factor_constrained_v1",
+        "factor_constrained_v2",
+        "conviction_weighted_v1",
+    }
+)
 
 
 def risk_contribution(weights: np.ndarray, cov: np.ndarray) -> np.ndarray:

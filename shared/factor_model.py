@@ -382,7 +382,11 @@ def factor_constrained_weights_v2(
     from scipy.optimize import minimize
 
     result = minimize(
-        objective, x0, method="SLSQP", bounds=bounds, constraints=cons,
+        objective,
+        x0,
+        method="SLSQP",
+        bounds=bounds,
+        constraints=cons,
         options={"maxiter": 2000, "ftol": 1e-12},
     )
 
