@@ -146,6 +146,13 @@ class EntryService:
         if vol is None:
             return
 
+        # Use current market price for fill/SL/TP instead of the decision's
+        # close_price which may be stale (yesterday's close vs today's live).
+        # The decision determines direction; the market determines fill price.
+        live_entry = getattr(asset, "current_price", None)
+        if live_entry is not None and not pd.isna(live_entry) and live_entry > 0:
+            entry_price = float(live_entry)
+
         state = self._resolve_validity_state(asset)
 
         # ── Stacking branch ─────────────────────────────────────────
