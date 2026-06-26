@@ -819,6 +819,20 @@ class EngineOrchestrator:
                     mt5_ticket,
                 )
                 engine.position.pop("mt5_ticket", None)
+                exit_price = getattr(engine, "current_price", None)
+                if exit_price is not None and exit_price > 0:
+                    try:
+                        engine._close_position(
+                            exit_price,
+                            datetime.now(timezone.utc),
+                            "MT5_STALE_TICKET",
+                        )
+                    except Exception:
+                        logger.exception(
+                            "MT5_STALE_TICKET: %s failed to close paper position — "
+                            "position may be a ghost",
+                            name,
+                        )
 
         # ── Phase C: Dry-run orphan report (log only, no state mutation) ──
         # Reports every MT5 position with no matching paper-side ticket.
