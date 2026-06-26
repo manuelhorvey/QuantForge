@@ -17,6 +17,56 @@ interface Props {
   name: string
 }
 
+interface PositionLeg {
+  entry: number
+  side: 'long' | 'short'
+  sl: number
+  tp: number
+  unrealized_pnl?: number | null
+  layers?: unknown[]
+}
+
+interface ScaleOutTier {
+  fraction: number
+  price: number
+  filled: boolean
+  fill_price?: number
+}
+
+interface RiskGeometry {
+  tpDistPct: number
+  slDistPct: number
+  rr: number
+}
+
+// One badge wins — tripwire beats sell-only beats "new". Stacking badges
+// of equal visual weight is how a card stops reading at a glance.
+function pickBadge(info: { sellOnly: boolean; tripwireActive: boolean; isNew: boolean }) {
+  if (info.tripwireActive) return { label: 'Tripwire', tone: 'red' as const, pulse: true }
+  if (info.sellOnly) return { label: 'Sell only', tone: 'yellow' as const, pulse: false }
+  if (info.isNew) return { label: 'New', tone: 'yellow' as const, pulse: true }
+  return null
+}
+
+function getRiskGeometry(pos: PositionLeg, currentPrice: number): RiskGeometry {
+  const isLong = pos.side === 'long'
+  const hasTp = pos.tp != null && pos.tp !== 0
+  const hasSl = pos.sl != null && pos.sl !== 0
+
+  const tpDistPct = hasTp
+    ? (isLong ? (pos.tp - currentPrice) / currentPrice : (currentPrice - pos.tp) / currentPrice) * 100
+    : 0
+  const slDistPct = hasSl
+    ? (isLong ? (currentPrice - pos.sl) / currentPrice : (pos.sl - currentPrice) / currentPrice) * 100
+    : 0
+
+  const reward = Math.abs(pos.tp - pos.entry)
+  const risk = Math.abs(pos.entry - pos.sl)
+  const rr = risk > 0 ? reward / risk : 0
+
+  return { tpDistPct, slDistPct, rr }
+}
+
 const AssetCard: React.FC<Props> = React.memo(({ name }) => {
   const { data: bundle } = useSystemSnapshot()
   const data = bundle?.snapshot
@@ -24,50 +74,60 @@ const AssetCard: React.FC<Props> = React.memo(({ name }) => {
   const asset = data?.assets?.[name]
 
   const prevEntryRef = useRef<number | null>(null)
-  const [newBadge, setNewBadge] = useState(false)
+  const [recentEntryBadge, setRecentEntryBadge] = useState(false)
 
   const info = useMemo(() => {
     if (!asset) return null
+
     const m = asset.metrics
     const sig = asset.last_signal
-    const pos = m.position
-    const open = data?.open_positions?.[name]
-    const hist = open?.prob_history ?? []
-    const isNew = hist.length >= 2 && hist[hist.length - 1].signal !== hist[hist.length - 2].signal
+    const pos = m.position as PositionLeg | undefined
+    const openPosition = data?.open_positions?.[name]
+    const signalHistory = openPosition?.prob_history ?? []
+    const isNew =
+      signalHistory.length >= 2 &&
+      signalHistory[signalHistory.length - 1].signal !== signalHistory[signalHistory.length - 2].signal
+
+    const price = m.current_price ?? sig?.close_price
+    const risk = pos && price != null ? getRiskGeometry(pos, price) : null
+
     return {
       signal: asset.final_signal ?? sig?.signal ?? 'FLAT',
       confidence: confidenceToPercent(sig?.confidence),
-      price: m.current_price ?? sig?.close_price,
+      price,
       totalReturn: m.mtm_return ?? m.total_return ?? 0,
       drawdown: m.drawdown ?? 0,
-      meanConf: confidenceToPercent(m.mean_confidence),
+      meanConfidence: confidenceToPercent(m.mean_confidence),
       nTrades: m.n_trades ?? 0,
       nSignals: m.n_signals ?? 0,
-      pos,
-      dist: m.signal_distribution,
+      position: pos,
+      risk,
+      signalDistribution: m.signal_distribution,
       sellOnly: asset.sell_only ?? false,
       tripwireActive: asset.tripwire_active ?? false,
       slMult: m.current_sl_mult ?? asset.sl_mult,
       tpMult: m.current_tp_mult ?? asset.tp_mult,
       scaleOutActive: m.scale_out_active ?? false,
-      scaleOutTiers: m.scale_out_tiers ?? null,
+      scaleOutTiers: (m.scale_out_tiers ?? null) as ScaleOutTier[] | null,
       remainingFraction: m.remaining_fraction ?? 1,
       isNew,
     }
   }, [asset, data, name])
 
+  // Flag a fresh entry for 60s so a re-render doesn't retrigger it on the
+  // same position (only fires when entry price actually changes).
   useEffect(() => {
-    const entry = info?.pos?.entry
-    if (entry != null && entry !== prevEntryRef.current) {
-      if (prevEntryRef.current !== null) {
-        setNewBadge(true)
-        const t = setTimeout(() => setNewBadge(false), 60_000)
-        prevEntryRef.current = entry
-        return () => clearTimeout(t)
-      }
-      prevEntryRef.current = entry
-    }
-  }, [info?.pos?.entry])
+    const entry = info?.position?.entry
+    if (entry == null || entry === prevEntryRef.current) return
+
+    const isFirstObservation = prevEntryRef.current === null
+    prevEntryRef.current = entry
+    if (isFirstObservation) return
+
+    setRecentEntryBadge(true)
+    const timer = setTimeout(() => setRecentEntryBadge(false), 60_000)
+    return () => clearTimeout(timer)
+  }, [info?.position?.entry])
 
   if (!info) {
     return (
@@ -78,146 +138,160 @@ const AssetCard: React.FC<Props> = React.memo(({ name }) => {
     )
   }
 
-  const confState: GovernanceState = confToState(info.confidence)
-  const retState: GovernanceState = info.totalReturn >= 0 ? 'GREEN' : 'RED'
-  const ddState: GovernanceState = ddToState(info.drawdown)
-  const cardState: GovernanceState = info.signal === 'BUY' ? 'GREEN' : info.signal === 'SELL' ? 'RED' : 'INIT'
+  const confidenceState: GovernanceState = confToState(info.confidence)
+  const returnState: GovernanceState = info.totalReturn >= 0 ? 'GREEN' : 'RED'
+  const drawdownState: GovernanceState = ddToState(info.drawdown)
+  const cardState: GovernanceState =
+    info.signal === 'BUY' ? 'GREEN' : info.signal === 'SELL' ? 'RED' : 'INIT'
+  const signalTextClass =
+    info.signal === 'BUY' ? governanceText.GREEN : info.signal === 'SELL' ? governanceText.RED : 'text-muted'
+
+  const badge = pickBadge({ sellOnly: info.sellOnly, tripwireActive: info.tripwireActive, isNew: info.isNew || recentEntryBadge })
 
   return (
     <div
       role="button"
       tabIndex={0}
       onClick={() => setSelectedAsset(name)}
-      onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedAsset(name) } }}
-      className={`relative bg-panel border border-default rounded-lg px-4 py-3 overflow-hidden group shadow-panel transition-all duration-200 hover:border-strong hover:shadow-card cursor-pointer border-l-2 active:scale-[0.98] sm:active:scale-100 ${governanceBorder[cardState]} ${governanceBgMuted[cardState]}`}>
+      onKeyDown={(e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          setSelectedAsset(name)
+        }
+      }}
+      className={`relative bg-panel border border-default rounded-lg px-4 py-3 overflow-hidden shadow-panel transition-colors duration-150 hover:border-strong hover:shadow-card cursor-pointer border-l-2 active:scale-[0.98] sm:active:scale-100 ${governanceBorder[cardState]} ${governanceBgMuted[cardState]}`}
+    >
+      {/* Header: identity + signal. One badge max, price is secondary. */}
       <div className="flex items-center gap-2 mb-2">
         <span className="font-semibold text-sm text-primary">{name}</span>
-        {info.sellOnly && (
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full leading-none ${
-            info.tripwireActive
-              ? 'bg-gov-red-muted text-gov-red border border-gov-red/20 animate-pulse'
-              : 'bg-gov-yellow-muted text-gov-yellow border border-gov-yellow/20'
-          }`}>
-            {info.tripwireActive ? 'TRIPWIRE' : 'SELL-ONLY'}
+
+        {badge && (
+          <span
+            className={`text-[10px] font-bold px-2 py-0.5 rounded-full leading-none border ${badge.tone === 'red'
+                ? 'bg-gov-red-muted text-gov-red border-gov-red/20'
+                : 'bg-gov-yellow-muted text-gov-yellow border-gov-yellow/20'
+              } ${badge.pulse ? 'animate-pulse' : ''}`}
+          >
+            {badge.label}
           </span>
         )}
-        {(info.isNew || newBadge) && (
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gov-yellow-muted text-gov-yellow border border-gov-yellow/20 animate-pulse leading-none">
-            NEW
-          </span>
-        )}
+
         {info.price != null && (
           <span className="text-xs text-tertiary font-mono ml-1">${formatAssetPrice(info.price)}</span>
         )}
-        <span className="ml-auto flex items-center gap-2">
-          <span className={`text-xs font-semibold ${info.signal === 'BUY' ? governanceText.GREEN : info.signal === 'SELL' ? governanceText.RED : 'text-muted'}`}>
-            {info.signal}
+
+        <span className="ml-auto flex items-baseline gap-2">
+          <span className={`text-xs font-semibold ${signalTextClass}`}>{info.signal}</span>
+          <span className={`text-xs font-mono ${governanceText[confidenceState]}`}>
+            {info.confidence.toFixed(0)}%
           </span>
-          <span className={`text-xs font-mono ${governanceText[confState]}`}>{info.confidence.toFixed(0)}%</span>
         </span>
       </div>
 
-      <div className="flex items-center gap-2 text-xs text-tertiary mb-2">
-        <span className={governanceText[retState]}>{info.totalReturn >= 0 ? '+' : ''}{info.totalReturn.toFixed(2)}%</span>
-        <span className="text-default/50">|</span>
-        <span className={governanceText[ddState]}>DD {info.drawdown.toFixed(2)}%</span>
-        <span className="text-default/50">|</span>
-        <span>Conf {info.meanConf.toFixed(1)}%</span>
+      {/* Performance row: return, drawdown, mean confidence — even spacing, no mixed dividers */}
+      <div className="flex items-center gap-x-3 text-xs text-tertiary mb-2">
+        <span className={governanceText[returnState]}>
+          {info.totalReturn >= 0 ? '+' : ''}
+          {info.totalReturn.toFixed(2)}%
+        </span>
+        <span className={governanceText[drawdownState]}>DD {info.drawdown.toFixed(2)}%</span>
+        <span>Conf {info.meanConfidence.toFixed(1)}%</span>
       </div>
 
+      {/* Risk multipliers + signal mix — quiet, monochrome except SL/TP color cues */}
       {info.slMult != null && info.tpMult != null && (
-        <div className="flex items-center gap-2 text-xs text-tertiary mb-1">
-          <span className="text-tertiary">SL <span className="font-mono text-gov-red/80">{info.slMult.toFixed(2)}x</span></span>
-          <span className="text-muted">·</span>
-          <span className="text-tertiary">TP <span className="font-mono text-gov-green/80">{info.tpMult.toFixed(2)}x</span></span>
-          <span className="text-default/50">·</span>
-          <span className="font-mono text-tertiary">{info.dist ? `${info.dist.BUY ?? 0}B ${info.dist.SELL ?? 0}S ${info.dist.FLAT ?? 0}F` : '—'}</span>
-          <span className="ml-auto font-mono text-tertiary">{info.nSignals} sigs · {info.nTrades} trds</span>
+        <div className="flex items-center gap-x-3 text-xs text-tertiary mb-1">
+          <span>
+            SL <span className="font-mono text-gov-red/80">{info.slMult.toFixed(2)}x</span>
+          </span>
+          <span>
+            TP <span className="font-mono text-gov-green/80">{info.tpMult.toFixed(2)}x</span>
+          </span>
+          {info.signalDistribution && (
+            <span className="font-mono">
+              {info.signalDistribution.BUY ?? 0}B {info.signalDistribution.SELL ?? 0}S{' '}
+              {info.signalDistribution.FLAT ?? 0}F
+            </span>
+          )}
+          <span className="ml-auto font-mono">
+            {info.nSignals} sigs · {info.nTrades} trades
+          </span>
         </div>
       )}
 
-      {info.pos && (
+      {/* Open position block */}
+      {info.position && (
         <div className="pt-2 border-t border-default/30">
           <div className="flex items-center justify-between text-xs text-tertiary">
             <span className="flex items-center gap-1.5">
-              <span className={`w-2 h-2 rounded-full ${info.pos.side === 'long' ? governanceDot.GREEN : governanceDot.RED}`} />
-              {info.pos.side.toUpperCase()} @ ${formatAssetPrice(info.pos.entry)}
-              {info.pos.layers && info.pos.layers.length > 1 && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-900/30 text-blue-400 border border-blue-500/30 leading-none ml-2">
-                  ×{info.pos.layers.length}
+              <span
+                className={`w-2 h-2 rounded-full ${info.position.side === 'long' ? governanceDot.GREEN : governanceDot.RED
+                  }`}
+              />
+              {info.position.side.toUpperCase()} @ ${formatAssetPrice(info.position.entry)}
+              {info.position.layers && info.position.layers.length > 1 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-900/30 text-blue-400 border border-blue-500/30 leading-none">
+                  ×{info.position.layers.length}
                 </span>
               )}
             </span>
-            <span className="font-mono">
-              {info.pos.unrealized_pnl != null && (
-                <span className={`${info.pos.unrealized_pnl >= 0 ? governanceText.GREEN : governanceText.RED}`}>
-                  {info.pos.unrealized_pnl >= 0 ? '+' : ''}{info.pos.unrealized_pnl.toFixed(2)}%
+            {info.position.unrealized_pnl != null && (
+              <span
+                className={`font-mono ${info.position.unrealized_pnl >= 0 ? governanceText.GREEN : governanceText.RED
+                  }`}
+              >
+                {info.position.unrealized_pnl >= 0 ? '+' : ''}
+                {info.position.unrealized_pnl.toFixed(2)}%
+              </span>
+            )}
+          </div>
+
+          {info.risk && (
+            <div className="flex items-center gap-x-3 text-xs mt-1">
+              {info.position.tp != null && info.position.tp !== 0 && (
+                <span className="flex items-center gap-1 text-tertiary">
+                  <span className={`w-1.5 h-1.5 rounded-full ${governanceDot.GREEN}`} />
+                  TP {formatAssetPrice(info.position.tp)}
+                  <span className={`font-mono ${governanceText.GREEN}`}>↑{info.risk.tpDistPct.toFixed(2)}%</span>
                 </span>
               )}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-xs mt-1">
-            {(() => {
-              const p = info.pos
-              const isLong = p.side === 'long'
-              const cur = info.price ?? p.entry
-              const tpDist = isLong ? ((p.tp - cur) / cur) * 100 : ((cur - p.tp) / cur) * 100
-              const slDist = isLong ? ((cur - p.sl) / cur) * 100 : ((p.sl - cur) / cur) * 100
-              const reward = Math.abs(p.tp - p.entry)
-              const risk = Math.abs(p.entry - p.sl)
-              const rr = risk > 0 ? reward / risk : 0
-              return (
-                <>
-                  {p.tp != null && p.tp !== 0 && (
-                    <span className="flex items-center gap-1 text-tertiary">
-                      <span className={`w-1.5 h-1.5 rounded-full ${governanceDot.GREEN}`} />
-                      TP {formatAssetPrice(p.tp)}
-                      <span className={`${governanceText.GREEN} font-mono`}>↑{tpDist.toFixed(2)}%</span>
-                    </span>
-                  )}
-                  {p.sl != null && p.sl !== 0 && (
-                    <span className="flex items-center gap-1 text-tertiary">
-                      <span className={`w-1.5 h-1.5 rounded-full ${governanceDot.RED}`} />
-                      SL {formatAssetPrice(p.sl)}
-                      <span className={`font-mono ${governanceText.RED}`}>↓{slDist.toFixed(2)}%</span>
-                    </span>
-                  )}
-                  {rr > 0 && (
-                    <span className={`ml-auto font-mono font-semibold ${governanceText[rrToState(rr)]}`}>
-                      {rr.toFixed(1)}:1
-                    </span>
-                  )}
-                </>
-              )
-            })()}
-          </div>
+              {info.position.sl != null && info.position.sl !== 0 && (
+                <span className="flex items-center gap-1 text-tertiary">
+                  <span className={`w-1.5 h-1.5 rounded-full ${governanceDot.RED}`} />
+                  SL {formatAssetPrice(info.position.sl)}
+                  <span className={`font-mono ${governanceText.RED}`}>↓{info.risk.slDistPct.toFixed(2)}%</span>
+                </span>
+              )}
+              {info.risk.rr > 0 && (
+                <span className={`ml-auto font-mono font-semibold ${governanceText[rrToState(info.risk.rr)]}`}>
+                  {info.risk.rr.toFixed(1)}:1
+                </span>
+              )}
+            </div>
+          )}
 
           {info.scaleOutActive && info.scaleOutTiers && info.scaleOutTiers.length > 0 && (
             <div className="mt-2 space-y-1">
               <div className="text-[10px] text-tertiary font-medium uppercase tracking-wider flex items-center gap-1">
-                Scale-out Tiers
+                Scale-out tiers
                 <span className="text-muted font-mono normal-case tracking-normal">
                   ({info.remainingFraction != null ? (info.remainingFraction * 100).toFixed(0) : '?'}% remain)
                 </span>
               </div>
               <div className="flex gap-1">
-                {info.scaleOutTiers.map((tier, i) => {
-                  const filled = tier.filled
-                  const fillPct = tier.fraction * 100
-                  return (
-                    <div
-                      key={i}
-                      className={`flex-1 h-6 rounded text-[9px] font-mono flex items-center justify-center border transition-colors ${
-                        filled
-                          ? 'bg-gov-green/15 border-gov-green/40 text-gov-green'
-                          : 'bg-panel border-default/50 text-tertiary'
+                {info.scaleOutTiers.map((tier, i) => (
+                  <div
+                    key={i}
+                    className={`flex-1 h-6 rounded text-[9px] font-mono flex items-center justify-center border ${tier.filled
+                        ? 'bg-gov-green/15 border-gov-green/40 text-gov-green'
+                        : 'bg-panel border-default/50 text-tertiary'
                       }`}
-                      title={`Tier ${i + 1}: ${fillPct.toFixed(0)}% @ $${tier.price}${filled ? ` (filled @ $${tier.fill_price})` : ' (pending)'}`}
-                    >
-                      {fillPct.toFixed(0)}%
-                    </div>
-                  )
-                })}
+                    title={`Tier ${i + 1}: ${(tier.fraction * 100).toFixed(0)}% @ $${tier.price}${tier.filled ? ` (filled @ $${tier.fill_price})` : ' (pending)'
+                      }`}
+                  >
+                    {(tier.fraction * 100).toFixed(0)}%
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -228,4 +302,5 @@ const AssetCard: React.FC<Props> = React.memo(({ name }) => {
 })
 
 AssetCard.displayName = 'AssetCard'
+
 export default AssetCard
