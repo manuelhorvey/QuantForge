@@ -420,6 +420,8 @@ class TestPreOpenGuard:
         engine._last_prob_neutral = 0.0
         engine._last_meta_proba = None
         engine._current_regime = "neutral"
+        engine._kelly_multiplier = 1.0
+        engine._drawdown_taper_mult = 1.0
 
         bridge = MagicMock()
         bridge._is_real_broker = True
