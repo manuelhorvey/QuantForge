@@ -433,6 +433,10 @@ def main():
         "--n-folds", type=int, default=3,
         help="Number of walk-forward folds (default 3; reduce for assets with sparse labels)",
     )
+    parser.add_argument(
+        "--max-depth", type=int, default=None,
+        help="Override max_depth for all assets (default: from production config)",
+    )
     args = parser.parse_args()
 
     # Load per-asset pt_sl from production config
@@ -487,7 +491,7 @@ def main():
             pt_sl = _asset_pt_sl.get(name, (2.0, 2.0))
         # Load per-asset max_depth from production config
         _acfg = _cfg.assets.get(name, {})
-        _md = int(_acfg.get("max_depth", 2))
+        _md = args.max_depth if args.max_depth is not None else int(_acfg.get("max_depth", 2))
         result = run_walk_forward(
             name, ticker,
             window_years=args.years,
