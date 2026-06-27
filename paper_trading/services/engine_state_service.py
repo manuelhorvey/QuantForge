@@ -7,7 +7,7 @@ import pytz
 
 from paper_trading.api.common import set_mt5_status
 from paper_trading.config_manager import get_config
-from paper_trading.execution.decision_pipeline import SELL_ONLY_ASSETS
+from paper_trading.execution.gate_constants import SELL_ONLY_ASSETS
 from paper_trading.governance.risk import get_sell_tripwire_state
 from paper_trading.ops.experiment_context import ExperimentContext
 from paper_trading.ops.simulation_snapshot import build_asset_snapshot

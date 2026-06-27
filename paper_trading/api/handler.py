@@ -32,9 +32,16 @@ class Handler:
                 raise
 
     def _send_json(self, data: str, status: int = 200) -> None:
-        # Wrap in state metadata envelope so every JSON endpoint has state_timestamp + sequence_id
         payload = json.loads(data)
-        data = json_dumps(_with_state_meta(payload))
+        # If the payload already contains state metadata (e.g. from handle_state which
+        # called _STORE.load_snapshot()), extract it to avoid a redundant second read.
+        seq = payload.get("sequence_id")
+        ts = payload.get("timestamp", "")
+        if seq is not None and ts:
+            wrapped = {"data": payload, "state_timestamp": ts, "sequence_id": seq}
+            data = json_dumps(wrapped)
+        else:
+            data = json_dumps(_with_state_meta(payload))
         body = data.encode("utf-8")
         accept_gzip = self.headers.get("Accept-Encoding", "")
         if "gzip" in accept_gzip and len(body) > 512:

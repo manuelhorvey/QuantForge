@@ -6,6 +6,9 @@ import pytest
 from paper_trading.entry.decision import PositionSide, TradeDecision
 from paper_trading.execution.decision_pipeline import (
     DecisionContext,
+    manage_position,
+)
+from paper_trading.execution.stacking import (
     _compute_stack_size,
     _get_adx,
     _is_trending,
@@ -14,9 +17,8 @@ from paper_trading.execution.decision_pipeline import (
     _projected_risk_for_stack,
     _should_stack,
     _stack_sl_price,
-    _update_position_protection,
-    manage_position,
 )
+from paper_trading.position.protection import _update_position_protection
 from quantforge.domain.entities.position import PositionIntent, StackLayer
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -419,55 +421,55 @@ class TestShouldStack:
         # IV-3 needs meaningful existing size so tightened SL compensates the added notional
         pos = _pos_long(entry=100.0, vol=0.02, size=1.0)  # sl=98, total_size=1.0
         ctx = self._make_context(pos, current_price=105.0)
-        assert _should_stack(ctx) is True
+        assert _should_stack(ctx).should_stack is True
 
     def test_gate_iv4_min_r_fails(self):
         pos = _pos_long(entry=100.0, vol=0.02)
         ctx = self._make_context(pos, current_price=100.3)  # only 0.15R
-        assert _should_stack(ctx) is False
+        assert _should_stack(ctx).should_stack is False
 
     def test_gate_max_layers_fails(self):
         layers = [StackLayer(entry_price=p, size=0.5, timestamp=f"t{i}") for i, p in enumerate([101, 102, 103])]
         pos = _pos_long(entry=100.0, vol=0.02, layers=layers)
         ctx = self._make_context(pos, current_price=105.0)
-        assert _should_stack(ctx) is False
+        assert _should_stack(ctx).should_stack is False
 
     def test_gate_confidence_fails(self):
         pos = _pos_long(entry=100.0, vol=0.02)
         ctx = self._make_context(pos, current_price=105.0, decision=_decision(confidence=0.55))
-        assert _should_stack(ctx) is False
+        assert _should_stack(ctx).should_stack is False
 
     def test_gate_iv8_duplicate_bar_fails(self):
         pos = _pos_long(entry=100.0, vol=0.02)
         pos.last_stack_bar_id = 42  # same as engine._bar_counter
         ctx = self._make_context(pos, current_price=105.0)
-        assert _should_stack(ctx) is False
+        assert _should_stack(ctx).should_stack is False
 
     def test_gate_iv5_spacing_fails(self):
         layers = [StackLayer(entry_price=104.5, size=0.5, timestamp="t1")]
         pos = _pos_long(entry=100.0, vol=0.02, layers=layers)
         ctx = self._make_context(pos, current_price=105.0)
         # last_entry=104.5, current=105.0, gap_r = |105-104.5|/(100*0.02) = 0.25 < 0.5
-        assert _should_stack(ctx) is False
+        assert _should_stack(ctx).should_stack is False
 
     def test_gate_iv5_spacing_passes_with_gap(self):
         layers = [StackLayer(entry_price=102.0, size=0.5, timestamp="t1")]
         pos = _pos_long(entry=100.0, vol=0.02, size=1.0, layers=layers)
         ctx = self._make_context(pos, current_price=105.0)
         # last_entry=102.0, current=105.0, gap_r = |105-102|/(100*0.02) = 1.5 >= 0.5
-        assert _should_stack(ctx) is True
+        assert _should_stack(ctx).should_stack is True
 
     def test_gate_iv6_adx_fails(self):
         pos = _pos_long(entry=100.0, vol=0.02)
         df = pd.DataFrame({"adx": [20.0]})
         ctx = self._make_context(pos, current_price=105.0, df=df)
-        assert _should_stack(ctx) is False
+        assert _should_stack(ctx).should_stack is False
 
     def test_gate_iv6_adx_passes_when_trending(self):
         pos = _pos_long(entry=100.0, vol=0.02, size=1.0)
         df = pd.DataFrame({"adx": [26.0]})
         ctx = self._make_context(pos, current_price=105.0, df=df)
-        assert _should_stack(ctx) is True
+        assert _should_stack(ctx).should_stack is True
 
     def test_gate_iv2_size_cap_fails(self):
         """IV-2: stack_size exceeds base_entry_size when size_cap > 1.0 permits it."""
@@ -476,14 +478,14 @@ class TestShouldStack:
         ctx.engine.config["stacking"]["layer_multipliers"] = [1.5, 1.0, 0.5]
         ctx.engine.config["stacking"]["size_cap"] = 2.0
         ctx.engine._realized_volatility = 0.15
-        assert _should_stack(ctx) is False
+        assert _should_stack(ctx).should_stack is False
         # Actually size = 0.8 (layer_mult=0.8 * base_entry=1.0 * vol_adj=1.0) = 0.8
         # base_size = 0.1, so 0.8 > 0.1 -> IV-2 fails
 
     def test_no_price_returns_false(self):
         pos = _pos_long(entry=100.0, vol=0.02)
         ctx = self._make_context(pos, current_price=0.0)
-        assert _should_stack(ctx) is False
+        assert _should_stack(ctx).should_stack is False
 
     def test_none_position_returns_false(self):
         ctx = self._make_context(None, side=PositionSide.LONG)
@@ -491,21 +493,21 @@ class TestShouldStack:
         engine = ctx.engine
         engine.pos_mgr.stack_layer_count.return_value = 0
         engine.pos_mgr.max_layers_reached.return_value = False
-        assert _should_stack(ctx) is False
+        assert _should_stack(ctx).should_stack is False
 
     def test_gate_9_pending_entry_conflict_fails(self):
         """Gate 9: pending entry for same side blocks stacking."""
         pos = _pos_long(entry=100.0, vol=0.02, size=1.0)
         ctx = self._make_context(pos, current_price=105.0)
         ctx.engine._pending_entries = {"long": MagicMock()}
-        assert _should_stack(ctx) is False
+        assert _should_stack(ctx).should_stack is False
 
     def test_gate_9_no_pending_entry_passes(self):
         """Gate 9: no pending entry does not block stacking."""
         pos = _pos_long(entry=100.0, vol=0.02, size=1.0)
         ctx = self._make_context(pos, current_price=105.0)
         ctx.engine._pending_entries = {}
-        assert _should_stack(ctx) is True
+        assert _should_stack(ctx).should_stack is True
 
     def test_gate_10_stopout_cooldown_fails(self):
         """Gate 10: recent cross-side stopout within cooldown blocks stacking."""
@@ -514,7 +516,7 @@ class TestShouldStack:
         ctx.engine._cycle_counter = 100
         ctx.engine._last_stop_out_cycle = 99  # 1 cycle ago, cooldown=1
         ctx.engine.config["stopout_cross_side_cooldown_cycles"] = 3
-        assert _should_stack(ctx) is False
+        assert _should_stack(ctx).should_stack is False
 
     def test_gate_10_stopout_cooldown_expired_passes(self):
         """Gate 10: stopout cooldown expired allows stacking."""
@@ -523,14 +525,14 @@ class TestShouldStack:
         ctx.engine._cycle_counter = 100
         ctx.engine._last_stop_out_cycle = 96  # 4 cycles ago, cooldown=3
         ctx.engine.config["stopout_cross_side_cooldown_cycles"] = 3
-        assert _should_stack(ctx) is True
+        assert _should_stack(ctx).should_stack is True
 
     def test_gate_10_no_stopout_passes(self):
         """Gate 10: no stopout history allows stacking."""
         pos = _pos_long(entry=100.0, vol=0.02, size=1.0)
         ctx = self._make_context(pos, current_price=105.0)
         ctx.engine._last_stop_out_cycle = None
-        assert _should_stack(ctx) is True
+        assert _should_stack(ctx).should_stack is True
 
 
 # ── _update_position_protection ────────────────────────────────────────────

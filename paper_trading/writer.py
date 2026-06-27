@@ -74,9 +74,15 @@ class BackgroundWriter:
         self._queue.put_nowait(cmd)
 
     def flush(self, timeout: float = 10.0) -> bool:
-        """Block until all previously enqueued writes are persisted."""
+        """Block until all previously enqueued writes are persisted (WAL + DB)."""
         self._flush_event.set()
-        return self._flush_done.wait(timeout)
+        ok = self._flush_done.wait(timeout)
+        if ok and self._wal is not None:
+            try:
+                self._wal.flush()
+            except Exception:
+                logger.exception("Background writer WAL flush failed")
+        return ok
 
     def shutdown(self, timeout: float = 5.0) -> None:
         """Signal shutdown and wait for the background thread to finish."""

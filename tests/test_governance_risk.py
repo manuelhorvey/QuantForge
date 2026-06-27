@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from paper_trading.governance import risk as risk_module
+from paper_trading.governance import risk_registry
 
 
 @pytest.fixture(autouse=True)
@@ -85,9 +86,9 @@ class TestReset:
         assert risk_module.get_sl_hit_rate_all() == {}
 
     def test_reset_clears_cache(self):
-        risk_module._cache["test"] = "value"
+        risk_module._default_registry._cache["test"] = "value"
         risk_module.reset()
-        assert risk_module._cache == {}
+        assert risk_module._default_registry._cache == {}
 
 
 # ── Evaluate ────────────────────────────────────────────────────────────
@@ -95,7 +96,7 @@ class TestReset:
 
 class TestEvaluate:
     def test_low_risk_no_sl_hits(self, monkeypatch, shadow_intelligence):
-        monkeypatch.setattr(risk_module, "get_shadow_intelligence", lambda asset, **kw: shadow_intelligence)
+        monkeypatch.setattr(risk_registry, "get_shadow_intelligence", lambda asset, **kw: shadow_intelligence)
         result = risk_module.evaluate("EURUSD")
         assert result["risk_level"] == "LOW"
         assert result["risk_score"] < 0.3
@@ -113,7 +114,7 @@ class TestEvaluate:
             },
             "details": {},
         }
-        monkeypatch.setattr(risk_module, "get_shadow_intelligence", lambda asset, **kw: high_drift)
+        monkeypatch.setattr(risk_registry, "get_shadow_intelligence", lambda asset, **kw: high_drift)
         result = risk_module.evaluate("EURUSD")
         assert result["risk_level"] == "HIGH"
         assert "MODEL_DRIFT" in result["risk_flags"]
@@ -122,7 +123,7 @@ class TestEvaluate:
         assert result["recommended_action"] == "PAUSE"
 
     def test_sl_hit_rate_critical_halts(self, monkeypatch, shadow_intelligence):
-        monkeypatch.setattr(risk_module, "get_shadow_intelligence", lambda asset, **kw: shadow_intelligence)
+        monkeypatch.setattr(risk_registry, "get_shadow_intelligence", lambda asset, **kw: shadow_intelligence)
         for _ in range(15):
             risk_module.record_trade_outcome("EURUSD", "sl")
         for _ in range(5):
@@ -133,7 +134,7 @@ class TestEvaluate:
         assert result["recommended_action"] == "PAUSE"
 
     def test_sl_hit_rate_elevated_triggers_monitor(self, monkeypatch, shadow_intelligence):
-        monkeypatch.setattr(risk_module, "get_shadow_intelligence", lambda asset, **kw: shadow_intelligence)
+        monkeypatch.setattr(risk_registry, "get_shadow_intelligence", lambda asset, **kw: shadow_intelligence)
         for _ in range(9):
             risk_module.record_trade_outcome("EURUSD", "sl")
         for _ in range(11):
@@ -154,7 +155,7 @@ class TestEvaluate:
             },
             "details": {},
         }
-        monkeypatch.setattr(risk_module, "get_shadow_intelligence", lambda asset, **kw: medium_drift)
+        monkeypatch.setattr(risk_registry, "get_shadow_intelligence", lambda asset, **kw: medium_drift)
         result = risk_module.evaluate("EURUSD")
         assert result["risk_level"] == "MEDIUM"
         assert result["recommended_action"] == "REDUCE_RISK"
@@ -163,7 +164,7 @@ class TestEvaluate:
         def failing_get(asset, **kw):
             raise RuntimeError("Shadow unavailable")
 
-        monkeypatch.setattr(risk_module, "get_shadow_intelligence", failing_get)
+        monkeypatch.setattr(risk_registry, "get_shadow_intelligence", failing_get)
         result = risk_module.evaluate("EURUSD")
         assert result["risk_level"] == "LOW"
         assert result["risk_score"] == 0.0
@@ -174,12 +175,13 @@ class TestEvaluate:
 
 class TestGetLatest:
     def test_get_latest_single_asset(self):
-        risk_module._cache = {"EURUSD": {"risk_level": "LOW"}}
+        risk_module._default_registry._cache["EURUSD"] = {"risk_level": "LOW"}
         assert risk_module.get_latest("EURUSD") == {"risk_level": "LOW"}
         assert risk_module.get_latest("GBPUSD") is None
 
     def test_get_latest_all(self):
-        risk_module._cache = {"EURUSD": {"risk_level": "LOW"}, "GBPUSD": {"risk_level": "MEDIUM"}}
+        risk_module._default_registry._cache["EURUSD"] = {"risk_level": "LOW"}
+        risk_module._default_registry._cache["GBPUSD"] = {"risk_level": "MEDIUM"}
         all_results = risk_module.get_latest()
         assert len(all_results) == 2
         assert all_results["EURUSD"]["risk_level"] == "LOW"

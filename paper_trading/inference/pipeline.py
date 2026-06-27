@@ -41,6 +41,8 @@ class AssetInferencePipeline:
         self._truncation_validated = False
         self._validated_model_id = -1
         self._truncate_inference = False
+        self._regime_features_cache: pd.DataFrame | None = None
+        self._regime_cache_cycle: int = -1
 
     def generate_signal(self, threshold=0.45):
         return self._generate_and_apply(threshold)
@@ -235,10 +237,18 @@ class AssetInferencePipeline:
             archetype_df["bb_zscore"] = ((ohlcv["close"] - bb_mavg) / (bb_std / 2)).reindex(alpha_idx)
         archetype_df = archetype_df.bfill()
 
-        # Generate regime features from same OHLCV, prefixed per-asset (matches training)
+        # Generate regime features from OHLCV, prefixed per-asset (matches training).
+        # Cache per cycle to avoid recomputation when regime sizing is enabled.
+        from features.data_fetch import _cycle_id
+
         regime_inference_df = pd.DataFrame(index=alpha_idx)
         if not ohlcv.empty:
-            raw_regime = generate_regime_features(ohlcv)
+            if self._regime_cache_cycle != _cycle_id:
+                raw_regime = generate_regime_features(ohlcv)
+                self._regime_features_cache = raw_regime
+                self._regime_cache_cycle = _cycle_id
+            else:
+                raw_regime = self._regime_features_cache
             prefix = asset.name.upper()
             renaming = {col: f"{prefix}_{col}" for col in raw_regime.columns}
             prefixed = raw_regime.rename(columns=renaming)
@@ -392,7 +402,14 @@ class AssetInferencePipeline:
     def _compute_sizing_and_signal(self, asset, df, proba, infer_idx, threshold):
         sizing_cfg = asset._sizing_config(df["close"])
         if asset.config.get("regime_sizing"):
-            regime_features_df = generate_regime_features(df)
+            from features.data_fetch import _cycle_id
+
+            if self._regime_cache_cycle == _cycle_id and self._regime_features_cache is not None:
+                regime_features_df = self._regime_features_cache
+            else:
+                regime_features_df = generate_regime_features(df)
+                self._regime_features_cache = regime_features_df
+                self._regime_cache_cycle = _cycle_id
             regime_results = asset.regime_classifier.classify(regime_features_df)
             last_row = regime_results.iloc[-1]
             asset._current_regime = last_row["regime"]

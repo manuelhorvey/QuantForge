@@ -337,7 +337,7 @@ def _factor_constrained_v1(
     Returns:
         WeightVector with constrained weights.
     """
-    from shared.factor_model import DEFAULT_FACTOR_LIMITS, factor_constrained_weights
+    from shared.constrained_weights import DEFAULT_FACTOR_LIMITS, factor_constrained_weights
 
     limits = kwargs.get("factor_limits", DEFAULT_FACTOR_LIMITS)
     rp_weight = float(kwargs.get("risk_parity_weight", 0.7))
@@ -360,7 +360,7 @@ def _factor_constrained_v2(returns: pd.DataFrame, **kwargs) -> dict[str, float]:
     inequality constraints in the SLSQP optimizer, guaranteeing that CHF,
     equity, and other factor limits are satisfied.
     """
-    from shared.factor_model import DEFAULT_FACTOR_LIMITS, factor_constrained_weights_v2
+    from shared.constrained_weights import DEFAULT_FACTOR_LIMITS, factor_constrained_weights_v2
 
     limits = kwargs.get("factor_limits", DEFAULT_FACTOR_LIMITS)
     weights = factor_constrained_weights_v2(returns, limits=limits)

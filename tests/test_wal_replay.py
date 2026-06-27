@@ -32,7 +32,7 @@ def tmp_wal_dir() -> str:
 
 @pytest.fixture
 def writer(tmp_wal_dir: str) -> WalWriter:
-    return WalWriter(tmp_wal_dir, source="test_engine")
+    return WalWriter(tmp_wal_dir, source="test_engine", batch_size=1)
 
 
 @pytest.fixture
@@ -101,7 +101,7 @@ class TestWalWriter:
         assert e2.sequence == 2
 
     def test_writes_persist_to_disk(self, tmp_wal_dir: str):
-        w = WalWriter(tmp_wal_dir, source="persist_test")
+        w = WalWriter(tmp_wal_dir, source="persist_test", batch_size=1)
         w.write("price_update", {"price": 1.10})
         assert os.path.exists(w.path)
         with open(w.path) as f:
@@ -111,7 +111,7 @@ class TestWalWriter:
         assert data["event_type"] == "price_update"
 
     def test_append_only(self, tmp_wal_dir: str):
-        w = WalWriter(tmp_wal_dir, source="append_test")
+        w = WalWriter(tmp_wal_dir, source="append_test", batch_size=1)
         w.write("event_a", {"val": 1})
         w.write("event_b", {"val": 2})
         with open(w.path) as f:
@@ -125,8 +125,8 @@ class TestWalWriter:
         assert writer.current_sequence == 100
 
     def test_file_per_source(self, tmp_wal_dir: str):
-        w1 = WalWriter(tmp_wal_dir, source="src_a")
-        w2 = WalWriter(tmp_wal_dir, source="src_b")
+        w1 = WalWriter(tmp_wal_dir, source="src_a", batch_size=1)
+        w2 = WalWriter(tmp_wal_dir, source="src_b", batch_size=1)
         assert w1.path != w2.path
         w1.write("event", {})
         w2.write("event", {})

@@ -88,7 +88,7 @@ class WalWriter:
     Past events are never mutated (invariant I3).
     """
 
-    def __init__(self, base_dir: str, source: str = "engine", batch_size: int = 1):
+    def __init__(self, base_dir: str, source: str = "engine", batch_size: int = 64):
         self._base_dir = base_dir
         self._source = source
         self._batch_size = max(batch_size, 1)

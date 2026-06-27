@@ -418,8 +418,13 @@ class PaperTradingEngine:
         # ── Auto-prune old data (once per day) ───────────────────────
         self._prune_old_data()
 
-        # ── Flush background writer ──────────────────────────────────
+        # ── Flush background writer and WAL ──────────────────────────
         self._background_writer.flush()
+        if self._wal is not None:
+            try:
+                self._wal.flush()
+            except Exception:
+                logger.exception("WAL flush failed at cycle boundary")
 
         # ── Cycle benchmark ───────────────────────────────────────────
         _elapsed = time.perf_counter() - _t0
