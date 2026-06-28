@@ -14,12 +14,6 @@ function valClass(val: number | null, lo: number, hi: number): string {
   return 'text-gov-red'
 }
 
-function renderVal(val: number | null, lo: number, hi: number, decimals = 4): string {
-  if (val === null) return '—'
-  const cls = valClass(val, lo, hi)
-  return `<span class="font-mono tabular-nums ${cls}">${val.toFixed(decimals)}</span>`
-}
-
 function minTrlClass(val: number | null): string {
   if (val === null) return 'text-tertiary'
   if (val <= 100) return 'text-gov-green'
