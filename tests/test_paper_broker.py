@@ -31,6 +31,11 @@ def priced_broker(zero_spread_config):
 
 
 class TestPaperBroker:
+    @pytest.fixture(autouse=True)
+    def _mock_yfinance(self):
+        with patch("paper_trading.execution.paper_broker.yf.Ticker", side_effect=RuntimeError("yfinance unavailable")):
+            yield
+
     @pytest.fixture
     def broker(self, zero_spread_config):
         return PaperBroker(
@@ -50,8 +55,7 @@ class TestPaperBroker:
         assert broker.connect() is True
         assert broker.disconnect() is True
 
-    @patch("paper_trading.execution.paper_broker.yf.Ticker", side_effect=RuntimeError("yfinance unavailable"))
-    def test_get_current_price_returns_zero_for_unknown(self, mock_ticker, broker):
+    def test_get_current_price_returns_zero_for_unknown(self, broker):
         price = broker.get_current_price("NONEXISTENT_SYMBOL_12345")
         assert price == 0.0
 
