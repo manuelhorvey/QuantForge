@@ -1,12 +1,4 @@
-"""Route registry — imports handlers from domain modules and registers them.
-
-Each module | routers.py:
-  state_routes.py    | /state, /trades, /equity_history, /confidence, /volatility, /logs, /ping, /health, /metrics
-  governance_routes.py | /risk, /health, /governance, /statistical-metrics, /risk-parity, /psi, /trade-outcomes, /narrative, /liquidity, /weekly-review, /narrative/confirm
-  analytics_routes.py | /attribution, /execution, /archetype, /analytics
-  shadow_routes.py   | /shadow/trades, /shadow/summary, /shadow-actions
-  asset_routes.py    | /asset, /wal, /mt5
-"""
+"""Route registry — imports handlers from domain modules."""
 
 from paper_trading.api.analytics_routes import (
     handle_analytics_snapshot,

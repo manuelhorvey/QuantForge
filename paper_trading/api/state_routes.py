@@ -5,7 +5,6 @@ from datetime import datetime
 
 import pytz
 
-from paper_trading.api.bundle import handle_state_bundle
 from paper_trading.api.common import (
     _STORE,
     CONFIDENCE_PATH,

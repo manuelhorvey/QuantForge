@@ -23,9 +23,9 @@ import logging
 import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
-from scipy.special import expit
 
 import numpy as np
+from scipy.special import expit
 
 if sys.version_info >= (3, 11):
     from typing import Self

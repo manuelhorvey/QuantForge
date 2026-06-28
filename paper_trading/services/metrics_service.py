@@ -96,11 +96,9 @@ class MetricsService:
     ):
         if ensure_position_synced:
             ensure_position_synced()
-        cv = current_value if not pd.isna(current_value) else initial_capital
         mtm_val = mtm_value
         pv = peak_value if not pd.isna(peak_value) else mtm_val
         dd = min(0, (mtm_val - pv) / pv) if pv > 0 else 0
-        total_return = (cv - initial_capital) / initial_capital if initial_capital > 0 else 0
 
         monthly_pfs = []
         if trade_log:
