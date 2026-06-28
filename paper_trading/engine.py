@@ -9,6 +9,7 @@ import pytz
 from dotenv import load_dotenv
 
 # Re-exported from child modules for backward compatibility
+from paper_trading.alerting.manager import setup_alerting_from_config
 from paper_trading.asset_engine import AssetEngine  # noqa: F401
 from paper_trading.config_manager import get_config
 from paper_trading.execution.bridge import ExecutionBridge
@@ -93,6 +94,12 @@ class PaperTradingEngine:
         cfg = config or get_config()
         self._engine_cfg = cfg
         self.execution_configs = build_execution_configs(cfg.assets, defaults=cfg.execution_defaults)
+
+        # Initialize alerting channels from config
+        try:
+            setup_alerting_from_config(cfg)
+        except Exception:
+            logger.debug("Alerting setup skipped (no config section or invalid)", exc_info=True)
 
         if cfg.mt5.enabled:
             self.broker = self._create_mt5_broker(cfg)

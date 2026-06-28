@@ -11,6 +11,20 @@ mt5:
   bridge_port: 9879
   min_lot: 0.05
   symbol_map_path: configs/mt5_symbol_map.yaml
+# Alerting framework — multi-channel dispatch for engine events.
+# Each channel supports its own config keys; unconfigured channels are skipped.
+# Environment variable values take precedence over YAML.
+alerting:
+  channels:
+    pagerduty:
+      enabled: false
+      routing_key: ""
+      min_interval: 30.0
+    webhook:
+      enabled: false
+      url: ""
+      format: slack
+      min_interval: 10.0
 # Ensemble is configured programmatically per-asset after regime model training.
 # Config values here serve as global defaults for all assets.
 ensemble:

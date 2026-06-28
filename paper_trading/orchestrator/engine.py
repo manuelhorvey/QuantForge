@@ -19,6 +19,7 @@ Invariants:
 from __future__ import annotations
 
 import atexit
+import contextlib
 import logging
 import math
 import threading
@@ -27,6 +28,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any
 
+from paper_trading.alerting.manager import global_alert_manager
 from paper_trading.config_manager import get_config
 from paper_trading.governance.drawdown_controls import check_drawdown_circuit_breaker, compute_exposure_multiplier
 from paper_trading.logging.correlation import set_correlation_id
@@ -341,6 +343,12 @@ class EngineOrchestrator:
             self._emergency_halt = True
             self._halt_reason = HaltReason.HALT_RATIO
             self._halt_detail = f"halt_ratio={health.halt_ratio:.4f}"
+            with contextlib.suppress(Exception):
+                global_alert_manager().critical(
+                    "Portfolio halted — halt ratio exceeded",
+                    f"halt_ratio={health.halt_ratio:.4f}/{self._max_halt_ratio:.4f}",
+                    details={"halt_ratio": health.halt_ratio, "threshold": self._max_halt_ratio},
+                )
             results["circuit_breaker"] = {
                 "triggered": True,
                 "halt_ratio": health.halt_ratio,
@@ -375,6 +383,12 @@ class EngineOrchestrator:
                 "VOLATILITY CIRCUIT BREAKER TRIGGERED: %s \u2014 flattening and halting",
                 breaker_result.reason,
             )
+            with contextlib.suppress(Exception):
+                global_alert_manager().critical(
+                    f"Portfolio halted — {breaker_result.reason}",
+                    "Volatility circuit breaker triggered — flattening all positions",
+                    details={"reason": breaker_result.reason, "severity": breaker_result.severity},
+                )
             self.flatten_positions(reason=f"circuit_breaker_{breaker_result.reason}")
             results["circuit_breaker"] = {"triggered": True, "reason": breaker_result.reason}
             return True
@@ -465,6 +479,17 @@ class EngineOrchestrator:
                 skew * 100,
                 threshold * 100,
             )
+            with contextlib.suppress(Exception):
+                global_alert_manager().warning(
+                    "Position concentration alert",
+                    f"{max(long_count, short_count)}/{total} on {side_label} side",
+                    details={
+                        "long": long_count,
+                        "short": short_count,
+                        "skew": round(skew, 4),
+                        "threshold": threshold,
+                    },
+                )
         return {
             "long": long_count,
             "short": short_count,
