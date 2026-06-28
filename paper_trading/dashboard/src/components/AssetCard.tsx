@@ -248,7 +248,7 @@ const AssetCard: React.FC<Props> = React.memo(({ name }) => {
                   }`}
               >
                 {info.position.unrealized_pnl >= 0 ? '+' : ''}
-                {info.position.unrealized_pnl.toFixed(2)}%
+                {info.position.unrealized_pnl.toFixed(2)} uPnL
               </span>
             )}
           </div>

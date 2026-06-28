@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useSystemSnapshot } from './useSystemSnapshot'
 
 export interface Alert {
@@ -13,11 +13,19 @@ export interface Alert {
   timestamp: string
 }
 
-const DISMISSED_KEY = 'qf-dismissed-alerts'
+let _dismissedVersion = ''
+
+export function setDismissedVersion(version: string) {
+  _dismissedVersion = version
+}
+
+function dismissedKey(): string {
+  return _dismissedVersion ? `qf-dismissed-alerts-${_dismissedVersion}` : 'qf-dismissed-alerts'
+}
 
 function loadDismissed(): Set<string> {
   try {
-    const raw = sessionStorage.getItem(DISMISSED_KEY)
+    const raw = sessionStorage.getItem(dismissedKey())
     return new Set(raw ? JSON.parse(raw) : [])
   } catch {
     return new Set()
@@ -25,10 +33,11 @@ function loadDismissed(): Set<string> {
 }
 
 export function dismissAlert(id: string) {
+  const key = dismissedKey()
   const dismissed = loadDismissed()
   dismissed.add(id)
   try {
-    sessionStorage.setItem(DISMISSED_KEY, JSON.stringify([...dismissed]))
+    sessionStorage.setItem(key, JSON.stringify([...dismissed]))
   } catch {}
 }
 
@@ -41,6 +50,10 @@ export function useMonitorAlerts(): Alert[] {
   const state = bundle?.snapshot
   const health = bundle?.live?.health
   const seqId = bundle?.meta?.snapshot_sequence_id
+
+  useEffect(() => {
+    if (bundle?.meta?.version) setDismissedVersion(bundle.meta.version)
+  }, [bundle?.meta?.version])
 
   return useMemo(() => {
     const alerts: Alert[] = []
