@@ -15,11 +15,11 @@ import WeeklyReviewModal from './components/WeeklyReviewModal'
 import { SystemHealthModalProvider } from './hooks/useSystemHealthModal'
 import SystemHealthModal from './components/SystemHealthModal'
 import { useSystemSnapshot } from './hooks/useSystemSnapshot'
+import { systemSelectors } from './selectors/system'
 import { useSelectedAsset } from './hooks/useSelectedAsset'
 
 function AppContent() {
-  const { data: bundle } = useSystemSnapshot()
-  const state = bundle?.snapshot
+  const { data: state } = useSystemSnapshot(systemSelectors.snapshot)
   const { selectedAsset, deepDiveAsset, setSelectedAsset, setDeepDiveAsset } = useSelectedAsset()
 
   const detailAsset = selectedAsset && state?.assets?.[selectedAsset]

@@ -39,8 +39,7 @@ interface Row {
 }
 
 export default function StatisticalMetricsTable() {
-  const { data: bundle } = useSystemSnapshot()
-  const stats = selectStatisticalMetrics(bundle)
+  const { data: stats } = useSystemSnapshot(selectStatisticalMetrics)
 
   const rows = useMemo(() => {
     if (!stats) return []
@@ -145,7 +144,9 @@ export default function StatisticalMetricsTable() {
     },
   ], [])
 
-  if (!bundle) return <TableSkeleton rows={6} />
+  if (!stats || Object.keys(stats).length === 0) return <TableSkeleton rows={6} />
+
+
 
   if (rows.length === 0) {
     return (
