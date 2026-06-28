@@ -656,7 +656,7 @@ The counterfactual script uses a 600-row dataset (vs 848 in production), 5 folds
 
 ## Known Issues
 
-- **Stacking (ADDED 2026-06-22)**: Pyramiding layer support for existing winning positions. Default `enabled: false`, dry_run: true. When enabled, `manage_position` evaluates stacking before suppressing same-side re-entry. Stacking uses unrealized PnL > 0 + confidence >= min_confidence. Layers tracked via `PositionIntent.layers` (StackLayer dataclass) with avg_price invariant enforcement. MT5_ORPHAN guard bypassed for `OrderType.STACK`. Size: volatility-adjusted diminishing schedule anchored to `base_entry_size`. Phase-out plan: validate on EURCAD/CADCHF → FX majors → full portfolio.
+- **Stacking (ADDED 2026-06-22, DEFERRED 2026-06-28)**: Pyramiding layer support for existing winning positions. Default `enabled: false`, dry_run: true. Walk-forward analysis showed stacking does not improve portfolio risk-adjusted returns — it increases notional concentration during already-profitable trades without commensurate Sharpe benefit. Remains disabled by default with no active phase-in plan. If revisited, validate on EURCAD/CADCHF first.
 - **MT5 orphan/re-entry bug (FIXED 2026-06-22)**: 5-fix chain to resolve same-side re-entry orphan problem:
   1. `decision_pipeline.py:manage_position` — sets `ctx.new_side = None` when already in same-side position (was `logger.debug`, promoted to `logger.info` same session)
   2. `entry_service.py:_record_position_state` — preserves existing `mt5_ticket` when broker returns None
