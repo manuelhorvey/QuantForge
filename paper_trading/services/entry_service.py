@@ -2,8 +2,6 @@ import logging
 import threading
 import time
 
-_LOCK_TYPE = type(threading.Lock())
-
 import numpy as np
 import pandas as pd
 import pytz
@@ -18,6 +16,8 @@ from shared.volatility import estimate_ewm_vol
 logger = logging.getLogger("quantforge.entry_service")
 
 ET = pytz.timezone("US/Eastern")
+
+_LOCK_TYPE = type(threading.Lock())
 
 
 class EntryService:
