@@ -1,5 +1,14 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSystemSnapshot } from './useSystemSnapshot'
+
+const ALERTS_CHANNEL = 'quantforge-alerts'
+
+let _channel: BroadcastChannel | null = null
+function getChannel(): BroadcastChannel {
+  if (typeof BroadcastChannel === 'undefined') return null as never
+  if (!_channel) _channel = new BroadcastChannel(ALERTS_CHANNEL)
+  return _channel
+}
 
 export interface Alert {
   id: string
@@ -38,6 +47,8 @@ export function dismissAlert(id: string) {
   dismissed.add(id)
   try {
     sessionStorage.setItem(key, JSON.stringify([...dismissed]))
+    const ch = getChannel()
+    if (ch) ch.postMessage({ type: 'dismiss', id })
   } catch {}
 }
 
@@ -50,10 +61,28 @@ export function useMonitorAlerts(): Alert[] {
   const state = bundle?.snapshot
   const health = bundle?.live?.health
   const seqId = bundle?.meta?.snapshot_sequence_id
+  const [broadcastTick, setBroadcastTick] = useState(0)
 
   useEffect(() => {
     if (bundle?.meta?.version) setDismissedVersion(bundle.meta.version)
   }, [bundle?.meta?.version])
+
+  useEffect(() => {
+    const ch = getChannel()
+    if (!ch) return
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === 'dismiss' && e.data?.id) {
+        const dismissed = loadDismissed()
+        dismissed.add(e.data.id)
+        try {
+          sessionStorage.setItem(dismissedKey(), JSON.stringify([...dismissed]))
+        } catch {}
+        setBroadcastTick(t => t + 1)
+      }
+    }
+    ch.addEventListener('message', handler)
+    return () => ch.removeEventListener('message', handler)
+  }, [])
 
   return useMemo(() => {
     const alerts: Alert[] = []
@@ -158,5 +187,5 @@ export function useMonitorAlerts(): Alert[] {
     }
 
     return alerts.filter(a => !dismissed.has(a.id))
-  }, [seqId, state, health])
+  }, [seqId, state, health, broadcastTick])
 }
