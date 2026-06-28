@@ -10,6 +10,7 @@ from paper_trading.api.common import (
     auth_headers,
     cache_get,
     get_index_html,
+    get_rate_limiter,
     json_dumps,
     require_auth,
     try_serve_file,
@@ -80,11 +81,38 @@ class Handler:
         self.end_headers()
         self._safe_write(self.wfile, body.encode("utf-8"))
 
+    @staticmethod
+    def _is_static_path(path: str) -> bool:
+        """Return True if *path* is a static file exempt from rate limiting."""
+        return path in ("/", "/index.html") or path.startswith("/assets/") or path.startswith("/favicon.ico")
+
+    def _check_rate_limit(self) -> bool:
+        """Enforce per-IP rate limiting for non-static requests.
+
+        Returns True if the request is allowed.  Sends 429 and returns False
+        if the client has exceeded the rate limit.
+        """
+        if self._is_static_path(self.path.split("?", 1)[0]):
+            return True
+        client_ip = self.client_address[0]
+        limiter = get_rate_limiter()
+        if not limiter.is_allowed(client_ip):
+            logger.warning("Rate limit exceeded for %s on %s", client_ip, self.path)
+            body = json_dumps({"error": "rate_limit", "message": "Too many requests"})
+            self.send_response(429)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Retry-After", "60")
+            for k, v in auth_headers().items():
+                self.send_header(k, v)
+            self.end_headers()
+            self._safe_write(self.wfile, body.encode("utf-8"))
+            return False
+        return True
+
     def _requires_auth(self) -> bool:
         """Check auth for the current request. Returns True if authorized."""
         # Static files are always accessible
-        path = self.path.split("?", 1)[0]
-        if path in ("/", "/index.html") or path.startswith("/assets/") or path.startswith("/favicon.ico"):
+        if self._is_static_path(self.path.split("?", 1)[0]):
             return True
         if not require_auth(dict(self.headers)):
             logger.warning("Unauthorized request to %s from %s", self.path, self.client_address[0])
@@ -113,6 +141,8 @@ class Handler:
         self.end_headers()
 
     def do_GET(self):  # noqa: N802
+        if not self._check_rate_limit():
+            return
         if not self._requires_auth():
             return
 
@@ -193,10 +223,15 @@ class Handler:
         self.end_headers()
 
     def do_POST(self):  # noqa: N802
+        if not self._check_rate_limit():
+            return
         if not self._requires_auth():
             return
 
         length = int(self.headers.get("Content-Length", 0))
+        if length > 4 * 1024 * 1024:  # 4 MiB max payload
+            self._send_json({"error": "payload too large"}, 413)
+            return
         body = self.rfile.read(length) if length > 0 else b""
         path = self.path.split("?")[0]
         fn = POST_ROUTES.get(path)

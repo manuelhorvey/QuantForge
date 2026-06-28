@@ -1,4 +1,5 @@
 import errno
+import hmac
 import json
 import logging
 import os
@@ -173,6 +174,57 @@ def get_vol_baselines() -> dict:
     return cfg.vol_baselines or _FALLBACK_VOL_BASELINES
 
 
+# ── Rate Limiting ───────────────────────────────────────────────────────────
+
+_RATE_LIMIT_MAX: int = int(os.environ.get("QUANTFORGE_RATE_LIMIT", "100"))
+_RATE_LIMIT_WINDOW: float = 60.0
+
+
+class RateLimiter:
+    """Per-IP sliding-window rate limiter.
+
+    Tracks request timestamps per client IP address using monotonic time.
+    Thread-safe via a per-instance lock for use with ThreadingMixIn servers.
+    """
+
+    def __init__(self, max_requests: int = _RATE_LIMIT_MAX, window_seconds: float = _RATE_LIMIT_WINDOW) -> None:
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self._windows: dict[str, list[float]] = {}
+        self._lock = threading.Lock()
+
+    def is_allowed(self, client_ip: str) -> bool:
+        """Check and record a request from *client_ip*.  Returns True if allowed."""
+        now = time.monotonic()
+        cutoff = now - self.window_seconds
+        with self._lock:
+            window = self._windows.setdefault(client_ip, [])
+            while window and window[0] < cutoff:
+                window.pop(0)
+            if len(window) >= self.max_requests:
+                return False
+            window.append(now)
+            return True
+
+    def remaining(self, client_ip: str) -> int:
+        """Number of requests remaining in the current window for *client_ip*."""
+        now = time.monotonic()
+        cutoff = now - self.window_seconds
+        with self._lock:
+            window = self._windows.get(client_ip, [])
+            while window and window[0] < cutoff:
+                window.pop(0)
+            return max(0, self.max_requests - len(window))
+
+
+# Global rate limiter instance shared across handler threads
+_RATE_LIMITER = RateLimiter()
+
+
+def get_rate_limiter() -> RateLimiter:
+    return _RATE_LIMITER
+
+
 # ── Authentication ──────────────────────────────────────────────────────────
 
 _AUTH_TOKEN: str | None = None  # None = not yet loaded, "" = no auth configured
@@ -209,7 +261,7 @@ def require_auth(headers: dict) -> bool:
         return True  # no auth configured — open access
     provided = headers.get("Authorization", "")
     if provided.startswith("Bearer "):
-        return provided[7:] == token
+        return hmac.compare_digest(provided[7:], token)
     return False
 
 

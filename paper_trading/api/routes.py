@@ -22,6 +22,7 @@ from paper_trading.governance.health import compute_all as _compute_health_all
 from paper_trading.governance.health import get_latest as _get_health_latest
 from paper_trading.governance.multipliers import compute_governance_multipliers
 from paper_trading.governance.risk import get_latest as _get_risk_latest
+from paper_trading.metrics.exposition import global_registry
 from paper_trading.ops.market_hours import is_market_closed
 from paper_trading.ops.weekly_review import compute_weekly_review
 from paper_trading.portfolio_builder import build_paper_portfolio
@@ -867,6 +868,11 @@ def handle_wal_asset(path: str, query: dict) -> tuple[str, int]:
     return json_dumps({"events": events, "total": len(events), "asset": asset_name}), 200
 
 
+def handle_metrics(path: str, query: dict) -> str:
+    """Render all metrics in Prometheus text format."""
+    return global_registry().render()
+
+
 GET_ROUTES: dict[str, tuple] = {
     "/state-bundle.json": (handle_state_bundle, False),
     "/state.json": (handle_state, False),
@@ -899,6 +905,7 @@ GET_ROUTES: dict[str, tuple] = {
     "/mt5/status.json": (handle_mt5_status, False),
     "/ping": (handle_ping, False),
     "/health": (handle_engine_health, False),
+    "/metrics": (handle_metrics, True),
 }
 
 GET_ROUTES_PREFIX: list[tuple[str, object, bool]] = [

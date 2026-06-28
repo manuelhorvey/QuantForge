@@ -67,7 +67,9 @@ class AssetInferencePipeline:
 
         # ── Feature snapshot (causal boundary P0.1) ─────────────────────
         feature_vector = {k: float(v) for k, v in x.iloc[-1].items()}
-        feature_hash = hashlib.md5(json.dumps(feature_vector, sort_keys=True).encode()).hexdigest()[:12]
+        feature_hash = hashlib.md5(
+            (asset.name + json.dumps(feature_vector, sort_keys=True)).encode()
+        ).hexdigest()[:12]
         asset._last_feature_vector = feature_vector
         asset._last_feature_hash = feature_hash
         asset._last_feature_schema = sorted(feature_vector.keys())
@@ -87,12 +89,18 @@ class AssetInferencePipeline:
                     proba[:, 0] = 1.0 - cal_p_long
                     asset._calibration_applied = True
                 except Exception as e:
-                    logger.debug("%s: calibration inference failed: %s", asset.name, e)
+                    logger.error("%s: calibration inference failed: %s", asset.name, e)
                     asset._calibration_applied = False
             else:
                 asset._calibration_applied = False
         else:
             asset._calibration_applied = False
+
+        # Guard: if calibration is enabled but failed, neutralize probabilities
+        # to prevent uncalibrated raw XGBoost probabilities from driving trades.
+        _cal_cfg = get_config().defaults.get("calibration", {})
+        if _cal_cfg.get("enabled", False) and not asset._calibration_applied:
+            proba[:, :] = [0.0, 1.0, 0.0]  # force neutral (100% hold, 0% long/short)
 
         result, pos_size = self._compute_sizing_and_signal(asset, df, proba, _infer_idx, threshold)
 

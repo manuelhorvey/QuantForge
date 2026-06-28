@@ -72,6 +72,21 @@ class MT5Broker(BrokerInterface):
         # MT5 drawdown tracking for independent sizing
         self._peak_equity: float | None = None
 
+        # Optional WAL writer for order lifecycle events
+        self._wal_writer = None
+
+    def set_wal_writer(self, wal_writer) -> None:
+        """Attach a WAL writer for order lifecycle event logging."""
+        self._wal_writer = wal_writer
+
+    def _wal_event(self, event_type: str, payload: dict) -> None:
+        """Write a WAL event if a writer is attached."""
+        if self._wal_writer is not None:
+            try:
+                self._wal_writer.write(event_type, payload)
+            except Exception as e:
+                logger.debug("WAL write failed for %s: %s", event_type, e)
+
     # ── Connection lifecycle ────────────────────────────────────────────
 
     def connect(self) -> bool:
@@ -155,14 +170,33 @@ class MT5Broker(BrokerInterface):
 
         if order.order_type != "market":
             logger.warning("MT5Broker only supports market orders; got %s", order.order_type)
+            self._wal_event("mt5_order_rejected", {
+                "asset": order.asset,
+                "side": order.side,
+                "reason": f"unsupported_order_type:{order.order_type}",
+            })
             return ""
 
         volume = self._quantity_to_lots(order.asset, order.quantity)
         if volume <= 0:
             logger.error("Invalid volume for %s: qty=%s", order.asset, order.quantity)
+            self._wal_event("mt5_order_rejected", {
+                "asset": order.asset,
+                "side": order.side,
+                "reason": f"invalid_volume:{order.quantity}",
+            })
             return ""
 
         id_key = f"{order.asset}_{order.side}_{int(time.time() / 30)}"
+
+        self._wal_event("mt5_order_placed", {
+            "asset": order.asset,
+            "side": order.side,
+            "volume": volume,
+            "sl": order.sl,
+            "tp": order.tp,
+            "idempotency_key": id_key,
+        })
 
         try:
             result = self._client.place_order(
@@ -176,6 +210,12 @@ class MT5Broker(BrokerInterface):
             )
         except Exception as e:
             logger.error("Order placement failed for %s: %s", order.asset, e)
+            self._wal_event("mt5_order_rejected", {
+                "asset": order.asset,
+                "side": order.side,
+                "volume": volume,
+                "reason": f"exception:{e}",
+            })
             return ""
 
         retcode = result.get("retcode", -1)
@@ -190,9 +230,23 @@ class MT5Broker(BrokerInterface):
                 order.side,
                 volume,
             )
+            self._wal_event("mt5_order_rejected", {
+                "asset": order.asset,
+                "side": order.side,
+                "volume": volume,
+                "retcode": retcode,
+                "ticket": ticket,
+            })
             return ""
 
         order_id = str(ticket)
+        self._wal_event("mt5_order_filled", {
+            "asset": order.asset,
+            "side": order.side,
+            "volume": volume,
+            "ticket": order_id,
+            "retcode": retcode,
+        })
         logger.info(
             "Order filled: %s %s %.4f lots (ticket=%s)",
             order.side,
@@ -209,6 +263,11 @@ class MT5Broker(BrokerInterface):
 
         error = result.get("error", "")
         if "not found" in error:
+            self._wal_event("mt5_position_closed", {
+                "asset": asset,
+                "ticket": str(ticket),
+                "reason": "already_closed",
+            })
             logger.info(
                 "Position already closed: ticket=%s asset=%s (raw=%s)",
                 ticket,
@@ -220,13 +279,32 @@ class MT5Broker(BrokerInterface):
         retcode = result.get("result", {}).get("retcode", -1)
         if retcode != 10009:
             logger.error("Close position failed: retcode=%d ticket=%s asset=%s", retcode, ticket, asset)
+            self._wal_event("mt5_position_closed", {
+                "asset": asset,
+                "ticket": str(ticket),
+                "retcode": retcode,
+                "reason": "close_failed",
+            })
             return False
+
+        self._wal_event("mt5_position_closed", {
+            "asset": asset,
+            "ticket": str(ticket),
+            "retcode": retcode,
+            "reason": "closed",
+        })
         logger.info("Position closed: ticket=%s asset=%s", ticket, asset)
         return True
 
     def modify_position(self, asset: str, position_id: str, sl: float | None = None, tp: float | None = None) -> bool:
         self.ensure_connected()
         ticket = int(position_id)
+        self._wal_event("mt5_order_modified", {
+            "asset": asset,
+            "ticket": str(ticket),
+            "sl": sl,
+            "tp": tp,
+        })
         result = self._client.modify_position(ticket, sl=sl, tp=tp)
         retcode = result.get("result", {}).get("retcode", -1)
         if retcode != 10009:

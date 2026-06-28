@@ -10,15 +10,20 @@ Causal boundary events (P0 — required for deterministic replay):
     decision_output    — final action AFTER governance gating + model hash
 
 Observability events (supporting — not required for causal replay):
-    price_update      — OHLC bar data received
-    signal_generated  — model signal (entry/flat/exit + confidence)
-    entry_executed    — fill result for position entry
-    sl_executed       — fill result for stop-loss
-    tp_executed       — fill result for take-profit
-    position_closed   — position closed (any reason)
-    state_committed   — full state snapshot checkpoint
-    actor_health      — actor health state change
-    stack_added       — pyramid layer added to an existing position
+    price_update        — OHLC bar data received
+    signal_generated    — model signal (entry/flat/exit + confidence)
+    entry_executed      — fill result for position entry
+    sl_executed         — fill result for stop-loss
+    tp_executed         — fill result for take-profit
+    position_closed     — position closed (any reason)
+    state_committed     — full state snapshot checkpoint
+    actor_health        — actor health state change
+    stack_added         — pyramid layer added to an existing position
+    mt5_order_placed    — MT5 market order submitted to bridge (pre-fill)
+    mt5_order_filled    — MT5 order confirmed filled (retcode 10009)
+    mt5_order_rejected  — MT5 order rejected (unsupported type, invalid vol, bridge error, retcode != 10009)
+    mt5_order_modified  — MT5 SL/TP modification submitted
+    mt5_position_closed — MT5 position closed (or already closed / close failed)
 
 Invariants:
     I1: Events from a single source are strictly ordered by sequence.
@@ -131,6 +136,8 @@ class WalWriter:
         """Flush buffered events to disk (write + fsync).
 
         Safe to call multiple times — no-op when buffer is empty.
+        On write failure (disk full, permissions), events are re-buffered
+        for a retry on the next flush cycle.
         """
         with self._lock:
             lines = self._buffer
@@ -139,13 +146,21 @@ class WalWriter:
                 return
 
         seq_low = self._seq - len(lines) + 1  # approximate for logging
-        with open(self._path, "a") as f:
-            f.writelines(lines)
-            f.flush()
-            try:
-                os.fsync(f.fileno())
-            except OSError:
-                logger.exception("WAL batch fsync failed for %s seq=%d", self._source, seq_low)
+        try:
+            with open(self._path, "a") as f:
+                f.writelines(lines)
+                f.flush()
+                try:
+                    os.fsync(f.fileno())
+                except OSError:
+                    logger.exception("WAL batch fsync failed for %s seq=%d", self._source, seq_low)
+        except OSError:
+            logger.exception(
+                "WAL batch write failed for %s seq=%d — re-buffering %d events",
+                self._source, seq_low, len(lines),
+            )
+            with self._lock:
+                self._buffer = lines + self._buffer
 
     @property
     def current_sequence(self) -> int:

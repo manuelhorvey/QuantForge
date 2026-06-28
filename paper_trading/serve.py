@@ -2,14 +2,26 @@ import http.server
 import logging
 import os
 import socketserver
+import time
 from socketserver import ThreadingMixIn
 
 from paper_trading.api.handler import Handler
+from paper_trading.metrics.exposition import global_registry
 
 logger = logging.getLogger("quantforge.serve")
 
 DEFAULT_PORT = 5000
 DEFAULT_BIND = os.environ.get("QUANTFORGE_BIND", "127.0.0.1")
+
+# ── Prometheus metrics ────────────────────────────────────────────────────
+_metrics = global_registry()
+_http_requests_total = _metrics.counter("http_requests_total", "Total HTTP requests by method and path")
+_http_request_duration_seconds = _metrics.histogram(
+    "http_request_duration_seconds",
+    "HTTP request latency by method and path",
+    buckets=[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0],
+)
+_http_errors_total = _metrics.counter("http_errors_total", "Total HTTP error responses by status code")
 
 
 class ReuseServer(ThreadingMixIn, socketserver.TCPServer):
@@ -18,7 +30,21 @@ class ReuseServer(ThreadingMixIn, socketserver.TCPServer):
 
 
 class ServingHandler(Handler, http.server.SimpleHTTPRequestHandler):
-    pass
+    def __init__(self, *args, **kwargs):
+        self._req_start = time.monotonic()
+        super().__init__(*args, **kwargs)
+
+    def log_request(self, code: int | str = ..., size: int | str = ...) -> None:
+        """Override log_request to record Prometheus metrics."""
+        path = self.path.split("?", 1)[0]
+        method = self.command
+        _http_requests_total.inc(method=method, path=path)
+        elapsed = time.monotonic() - self._req_start
+        _http_request_duration_seconds.observe(elapsed, method=method, path=path)
+        status_code = int(code) if code is not None else 200
+        if status_code >= 400:
+            _http_errors_total.inc(status_code=str(status_code), path=path)
+        super().log_request(code, size)
 
 
 def serve(port=DEFAULT_PORT, shutdown_event=None):

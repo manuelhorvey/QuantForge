@@ -11,6 +11,20 @@ mt5:
   bridge_port: 9879
   min_lot: 0.05
   symbol_map_path: configs/mt5_symbol_map.yaml
+# Alerting framework — multi-channel dispatch for engine events.
+# Each channel supports its own config keys; unconfigured channels are skipped.
+# Environment variable values take precedence over YAML.
+alerting:
+  channels:
+    pagerduty:
+      enabled: false
+      routing_key: ""
+      min_interval: 30.0
+    webhook:
+      enabled: false
+      url: ""
+      format: slack
+      min_interval: 10.0
 # Ensemble is configured programmatically per-asset after regime model training.
 # Config values here serve as global defaults for all assets.
 ensemble:
@@ -78,6 +92,16 @@ defaults:
   portfolio_max_leverage: 2.0
   portfolio_leverage_tolerance: 0.001
   net_short_concentration_threshold: 0.75
+  # SELL_ONLY_ASSETS: assets where BUY signal is inverted (p_long > 0.5 → ~17% WR).
+  # These assets trade SELL only; BUY signals are overridden to FLAT.
+  # Derived from walk-forward BUY inversion discovery (2026-06-20).
+  # Removed from SELL_ONLY 2026-06-26: GBPJPY, USDCHF, EURCHF, USDJPY, ^DJI
+  sell_only_assets:
+    - CADCHF
+    - ES
+    - NQ
+    - NZDCHF
+    - EURAUD
   spread_gate:
     enabled: true
     staleness_secs: 300

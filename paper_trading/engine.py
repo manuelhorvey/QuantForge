@@ -9,10 +9,14 @@ import pytz
 from dotenv import load_dotenv
 
 # Re-exported from child modules for backward compatibility
+from paper_trading.alerting.manager import setup_alerting_from_config
 from paper_trading.asset_engine import AssetEngine  # noqa: F401
+from paper_trading.asset_engine_factory import build_asset_engine
 from paper_trading.config_manager import get_config
 from paper_trading.execution.bridge import ExecutionBridge
+from paper_trading.execution.mt5_broker import MT5Broker
 from paper_trading.execution.paper_broker import PaperBroker
+from paper_trading.execution_context import ExecutionContext
 from paper_trading.governance.risk import reset as _reset_risk_governance
 from paper_trading.ops.data_fetcher import (  # noqa: F401
     _cache_path,
@@ -25,8 +29,11 @@ from paper_trading.ops.data_fetcher import (  # noqa: F401
 )
 from paper_trading.ops.experiment_context import ExperimentContext
 from paper_trading.ops.market_hours import is_market_closed
+from paper_trading.ops.mt5_client import MT5Client
+from paper_trading.ops.simulation_snapshot import SimulationStore
 from paper_trading.orchestrator.actor import AssetActor
 from paper_trading.orchestrator.engine import EngineOrchestrator
+from paper_trading.portfolio_builder import build_paper_portfolio
 from paper_trading.replay.wal import WalWriter
 from paper_trading.services.engine_narrative_service import EngineNarrativeService
 from paper_trading.services.engine_rebalance_service import EngineRebalanceService
@@ -94,8 +101,17 @@ class PaperTradingEngine:
         self._engine_cfg = cfg
         self.execution_configs = build_execution_configs(cfg.assets, defaults=cfg.execution_defaults)
 
+        # Initialize alerting channels from config
+        try:
+            setup_alerting_from_config(cfg)
+        except Exception:
+            logger.debug("Alerting setup skipped (no config section or invalid)", exc_info=True)
+
         if cfg.mt5.enabled:
             self.broker = self._create_mt5_broker(cfg)
+            # Wire WAL writer into broker for MT5 order lifecycle events
+            if hasattr(self.broker, "set_wal_writer"):
+                self.broker.set_wal_writer(self._wal)
             is_real_broker = True
             # Install MT5 client as global data provider for data_fetcher
             self._install_mt5_data_provider(cfg)
@@ -111,8 +127,6 @@ class PaperTradingEngine:
         self._rebalance = EngineRebalanceService(self)
         self._recovery = EngineRecoveryService(self)
         self._state = EngineStateService(self)
-
-        from paper_trading.compat import ExecutionContext
 
         self._execution_context = ExecutionContext(
             state_store=self.state_store,
@@ -132,8 +146,6 @@ class PaperTradingEngine:
         self._init_experiment_context()
         self._narrative.init_narrative()
         self._recovery.restore_positions(saved_positions)
-        from paper_trading.compat import SimulationStore
-
         self._sim_store = SimulationStore(BASE)
         self._rebalance_last_day: datetime | None = None
         self._rebalance_weights: dict[str, float] = {}
@@ -179,8 +191,6 @@ class PaperTradingEngine:
     def _create_mt5_broker(self, cfg):
         import yaml
 
-        from paper_trading.compat import MT5Broker
-
         mt5 = cfg.mt5
         symbol_map: dict[str, str] = {}
         if mt5.symbol_map_path:
@@ -205,7 +215,6 @@ class PaperTradingEngine:
     def _install_mt5_data_provider(self, cfg) -> None:
         import yaml
 
-        from paper_trading.compat import MT5Client
         from paper_trading.ops.data_fetcher import set_mt5_client
 
         symbol_map: dict[str, str] = {}
@@ -229,14 +238,10 @@ class PaperTradingEngine:
         logger.info("MT5 data provider installed")
 
     def _build_asset_registry(self) -> None:
-        from paper_trading.compat import build_paper_portfolio as _build_paper_portfolio
-
-        portfolio = _build_paper_portfolio(self._engine_cfg.halt)
+        portfolio = build_paper_portfolio(self._engine_cfg.halt)
         _reg = StrategyRegistry.get_instance()
         _reg.register_defaults(list(portfolio.keys()))
         for name, spec in portfolio.items():
-            from paper_trading.compat import build_asset_engine
-
             self.assets[name] = build_asset_engine(
                 ticker=spec["ticker"],
                 name=name,
