@@ -42,7 +42,10 @@ class SizingInput:
     leverage_lock: threading.Lock | None = None
 
     is_mt5: bool = False
-    """If True, skip leverage budget check (MT5 defers it)."""
+    """If True, use MT5 sizing path (kelly + max_position_pct instead of size_scalar)."""
+
+    leverage_budget_soft: bool = False
+    """If True, log WARNING on budget exhaustion but don't block. If False, block entry (default)."""
 
     lot_converter: Callable[[str, float], float] | None = None
     """broker._quantity_to_lots or None."""
@@ -158,23 +161,33 @@ class SizingChain:
         budget_ref = inp.leverage_budget_ref
         budget_total: float = float("inf")
 
-        if lock is not None and budget_ref is not None and not inp.is_mt5:
+        if lock is not None and budget_ref is not None:
             with lock:
                 remaining = budget_ref[0]
                 if remaining <= 0:
-                    res.skip_reason = "leverage_exhausted"
                     tag = "MT5" if inp.is_mt5 else ""
-                    logger.info(
-                        "%s %s: entry skipped — leverage budget exhausted (remaining=%.2f equity=%.2f)",
-                        inp.ticker,
-                        tag,
-                        remaining,
-                        inp.equity,
-                    )
-                    return res
-                notional = min(notional, remaining)
-                budget_ref[0] = remaining - notional
-                budget_total = remaining
+                    if inp.leverage_budget_soft:
+                        logger.warning(
+                            "%s %s: leverage budget exhausted (remaining=%.2f equity=%.2f) — soft guard, allowing entry",
+                            inp.ticker,
+                            tag,
+                            remaining,
+                            inp.equity,
+                        )
+                    else:
+                        res.skip_reason = "leverage_exhausted"
+                        logger.info(
+                            "%s %s: entry skipped — leverage budget exhausted (remaining=%.2f equity=%.2f)",
+                            inp.ticker,
+                            tag,
+                            remaining,
+                            inp.equity,
+                        )
+                        return res
+                else:
+                    notional = min(notional, remaining)
+                    budget_ref[0] = remaining - notional
+                    budget_total = remaining
 
         res.leverage_budget_total = budget_total
         res.notional = notional

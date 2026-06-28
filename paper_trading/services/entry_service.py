@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 
 import numpy as np
@@ -500,6 +501,13 @@ class EntryService:
         mt5_dd = getattr(broker, "current_mt5_drawdown_pct", lambda: 0.0)()
         sl_dist = abs(intent_sl - entry_price)
 
+        mt5_budget_ref = getattr(asset, "_mt5_leverage_budget_ref", None)
+        mt5_lock = getattr(asset, "_mt5_leverage_lock", None)
+        if not isinstance(mt5_budget_ref, list):
+            mt5_budget_ref = None
+        if not isinstance(mt5_lock, threading.Lock):
+            mt5_lock = None
+
         sizing_input = SizingInput(
             equity=mt5_equity,
             drawdown_pct=mt5_dd,
@@ -512,8 +520,9 @@ class EntryService:
             drawdown_taper_min=cfg.get("size_taper_min", 0.50),
             entry_price=entry_price,
             sl_distance=sl_dist,
-            leverage_budget_ref=getattr(asset, "_leverage_budget_ref", None),
-            leverage_lock=getattr(asset, "_leverage_lock", None),
+            leverage_budget_ref=mt5_budget_ref,
+            leverage_lock=mt5_lock,
+            leverage_budget_soft=cfg.get("mt5_leverage_budget_soft", True),
             is_mt5=True,
             lot_converter=getattr(broker, "_quantity_to_lots", None),
             ticker=asset.ticker,

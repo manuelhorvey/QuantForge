@@ -91,6 +91,8 @@ defaults:
     stack_max_risk_growth: 1.0
   portfolio_max_leverage: 2.0
   portfolio_leverage_tolerance: 0.001
+  mt5_leverage_budget_enabled: false
+  mt5_leverage_budget_soft: true
   net_short_concentration_threshold: 0.75
   # SELL_ONLY_ASSETS: assets where BUY signal is inverted (p_long > 0.5 → ~17% WR).
   # These assets trade SELL only; BUY signals are overridden to FLAT.

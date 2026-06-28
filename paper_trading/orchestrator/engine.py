@@ -236,12 +236,32 @@ class EngineOrchestrator:
         budget_ref = [leverage_budget]
         self._cycles_elapsed += 1
 
+        # MT5 leverage budget — independent from paper budget, based on MT5 equity
+        mt5_total_equity = 0.0
+        mt5_leverage_budget_enabled = defaults.get("mt5_leverage_budget_enabled", False)
+        for actor in self._actors.values():
+            engine = actor._engine
+            try:
+                bridge = getattr(engine, "execution_bridge", None)
+                if bridge is not None and hasattr(bridge, "broker"):
+                    broker = bridge.broker
+                    if hasattr(broker, "get_account_summary"):
+                        summary = broker.get_account_summary()
+                        if summary and hasattr(summary, "portfolio_value"):
+                            mt5_total_equity += summary.portfolio_value
+            except Exception:
+                pass
+        mt5_leverage_budget = max_leverage * mt5_total_equity * self._backstop_multiplier
+        mt5_budget_ref = [mt5_leverage_budget] if mt5_leverage_budget_enabled else None
+
         exp_mult, _ = compute_exposure_multiplier(current_dd)
         for actor in self._actors.values():
             actor._engine._cycle_total_equity = total_equity
             actor._engine._cycle_drawdown_pct = current_dd
             actor._engine._leverage_budget_ref = budget_ref
             actor._engine._leverage_lock = self._leverage_lock
+            actor._engine._mt5_leverage_budget_ref = mt5_budget_ref
+            actor._engine._mt5_leverage_lock = self._leverage_lock
             if hasattr(actor._engine, "pos_mgr"):
                 actor._engine.pos_mgr.exposure_multiplier = exp_mult
         return defaults, max_leverage, budget_ref
