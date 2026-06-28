@@ -6,9 +6,6 @@ function getToken(): string | null {
   if (meta?.content) return meta.content
   const ls = localStorage.getItem(LS_KEY)
   if (ls) return ls
-  if (typeof import.meta !== "undefined" && import.meta.env?.VITE_QUANTFORGE_API_TOKEN) {
-    return import.meta.env.VITE_QUANTFORGE_API_TOKEN as string
-  }
   return null
 }
 

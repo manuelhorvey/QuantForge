@@ -100,7 +100,7 @@ function SignalsTable() {
           name,
           signal: asset.final_signal ?? sig?.signal ?? 'FLAT',
           confidence: confidenceToPercent(sig?.confidence),
-          price: sig?.close_price ?? m?.current_price ?? 0,
+          price: m?.current_price ?? sig?.close_price ?? 0,
           alloc,
           ret: m?.mtm_return ?? 0,
           dd: m?.drawdown ?? 0,

@@ -80,8 +80,9 @@ export default function StatisticalMetricsTable() {
       render: r => (
         <span
           className={`font-mono tabular-nums ${r.sharpe !== null ? (r.sharpe >= 0 ? 'text-gov-green' : 'text-gov-red') : 'text-tertiary'}`}
-          dangerouslySetInnerHTML={{ __html: r.sharpe !== null ? r.sharpe.toFixed(2) : '—' }}
-        />
+        >
+          {r.sharpe !== null ? r.sharpe.toFixed(2) : '—'}
+        </span>
       ),
     },
     {
@@ -91,14 +92,11 @@ export default function StatisticalMetricsTable() {
       sortable: true,
       sortKey: r => r.psr0 ?? 0,
       render: r => (
-        <span
-          className={`font-mono tabular-nums ${valClass(r.psr0, 0.5, 0.95)}`}
-          dangerouslySetInnerHTML={{
-            __html: r.psr0 !== null
-              ? r.psr0 >= 0.99995 ? '>0.9999' : r.psr0.toFixed(4)
-              : '—',
-          }}
-        />
+        <span className={`font-mono tabular-nums ${valClass(r.psr0, 0.5, 0.95)}`}>
+          {r.psr0 !== null
+            ? r.psr0 >= 0.99995 ? '>0.9999' : r.psr0.toFixed(4)
+            : '—'}
+        </span>
       ),
     },
     {
@@ -108,14 +106,11 @@ export default function StatisticalMetricsTable() {
       sortable: true,
       sortKey: r => r.psr1 ?? 0,
       render: r => (
-        <span
-          className={`font-mono tabular-nums ${valClass(r.psr1, 0.5, 0.95)}`}
-          dangerouslySetInnerHTML={{
-            __html: r.psr1 !== null
-              ? r.psr1 >= 0.99995 ? '>0.9999' : r.psr1.toFixed(4)
-              : '—',
-          }}
-        />
+        <span className={`font-mono tabular-nums ${valClass(r.psr1, 0.5, 0.95)}`}>
+          {r.psr1 !== null
+            ? r.psr1 >= 0.99995 ? '>0.9999' : r.psr1.toFixed(4)
+            : '—'}
+        </span>
       ),
     },
     {
