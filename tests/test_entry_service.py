@@ -15,9 +15,7 @@ def mock_asset():
     asset.name = "TEST"
     asset.current_price = 105.0
     asset.config = {}
-    dates = pd.date_range("2026-01-01", periods=50, freq="D")
-    prices = np.linspace(100, 110, 50)
-    asset.price_data = pd.DataFrame({"close": prices}, index=dates)
+    asset.price_data = pd.DataFrame({"close": np.linspace(100, 110, 50)})
     asset.validity_sm = MagicMock()
     asset.validity_sm.current_state.value = "GREEN"
     asset.governance = MagicMock()
@@ -361,24 +359,21 @@ class TestCanEnter:
 class TestValidatePriceVol:
     def test_returns_none_when_nan_vol(self, mock_asset):
         svc = EntryService()
-        dates = pd.date_range("2026-01-01", periods=10, freq="D")
-        data = pd.DataFrame({"close": [100.0] * 10}, index=dates)
+        data = pd.DataFrame({"close": [100.0] * 10})
         with patch("paper_trading.services.entry_service.estimate_ewm_vol", return_value=np.nan):
             vol, price = svc._validate_price_vol(mock_asset, data, 100.0)
         assert vol is None
 
     def test_returns_none_when_nan_entry_price(self, mock_asset):
         svc = EntryService()
-        dates = pd.date_range("2026-01-01", periods=10, freq="D")
-        data = pd.DataFrame({"close": [100.0] * 10}, index=dates)
+        data = pd.DataFrame({"close": [100.0] * 10})
         with patch("paper_trading.services.entry_service.estimate_ewm_vol", return_value=0.01):
             vol, price = svc._validate_price_vol(mock_asset, data, np.nan)
         assert vol is None
 
     def test_returns_none_when_entry_price_zero(self, mock_asset):
         svc = EntryService()
-        dates = pd.date_range("2026-01-01", periods=10, freq="D")
-        data = pd.DataFrame({"close": [100.0] * 10}, index=dates)
+        data = pd.DataFrame({"close": [100.0] * 10})
         with patch("paper_trading.services.entry_service.estimate_ewm_vol", return_value=0.01):
             vol, price = svc._validate_price_vol(mock_asset, data, 0.0)
         assert vol is None

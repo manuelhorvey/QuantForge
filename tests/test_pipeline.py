@@ -1,3 +1,4 @@
+import datetime as _dt
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -74,9 +75,9 @@ def mock_asset():
 
 def _make_price_df(n=300):
     np.random.seed(42)
-    dates = pd.date_range("2025-01-01", periods=n, freq="D", tz="UTC")
     prices = 100 + np.cumsum(np.random.randn(n) * 0.5)
-    return pd.DataFrame({"close": prices, "high": prices * 1.01, "low": prices * 0.99, "volume": 1000000}, index=dates)
+    idx = pd.DatetimeIndex([_dt.datetime(2025, 1, 1) + _dt.timedelta(days=i) for i in range(n)])
+    return pd.DataFrame({"close": prices, "high": prices * 1.01, "low": prices * 0.99, "volume": 1000000}, index=idx)
 
 
 @pytest.fixture
@@ -185,7 +186,7 @@ class TestCheckPsiDrift:
 class TestValidateAndTruncate:
     def test_truncates_when_validated(self, pipeline):
         asset = pipeline.asset
-        x = pd.DataFrame({"a": range(300)}, index=pd.date_range("2025-01-01", periods=300, freq="D", tz="UTC"))
+        x = pd.DataFrame({"a": range(300)})
         features_df = x.copy()
         pipeline._truncation_validated = True
         pipeline._validated_model_id = id(asset.model)
@@ -196,7 +197,7 @@ class TestValidateAndTruncate:
 
     def test_runs_validation_on_first_call(self, pipeline):
         asset = pipeline.asset
-        x = pd.DataFrame({"a": range(300)}, index=pd.date_range("2025-01-01", periods=300, freq="D", tz="UTC"))
+        x = pd.DataFrame({"a": range(300)})
         features_df = x.copy()
         n_warm = len(x) - 253
         asset._model_iface.predict.side_effect = [
@@ -208,7 +209,7 @@ class TestValidateAndTruncate:
 
     def test_no_truncation_when_disabled(self, pipeline):
         asset = pipeline.asset
-        x = pd.DataFrame({"a": range(300)}, index=pd.date_range("2025-01-01", periods=300, freq="D", tz="UTC"))
+        x = pd.DataFrame({"a": range(300)})
         features_df = x.copy()
         pipeline._truncation_validated = True
         pipeline._validated_model_id = id(asset.model)
@@ -296,9 +297,10 @@ class TestBuildDecision:
     def test_creates_trade_decision(self, pipeline):
         asset = pipeline.asset
         asset._record_inference_proxies = MagicMock()
+        tz_utc = _dt.timezone.utc
         asset.signal_data = pd.DataFrame(
             {"close": [1.1050], "prob_long": [0.7], "prob_short": [0.2], "prob_neutral": [0.1]},
-            index=pd.DatetimeIndex(["2025-06-01"], tz="UTC"),
+            index=pd.DatetimeIndex([_dt.datetime(2025, 6, 1, tzinfo=tz_utc)]),
         )
         asset.last_signal_date = None
         result = MagicMock()
@@ -327,7 +329,7 @@ class TestValidateInferenceTruncation:
     def test_enables_when_diff_within_tolerance(self, pipeline):
         asset = pipeline.asset
         n = 300
-        x = pd.DataFrame({"a": range(n)}, index=pd.date_range("2025-01-01", periods=n, freq="D", tz="UTC"))
+        x = pd.DataFrame({"a": range(n)})
         n_warm = len(x) - 253
         asset._model_iface.predict.side_effect = [
             np.ones((n_warm, 2)),
@@ -339,7 +341,7 @@ class TestValidateInferenceTruncation:
     def test_disables_when_diff_exceeds_tolerance(self, pipeline):
         asset = pipeline.asset
         n = 300
-        x = pd.DataFrame({"a": range(n)}, index=pd.date_range("2025-01-01", periods=n, freq="D", tz="UTC"))
+        x = pd.DataFrame({"a": range(n)})
         n_warm = len(x) - 253
         asset._model_iface.predict.side_effect = [
             np.ones((n_warm, 2)),
@@ -409,7 +411,7 @@ class TestGenerateAndApply:
                                             signal_data=pd.DataFrame(
                                                 {"close": [1.0], "prob_long": [0.7], "prob_short": [0.2],
                                                  "prob_neutral": [0.1]},
-                                                index=pd.DatetimeIndex(["2025-06-01"], tz="UTC"),
+                                                index=pd.DatetimeIndex([_dt.datetime(2025, 6, 1, tzinfo=_dt.timezone.utc)]),
                                             ),
                                         )
                                         asset._sizing_strategy.compute.return_value = 0.02
