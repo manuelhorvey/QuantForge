@@ -159,7 +159,7 @@ def _fetch_macro_batch() -> dict[str, pd.Series]:
                 progress=False,
                 group_by="ticker",
             )
-        except Exception:
+        except (OSError, ValueError, TypeError, KeyError):
             df = pd.DataFrame()
 
         if not df.empty and isinstance(df.columns, pd.MultiIndex):
@@ -179,7 +179,7 @@ def _fetch_macro_batch() -> dict[str, pd.Series]:
                 s = _fetch_single_series(ticker)
                 if not s.empty:
                     result[ticker] = s
-            except Exception:
+            except (OSError, ValueError, TypeError):
                 pass
 
     # Normalise all yield tickers from percentage to decimal
@@ -248,7 +248,7 @@ def _fetch_fred_series(ticker: str) -> pd.Series:
         s.index = _normalize_index(s.index)
         logger.debug("FRED fallback succeeded for %s (%s): %d rows", ticker, series_id, len(s))
         return s
-    except Exception as exc:
+    except (OSError, ValueError, TypeError, KeyError) as exc:
         logger.debug("FRED fallback failed for %s (%s): %s", ticker, series_id, exc)
         return pd.Series(dtype=float)
 
@@ -308,7 +308,7 @@ def fetch_cot_features(
                 result[f"{symbol}_cot_change_4w"] = val.fillna(0.0)
 
         return result
-    except Exception as exc:
+    except (OSError, ValueError, TypeError, KeyError) as exc:
         logger.debug("COT features unavailable: %s", exc)
         return pd.DataFrame()
 
@@ -335,7 +335,7 @@ def fetch_asset_data(
             raise ValueError("empty DataFrame")
         close = raw["close"].copy()
         close.index = _normalize_index(close.index)
-    except Exception as exc:
+    except (OSError, ValueError, TypeError) as exc:
         logger.debug(
             "MT5 fetch_live failed for %s (%s): %s — falling back to yfinance",
             asset_name,
@@ -495,7 +495,7 @@ def fetch_asset_ohlcv(
         df.index = _normalize_index(df.index)
         _set_cycle_cache(cache_key, df)
         return df
-    except Exception as exc:
+    except (OSError, ValueError, TypeError) as exc:
         logger.debug(
             "MT5 fetch_live failed for %s: %s — falling back to yfinance",
             ticker,

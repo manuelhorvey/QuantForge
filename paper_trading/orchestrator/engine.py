@@ -24,7 +24,7 @@ import logging
 import math
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any
 
@@ -249,7 +249,7 @@ class EngineOrchestrator:
                         summary = broker.get_account_summary()
                         if summary and hasattr(summary, "portfolio_value"):
                             mt5_total_equity += summary.portfolio_value
-            except Exception:
+            except (AttributeError, TypeError, OSError):
                 pass
         mt5_leverage_budget = max_leverage * mt5_total_equity * self._backstop_multiplier
         mt5_budget_ref = [mt5_leverage_budget] if mt5_leverage_budget_enabled else None
@@ -281,7 +281,7 @@ class EngineOrchestrator:
             name = futures[future]
             try:
                 asset_results[name] = future.result()
-            except Exception as e:
+            except (CancelledError, Exception) as e:
                 logger.critical("%s actor threw uncaught exception: %s", name, e)
                 asset_results[name] = AssetResult.failed(name, f"uncaught: {e}")
 
@@ -301,7 +301,7 @@ class EngineOrchestrator:
             try:
                 actor._engine.update_validity()
                 return None
-            except Exception as e:
+            except (CancelledError, Exception) as e:
                 return f"{name}: {e}"
 
         validity_futures = {self._pool.submit(_run_validity, n, a): n for n, a in self._actors.items()}
@@ -604,7 +604,7 @@ class EngineOrchestrator:
                         eng._halted = False
                     self._recovery_scheduler.record_result(name, success=True)
                     recovered.append(name)
-                except Exception as exc:
+                except (AttributeError, TypeError) as exc:
                     self._recovery_scheduler.record_result(name, success=False, error=str(exc))
                     logger.error("RecoveryScheduler: recovery failed for %s: %s", name, exc)
         if recovered:
@@ -742,7 +742,7 @@ class EngineOrchestrator:
                 engine._close_position(exit_price=exit_price, exit_date=now_iso, reason=reason)
                 flattened.append(name)
                 logger.warning("%s: position closed by circuit breaker (%.4f)", name, exit_price)
-            except Exception as e:
+            except (ValueError, TypeError, AttributeError, RuntimeError) as e:
                 logger.error("%s: circuit breaker flatten failed: %s", name, e)
         if flattened:
             logger.error(
@@ -827,7 +827,7 @@ class EngineOrchestrator:
                             ticket,
                             mt5_symbol,
                         )
-                except Exception as e:
+                except (OSError, ValueError, TypeError) as e:
                     still_pending.append((mt5_symbol, ticket))
                     logger.error(
                         "MT5_ORPHAN exception on retry %d: %s ticket=%s on %s: %s",
@@ -851,7 +851,7 @@ class EngineOrchestrator:
         try:
             broker._position_cache_time = 0.0  # invalidate cache for fresh data
             mt5_positions = broker.get_positions()
-        except Exception:
+        except (OSError, ValueError, TypeError):
             return
 
         mt5_by_ticket: dict[str, object] = {}

@@ -370,7 +370,7 @@ def build_alpha_features(
 
                 _div = rsi_divergence(_h, _l, _c)
                 features[f"{asset_upper}_rsi_divergence"] = _div
-            except Exception:
+            except (ImportError, ValueError, TypeError):
                 logger.debug("RSI divergence unavailable for %s", asset_upper)
                 features[f"{asset_upper}_rsi_divergence"] = 0
 

@@ -97,7 +97,7 @@ def _resolve_leader_path(leader: str, raw_dir: str) -> str | None:
             path = os.path.join(raw_dir, f"{filename}_1d.parquet")
             df.to_parquet(path)
             return path
-        except Exception:
+        except (OSError, ValueError, TypeError):
             return None
 
 

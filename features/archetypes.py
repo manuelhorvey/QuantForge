@@ -59,7 +59,7 @@ class ArchetypeClassifier:
                 return SetupArchetype.VOL_EXPANSION
 
             return SetupArchetype.UNKNOWN
-        except Exception as e:
+        except (ValueError, TypeError, KeyError) as e:
             logger.error(f"Archetype classification failed: {e}")
             return SetupArchetype.UNKNOWN
 

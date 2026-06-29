@@ -384,16 +384,6 @@ class TestTimestampProvenance:
 
         if series.index.tz is None:
             pytest.fail("fetch_yf_series strips timezone — tz-naive index detected")
-        """yfinance data should keep tz-aware index after loading."""
-        from features.data_fetch import fetch_yf_series
-
-        try:
-            series = fetch_yf_series("DX-Y.NYB", "dxy", period="5d")
-        except Exception:
-            pytest.skip("yfinance API unavailable")
-
-        if series.index.tz is None:
-            pytest.fail("fetch_yf_series strips timezone — tz-naive index detected")
 
     def test_no_tz_truncation_in_inference_pipeline(self):
         """The tz_convert('UTC').date pattern destroys temporal precision."""
