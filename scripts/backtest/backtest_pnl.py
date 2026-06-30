@@ -390,7 +390,7 @@ def main():
         "--sell-only",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Apply SELL-only filter for the 9 assets with inverted BUY calibration (default: True)",
+        help="Apply SELL-only filter for the 5 remaining SELL_ONLY assets (default: True)",
     )
     args = parser.parse_args()
     tag = args.tag

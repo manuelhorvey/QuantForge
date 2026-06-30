@@ -4,7 +4,7 @@
 
 Cross-sectional multi-asset paper trading engine. 21-asset portfolio (FX, commodities, equity indices) with per-asset XGBoost models, regime-conditional ensemble (disabled 2026-06-20; see ADR-026 and PnL backtest section), 15-layer governance, position sizing guardrails, and MT5 bridge execution (Exness demo via Wine).
 
-**2026-06-20: AUDNZD, EURUSD, AUDCHF removed from trading.** These 3 assets accounted for the model's confirmed directional instability failure mode (confident wrong-direction bets during trends). Removed from paper_trading.yaml assets, mt5_symbol_map, shadow analytics, risk-off suppression lists, and API commission table. 22-3=19 remaining assets. See the Walk-Forward PnL Backtest section for the full diagnostic chain.
+**2026-06-20: AUDNZD, EURUSD, AUDCHF removed from trading.** These 3 assets accounted for the model's confirmed directional instability failure mode (confident wrong-direction bets during trends). Removed from paper_trading.yaml assets, mt5_symbol_map, shadow analytics, and risk-off suppression lists. 22-3=19 remaining assets (subsequent additions grew to 21; see timeline below). See the Walk-Forward PnL Backtest section for the full diagnostic chain.
 
 **2026-06-20 (late): GBPNZD removed from trading; USDCAD/NZDUSD allocation halved.** GBPNZD had tp/sl=1.0/3.0 (ratio 0.33), requiring 75% breakeven WR. Model achieved 72.3% — close but net-negative (-37R, -71R max_dd). USDCAD and NZDUSD reduced from 5% to 2.5% allocation to limit their drawdown impact while keeping diversification. 19-1=18 remaining assets.
 
@@ -19,7 +19,7 @@ Cross-sectional multi-asset paper trading engine. 21-asset portfolio (FX, commod
 - **Models**: Per-asset XGBClassifier (base only) — regime-conditional ensemble disabled 2026-06-20 (walk-forward p=0.83; see ADR-026)
 - **Features**: 21 alpha (11 core + 6 trend-exhaustion + 4 cross-asset, include COT z/change) + 7 regime (hurst, kaufman_er, adx, vol_zscore, compression, utc_hour, session_vol_profile)
 - **Labels**: Triple-barrier with per-asset pt_sl, vertical_barrier=20, gap >= vb
-- **Config**: `configs/paper_trading.yaml` — `mode:` selector + `modes:` overrides (production/ftmo/live), global defaults + per-asset (19 assets)
+- **Config**: `configs/paper_trading.yaml` — `mode:` selector + `modes:` overrides (production/ftmo/live), global defaults + per-asset (21 assets)
 - **Portfolio Maturity Framework (5-layer, P0–P4)**: P0 weights (`shared/portfolio_weights.py`), P1 calibration (`shared/calibration/`), P2 Kelly (`shared/kelly.py`), P3 factor model (`shared/factor_model.py`), P4 HRP (`portfolio/hrp_allocator.py`). All config-gated.
 - **PEK (Portfolio Execution Kernel)**: `PortfolioStateSnapshot` (built pre-phase) + `RiskEngineV2` (adaptive budget) + `PerformanceState` (velocity + outcome telemetry) + `PortfolioAdmissionController` (two-stage filter → rank → enforce)
 - **Inference**: `paper_trading/inference/pipeline.py` → base model → calibration (P1) → governance → execute (ensemble disabled)
@@ -161,7 +161,7 @@ PYTHONPATH=$PYTHONPATH:. python scripts/training/train_regime_models.py
 
 ### Walk-Forward Backtest (diagnostic)
 ```bash
-PYTHONPATH=$PYTHONPATH:. python scripts/backtest/walk_forward_backtest.py --asset EURUSD
+PYTHONPATH=$PYTHONPATH:. python scripts/backtest/walk_forward_backtest.py --asset GBPCAD
 ```
 
 ### PnL Backtest from Signal Parquets

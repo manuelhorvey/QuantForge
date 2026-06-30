@@ -12,7 +12,9 @@ Changes require full regression validation.
 **Constructor:**
 ```
 n_estimators=300, max_depth=<per-asset>, learning_rate=0.02,
-random_state=42, n_jobs=1, tree_method='hist', verbosity=0
+objective='binary:logistic', scale_pos_weight=imbalance_ratio,
+random_state=42, n_jobs=1, tree_method='hist', verbosity=0,
+early_stopping_rounds=50
 ```
 **Per-asset max_depth:**
 | Depth | Assets |
@@ -145,8 +147,8 @@ Built in `features/regime_features.py:generate_regime_features()`.
 | `utc_hour` | UTC hour of bar timestamp |
 | `session_vol_profile` | Hourly vol relative to 20-day norm |
 
-20 total features enter the regime model (13 alpha + 7 regime).
-The base model sees only the 13 alpha features.
+28 total features enter the regime model (21 alpha + 7 regime).
+The base model sees the full 21 alpha features.
 
 ### Archetype features (inference-only, from full-history OHLCV)
 
@@ -214,7 +216,7 @@ df.index = pd.to_datetime(df.index.tz_convert("UTC").date)
 
 **Pipeline:** `paper_trading/inference/training.py:AssetTrainingPipeline.train()`
 **Data window:** 5y history from yfinance (`_FETCH_PERIOD = "5y"`, `_FETCH_WARMUP_BUFFER = 1250`), train on last `retrain_window` years (default 5)
-**Feature builder:** `build_alpha_features()` — 13 alpha feature columns (9 per-asset + 4 cross-asset)
+**Feature builder:** `build_alpha_features()` — 21 alpha feature columns (17 per-asset + 4 cross-asset)
 **Minimum samples:** 100 binary labels; 2+ unique classes
 **Train/val split:** 80/20 chronological, stratified by label if minimum class count ≥ 2
 **Per-asset max_depth** from `yaml` config (default 2).
@@ -224,7 +226,7 @@ df.index = pd.to_datetime(df.index.tz_convert("UTC").date)
 
 #### Regime Model Training
 - Second XGBoost trained on alpha features + 7 regime features (generated from OHLCV via `fetch_asset_ohlcv()`)
-- 20 total features (13 alpha + 7 regime, all prefixed by asset name)
+- 28 total features (21 alpha + 7 regime, all prefixed by asset name)
 - Saved to `models/regime/{ASSET}_regime.json`
 - Loaded at engine startup by `_train_regime_if_configured()` — skipped when `base_weight >= 1.0`
 - Ensemble disabled portfolio-wide (base_weight=1.0) — regime models not loaded at inference
@@ -345,7 +347,7 @@ Before placing an MT5 order, the engine checks if a position already exists for 
 | USDJPY | USDJPY=X | 4.0% | 0.52 | 1.97 | 2 |
 | GBPJPY | GBPJPY=X | 3.0% | 0.50 | 2.22 | 2 |
 
-**Total allocation: ~0.90** (remaining capacity held as cash buffer).
+**Total allocation: ~0.91** (remaining capacity held as cash buffer).
 
 ### Removed from trading (2026-06-20)
 AUDCHF, EURUSD, AUDNZD — removed after walk-forward diagnostic confirmed base model directional instability (confident wrong-direction bets during trend periods).
@@ -525,7 +527,7 @@ max_layers: 3
 | Spread gate | Block entry if spread > per-class tier (observe 720 cycles first) | `spread_gate_tiers` (fx_major=10bps, fx_cross=20bps, indices=15bps, metals=20bps) |
 | Session gate | Block entry outside market session hours per asset-class tier (observe 720 cycles first) | `session_gate.tiers` (fx_major=[7,17], fx_cross=[7,17], indices=[13,20], metals=[8,18]) |
 | ADX entry gate | Block entry if ADX below threshold (observe-only, disabled by default) | `adx_entry_gate` (adx_threshold=18) |
-| Confidence gate | Abort if net confidence below threshold | `min_confidence` (default 50) |
+| Confidence gate | Abort if net confidence below threshold | `min_confidence` (default 55.0) |
 | Signal stability filter | Require >0.65 max(prob_long, prob_short) | `stability_margin` (default 0.15) |
 | Signal hysteresis | 2-of-3 agreement before flip allowed | HYSTERESIS_WINDOW=3, HYSTERESIS_MIN_AGREE=2 |
 | Meta-label advisory | Record meta-label recommendation (no enforcement) | — |
@@ -556,7 +558,7 @@ See `docs/GOVERNANCE_LAYER.md` for full detail.
 9. Binary signal — model trains on {-1, 1} labels only; HOLD dropped
 10. Walk-forward validated — every promoted asset passes expanding-window backtest
 11. Per-asset model depth — `max_depth` configured per-asset, not global
-12. Exit reason canonicalization — all exit reasons are UPPERCASE (FLIP, SL, TP, BREAKEVEN, EXPIRY, GATE_CLOSED, PORTFOLIO_CIRCUIT_BREAKER, SELL_ONLY_FILTER)
+12. Exit reason canonicalization — all exit reasons are UPPERCASE (FLIP, SL, TP, BREAKEVEN, EXPIRY, GATE_CLOSED, MANUAL, PORTFOLIO_CIRCUIT_BREAKER, PEK_BUDGET_OVERRUN, SELL_ONLY_FILTER)
 13. **MT5 order lifecycle symmetry** — Every paper position open has a corresponding MT5 `place_order`; every paper close has a corresponding MT5 `close_position`; every SL/TP adjustment has a corresponding MT5 `modify_position`.
 14. **Paper engine is source of truth** — If an MT5 bridge operation fails (close, modify), the paper engine state is NOT rolled back. The next open cycle will detect the orphaned MT5 position and skip the duplicate order.
 15. **Independent paper/MT5 sizing** — Paper positions are sized from paper mtm_value ($100K capital) with paper-specific drawdown and leverage budget. MT5 positions are sized from the real broker account balance with MT5-specific drawdown. The two sizing paths never interfere.

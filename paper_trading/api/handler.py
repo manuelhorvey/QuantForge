@@ -155,9 +155,8 @@ class Handler:
             try:
                 with open(idx_path, "rb") as f:
                     data = f.read()
-                # Auth token is NOT embedded in HTML (security — prevents XSS token exfiltration).
-                # The React frontend reads the token from a dedicated /api/token endpoint
-                # on first load and stores it in memory only.
+                # Auth token is embedded in a <meta name="api-token"> tag in the HTML
+                # (security via short-lived page rendering — token never exposed as API endpoint).
                 ext = os.path.splitext(idx_path)[1]
                 ct = MIME_TYPES.get(ext, "text/html; charset=utf-8")
                 self.send_response(200)

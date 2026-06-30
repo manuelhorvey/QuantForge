@@ -22,7 +22,7 @@ ASSET_LABEL_PARAMS: dict[str, dict] = {
     "GBPJPY": {"pt": 2.22, "sl": 0.50},
     "USDCHF": {"pt": 3.0, "sl": 0.85},
     "GBPUSD": {"pt": 1.97, "sl": 0.52},
-    "EURUSD": {"pt": 1.5, "sl": 3.0},
+    "EURUSD": {"pt": 1.5, "sl": 3.0},  # REMOVED from trading 2026-06-20
     "AUDUSD": {"pt": 4.0, "sl": 1.5},
     "NZDUSD": {"pt": 2.5, "sl": 2.0},
     "EURGBP": {"pt": 2.0, "sl": 2.0},
@@ -30,14 +30,14 @@ ASSET_LABEL_PARAMS: dict[str, dict] = {
     "EURCHF": {"pt": 3.0, "sl": 1.0},
     "GBPAUD": {"pt": 2.0, "sl": 1.5},
     "AUDCAD": {"pt": 2.0, "sl": 2.0},
-    "AUDNZD": {"pt": 1.0, "sl": 2.0},
+    "AUDNZD": {"pt": 1.0, "sl": 2.0},  # REMOVED from trading 2026-06-20
     "EURNZD": {"pt": 2.74, "sl": 1.37},
-    "GBPNZD": {"pt": 1.0, "sl": 3.0},
+    "GBPNZD": {"pt": 1.0, "sl": 3.0},  # REMOVED from trading 2026-06-20
     "GBPCHF": {"pt": 2.0, "sl": 1.0},
     "CADCHF": {"pt": 4.0, "sl": 1.0},
     "NZDCAD": {"pt": 4.47, "sl": 2.24},
     "NZDCHF": {"pt": 4.0, "sl": 1.0},
-    "AUDCHF": {"pt": 3.5, "sl": 2.75},
+    "AUDCHF": {"pt": 3.5, "sl": 2.75},  # REMOVED from trading 2026-06-20
     "DJI": {"pt": 4.0, "sl": 0.5},
     "CL": {"pt": 2.0, "sl": 2.0},
 }

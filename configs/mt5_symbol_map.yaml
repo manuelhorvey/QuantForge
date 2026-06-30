@@ -6,7 +6,7 @@
 
 # ── Forex ─────────────────────────────────────────────────────────────────────
 # AUDCHF=X: AUDCHF    # REMOVED from trading (directional filter diagnostic — BUY was anti-skill)
-AUDJPY=X: AUDJPY
+AUDJPY=X: AUDJPY   # Research/data collection only — not in trading portfolio
 # AUDNZD=X: AUDNZD    # REMOVED from trading (directional filter diagnostic — SELL was anti-skill)
 AUDUSD=X: AUDUSD
 CADCHF=X: CADCHF
@@ -16,7 +16,7 @@ EURAUD=X: EURAUD
 EURCAD=X: EURCAD
 EURCHF=X: EURCHF
 EURNZD=X: EURNZD
-EURUSD=X: EURUSD
+# EURUSD=X: EURUSD    # REMOVED from trading 2026-06-20 (directional instability)
 GBPAUD=X: GBPAUD
 GBPCAD=X: GBPCAD
 GBPCHF=X: GBPCHF
@@ -47,11 +47,11 @@ GC=F: XAUUSD
 # Common variants: US500, SP500m, US500Cash, SPX, ES
 ES=F: US500
 NQ=F: USTEC
-YM=F: US30
+YM=F: US30           # Same symbol as ^DJI (Dow futures); only ^DJI is in portfolio
 ^DJI: US30
 
 # ── Energy ────────────────────────────────────────────────────────────────────
-CL=F: USOIL
+CL=F: USOIL          # Kept for WTI cross-asset feature (WTI_mom_21d); not traded directly
 # NG=F:      NATGAS
 
 # ── Crypto ────────────────────────────────────────────────────────────────────
