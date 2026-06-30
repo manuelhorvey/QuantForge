@@ -12,6 +12,7 @@ docs/adr/ADR-026).
 Usage:
     PYTHONPATH= python tools/check_import_firewall.py
 """
+
 from __future__ import annotations
 
 import ast
@@ -20,34 +21,36 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-FORBIDDEN_MODULES = frozenset({
-    "features.builder",
-    "features.lead_lag_features",
-    "features.pair_specific",
-    "features.publication_lags",
-    "features.cot_features",
-    "features.base_features",
-    "features.structural_features",
-    "features.interaction_features",
-    "labels.triple_barrier",
-    "labels.generator",
-    "shared.features",
-    "shared.meta_labeling",
-    "signals.signal_generator",
-    "signals.paper_signal_adapter",
-    "signals.signal_filters",
-    "signals.thresholding",
-    "signals.simple_threshold",
-    "signals.alpha_weighting",
-    "models.macro_only",
-    "portfolio.correlation_clusters",
-    "portfolio.hrp_allocator",
-    "portfolio.risk_parity",
-    "risk.drawdown_controls",
-    "risk.exposure_limits",
-    "risk.position_sizing",
-    "risk.stop_engine",
-})
+FORBIDDEN_MODULES = frozenset(
+    {
+        "features.builder",
+        "features.lead_lag_features",
+        "features.pair_specific",
+        "features.publication_lags",
+        "features.cot_features",
+        "features.base_features",
+        "features.structural_features",
+        "features.interaction_features",
+        "labels.triple_barrier",
+        "labels.generator",
+        "shared.features",
+        "shared.meta_labeling",
+        "signals.signal_generator",
+        "signals.paper_signal_adapter",
+        "signals.signal_filters",
+        "signals.thresholding",
+        "signals.simple_threshold",
+        "signals.alpha_weighting",
+        "models.macro_only",
+        "portfolio.correlation_clusters",
+        "portfolio.hrp_allocator",
+        "portfolio.risk_parity",
+        "risk.drawdown_controls",
+        "risk.exposure_limits",
+        "risk.position_sizing",
+        "risk.stop_engine",
+    }
+)
 
 SCAN_DIRECTORIES = [
     "paper_trading",
@@ -92,16 +95,12 @@ def _check_file(filepath: Path) -> list[tuple[int, str, str]]:
             for alias in node.names:
                 blocked = _module_forbidden(alias.name)
                 if blocked:
-                    violations.append(
-                        (node.lineno or 0, f"import {alias.name}", blocked)
-                    )
+                    violations.append((node.lineno or 0, f"import {alias.name}", blocked))
         elif isinstance(node, ast.ImportFrom) and node.module:
             blocked = _module_forbidden(node.module)
             if blocked:
                 names = ", ".join(a.name for a in node.names)
-                violations.append(
-                    (node.lineno or 0, f"from {node.module} import {names}", blocked)
-                )
+                violations.append((node.lineno or 0, f"from {node.module} import {names}", blocked))
 
     return violations
 
@@ -125,9 +124,7 @@ def main() -> int:
                     print(f"{rel}:{lineno}: FORBIDDEN {mod} — {imp}")
                 total_violations += len(violations)
 
-    print(
-        f"\nScanned {files_scanned} files across {len(SCAN_DIRECTORIES)} directories."
-    )
+    print(f"\nScanned {files_scanned} files across {len(SCAN_DIRECTORIES)} directories.")
     if total_violations:
         print(f"FAILED: {total_violations} forbidden import(s) found.")
         return 1
