@@ -3,6 +3,7 @@ import { useSystemSnapshot } from '../hooks/useSystemSnapshot'
 import { systemSelectors } from '../selectors/system'
 import { useMonitorAlerts } from '../hooks/useMonitorAlerts'
 import EmergencyHaltBanner from '../components/EmergencyHaltBanner'
+import AssetMiniGrid from '../components/AssetMiniGrid'
 import HaltConditions from '../components/HaltConditions'
 import LiveSharpeCard from '../components/LiveSharpeCard'
 import Panel from '../components/ui/Panel'
@@ -177,6 +178,9 @@ const DashboardOverview = memo(function DashboardOverview() {
       <EmergencyHaltBanner />
       <QuickStatsGrid />
       <PekStatusBar />
+      <EntranceAnimator variant="fade-up" delay={60}>
+        <AssetMiniGrid />
+      </EntranceAnimator>
       <LiveSharpePanel />
       <RiskSignalPanel />
     </div>
