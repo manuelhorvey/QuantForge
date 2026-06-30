@@ -29,6 +29,18 @@ export default function PekScalarPanel() {
     ]
   }, [pek])
 
+  const velocityCards = useMemo(() => {
+    const v = pek?.performance_state?.velocity
+    if (!v) return null
+    return [
+      { label: 'PnL Velocity', value: v.pnl_velocity.toFixed(4), accent: scalarColor(Math.abs(v.pnl_velocity), 0.002) },
+      { label: 'PnL Acceleration', value: v.pnl_acceleration.toFixed(4), accent: scalarColor(Math.abs(v.pnl_acceleration), 0.001) },
+      { label: 'Vol Velocity', value: v.vol_velocity.toFixed(4), accent: scalarColor(1 - v.vol_velocity, 0.5) },
+      { label: 'Degradation Velocity', value: v.degradation_velocity.toFixed(4), accent: scalarColor(1 - v.degradation_velocity, 0.5) },
+      { label: 'Execution Velocity', value: v.execution_velocity.toFixed(4), accent: scalarColor(v.execution_velocity) },
+    ]
+  }, [pek])
+
   const budgetCards = useMemo(() => {
     const rb = pek?.risk_budget
     if (!rb) return null
@@ -64,6 +76,17 @@ export default function PekScalarPanel() {
           <span className="text-2xs text-tertiary font-medium uppercase tracking-wider block mb-2">Performance State</span>
           <div className="grid grid-cols-3 lg:grid-cols-6 gap-2">
             {perfCards.map(c => (
+              <StatCard key={c.label} label={c.label} value={c.value} variant="kpi" accent={c.accent} />
+            ))}
+          </div>
+        </Panel>
+      )}
+
+      {velocityCards && (
+        <Panel padding="md">
+          <span className="text-2xs text-tertiary font-medium uppercase tracking-wider block mb-2">Velocity Sub-Metrics</span>
+          <div className="grid grid-cols-3 lg:grid-cols-5 gap-2">
+            {velocityCards.map(c => (
               <StatCard key={c.label} label={c.label} value={c.value} variant="kpi" accent={c.accent} />
             ))}
           </div>

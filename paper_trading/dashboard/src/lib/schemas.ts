@@ -275,6 +275,8 @@ export const PortfolioAdmissionSchema = z.object({
   budget_notional: z.number(),
   admitted: z.array(z.string()),
   rejected: z.array(z.string()),
+  rejection_reasons: z.record(z.string(), z.string()).optional().default({}),
+  ranking_scores: z.record(z.string(), z.number()).optional().default({}),
 })
 
 // ── PEK state (portfolio execution kernel) ─────────────────────────
@@ -550,6 +552,13 @@ export const AssetStateSchema = z.object({
   last_regime_features: z.record(z.string(), z.number()).nullable(),
   gates_trace: z.record(z.string(), z.boolean()).nullable(),
   sizing_chain: z.record(z.string(), z.union([z.number(), z.string(), z.null()])).nullable(),
+  total_exits: z.number(),
+  sl_exits: z.number(),
+  sl_hit_rate: z.number().nullable(),
+  calibration: z.object({
+    applied: z.boolean(),
+    registry_loaded: z.boolean(),
+  }),
 })
 
 // ── Open position (per-asset with metadata) ───────────────────────
@@ -563,6 +572,10 @@ export const OpenPositionStateSchema = z.object({
     entry_date: z.string(),
     vol: z.number(),
     mt5_ticket: z.union([z.string(), z.number()]).nullable(),
+    layers: z.array(z.unknown()).optional(),
+    avg_price: z.number(),
+    total_size: z.number(),
+    base_entry_size: z.number(),
   }),
   current_value: z.number(),
   peak_value: z.number(),
@@ -570,6 +583,9 @@ export const OpenPositionStateSchema = z.object({
   running_mfe: z.number().nullable(),
   trade_log: z.array(z.unknown()),
   prob_history: z.array(ProbHistoryEntrySchema),
+  bars_at_entry: z.number(),
+  initial_sl: z.number().nullable(),
+  initial_tp: z.number().nullable(),
 })
 
 // ── Risk signals ──────────────────────────────────────────────────
@@ -634,7 +650,7 @@ export const EngineSnapshotSchema = z.object({
   }),
   risk_signals: z.record(z.string(), RiskSignalSchema).nullable().optional(),
   shadow_actions: z.record(z.string(), ShadowActionSchema).nullable().optional(),
-  risk_parity: z.record(z.string(), z.unknown()).nullable().optional(),
+  risk_parity: RiskParityDataSchema.nullable().optional(),
   emergency_halt: z.boolean().optional().default(false),
   halt_reason: z.string().optional().default(''),
   halt_detail: z.string().optional().default(''),
