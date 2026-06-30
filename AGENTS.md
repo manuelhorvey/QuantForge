@@ -949,5 +949,104 @@ The WAL already had correct lock scope (lock released before `open()/writelines(
 ruff check . && ruff format . --check
 python tools/check_config_schema.py
 python tools/check_import_firewall.py
+python tools/check_no_bare_asserts.py
+python tools/check_no_plaintext_secrets.py
 PYTHONPATH=$PYTHONPATH:. python -m pytest tests/ -q
 ```
+
+## Deferred-Items Resolved (2026-06-30+)
+
+Continued hardening of the `refactor/codebase-remediation` branch — six
+phases that address every item originally deferred from the production
+readiness audit:
+
+### 7. MT5 Bridge Security
+- `paper_trading/ops/mt5_client.py:_is_loopback` rejects non-loopback
+  hosts; `MT5Client.__init__` logs WARNING and accepts an explicit
+  `allow_remote_bridge=True` override for testing only.
+- `tests/test_mt5_security.py` — 20 contract tests covering loopback
+  detection, private/public CIDR rejection, missing-host fallback,
+  warning emission, password-leak prevention in logs/repr, and AST-level
+  checks that the bridge source binds to 127.0.0.1 only and uses
+  `MT5_PASSWORD` env var (not CLI args).
+
+### 8. MT5 Bridge Supervision
+- `scripts/ops/mt5_bridge_supervisor.py:BridgeSupervisor` watches the
+  bridge via JSON-RPC heartbeat, restarts it on consecutive failures,
+  and exposes `/health` + `/ready` endpoints. Configurable interval,
+  max-restart cap, graceful SIGTERM.
+- `scripts/ops/quorrin-mt5-supervisor.service` — systemd unit with
+  hardening (NoNewPrivileges, PrivateTmp, ProtectSystem).
+- `monitor_all` — removed `--password $MT5_PASSWORD` from the argv
+  (was leaking the secret via `ps aux`).
+- 14 tests in `tests/test_mt5_supervisor.py` covering watchdog
+  detection, health 200/503 transitions, restart cap, signal handling.
+
+### 9. Structured JSON Logging
+- `paper_trading/logging/json_formatter.py:JsonFormatter` exports records
+  as single-line JSON with the canonical Quorrin key order. Handles
+  `extra=` payload, exception serialization, unicode. Optional
+  replacement of stream handlers via `install_json_logging`.
+- 13 tests in `tests/test_json_logging.py` cover valid JSON output,
+  exception/unicode handling, label determinism, and hardening
+  (no internal Python state leaks).
+
+### 10. Prometheus Metrics
+- `quorrin/observability/metrics.py:MetricsRegistry` — thread-safe
+  counter/gauge registry with `render()` for Prometheus v0.0.4 text
+  exposition format. Validates metric names per `[a-zA-Z_:][a-zA-Z0-9_:]*`.
+  Pre-seeded `default_registry()` includes the Quorrin engine metric
+  namespace (`quorrin_engine_cycles_total`, `..._signal_total`,
+  `..._drawdown_pct`, `..._wal_events_total`, etc.).
+- 18 tests in `tests/test_prometheus_metrics.py` covering basic counter
+  /gauge, label ordering/escaping, sample ordering, invalid names, and
+  concurrent safety.
+
+### 11. Pre-commit Hooks
+- `.pre-commit-config.yaml` — six local hooks wired into a single
+  pre-commit install:
+    * ruff lint
+    * ruff format
+    * config schema check (only when configs/*.yaml changes)
+    * import firewall
+    * scan for unclaimed TODO/FIXME/XXX/HACK markers
+    * no-bare-asserts guard
+    * plaintext-secret detector
+- `tools/check_no_bare_asserts.py` — AST scan; production code with
+  bare `assert` invocations fails to land.
+- `tools/check_no_plaintext_secrets.py` — regex sweep with allowlist
+  for known placeholders (your_password, ..., etc.) and tests/ dir
+  exclusion for synthetic credentials.
+- 10 tests in `tests/test_precommit_hooks.py`.
+
+### 12. Chaos Engineering Framework
+- `tests/chaos/chaos_tools.py:FaultRecipe` + `fault_inject` context
+  manager — deterministic, scoped fault injection. Supports count-limited
+  failures, probability-controlled failures, custom exceptions, return
+  overrides, and latency simulation. Patches replace the original on
+  exit (even on exceptions) and stack correctly under nesting.
+- 13 tests in `tests/chaos/test_chaos_tools.py` — including the
+  transient-disconnect retry scenario.
+
+### 13. ATLAS Covariate Shift Detector
+- `quorrin/observability/atlas.py:AtlasDetector` — layered change-point
+  detector combining:
+    * Two-sided CUSUM (cumulative sum control chart) with standard
+      deviation–scaled thresholds.
+    * Page-Hinkley (symmetric drift detector with running minimum).
+    * Sliding-window two-sample Kolmogorov-Smirnov test (non-parametric
+      distributional equality).
+- 12 tests in `tests/test_atlas_detector.py` — verify that constant
+  series never fires, step changes eventually trigger CUSUM, smooth
+  gradients can be detected, and extreme/negative inputs don't crash.
+
+### Final Validation Summary
+- 1912 tests pass (was 1812 at the first remediation checkpoint;
+  +100 new tests).
+- ruff check: zero errors.
+- ruff format: zero diffs.
+- config schema validator: passes (21 assets, 5 sell-only).
+- import firewall: passes (249 files, no forbidden imports).
+- bare-asserts guard: passes (140 prod files clean).
+- secrets scanner: passes (no plaintext credentials).
+- pre-commit yaml: valid, includes 6 hooks.
