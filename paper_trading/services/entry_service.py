@@ -356,14 +356,30 @@ class EntryService:
         tp_mult,
         tp_geo,
     ):
-        assert sl_dist > 0, f"SL distance must be positive, got {sl_dist}"
-        assert tp_geo.tp_distance > 0, f"TP distance must be positive, got {tp_geo.tp_distance}"
-        assert not pd.isna(intent_sl), f"NaN stop loss computed for {asset.name}"
-        assert not pd.isna(final_tp), f"NaN take profit computed for {asset.name}"
-        assert sl_mult > 0, f"SL multiplier must be positive, got {sl_mult}"
-        assert tp_mult > 0, f"TP multiplier must be positive, got {tp_mult}"
-        assert intent_sl > 0, f"Stop loss must be positive, got {intent_sl}"
-        assert final_tp > 0, f"Take profit must be positive, got {final_tp}"
+        if sl_dist <= 0:
+            logger.error("%s: SL distance must be positive, got %s", asset.name, sl_dist)
+            return False
+        if tp_geo.tp_distance <= 0:
+            logger.error("%s: TP distance must be positive, got %s", asset.name, tp_geo.tp_distance)
+            return False
+        if pd.isna(intent_sl):
+            logger.error("%s: NaN stop loss computed", asset.name)
+            return False
+        if pd.isna(final_tp):
+            logger.error("%s: NaN take profit computed", asset.name)
+            return False
+        if sl_mult <= 0:
+            logger.error("%s: SL multiplier must be positive, got %s", asset.name, sl_mult)
+            return False
+        if tp_mult <= 0:
+            logger.error("%s: TP multiplier must be positive, got %s", asset.name, tp_mult)
+            return False
+        if intent_sl <= 0:
+            logger.error("%s: Stop loss must be positive, got %s", asset.name, intent_sl)
+            return False
+        if final_tp <= 0:
+            logger.error("%s: Take profit must be positive, got %s", asset.name, final_tp)
+            return False
 
         rr = abs(final_tp - entry_price) / (sl_dist + 1e-9)
         min_rr = asset.config.get("dynamic_sltp", {}).get("min_rr_ratio", 1.5)

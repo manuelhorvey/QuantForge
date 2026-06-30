@@ -168,7 +168,8 @@ class SizingChain:
                     tag = "MT5" if inp.is_mt5 else ""
                     if inp.leverage_budget_soft:
                         logger.warning(
-                            "%s %s: leverage budget exhausted (remaining=%.2f equity=%.2f) — soft guard, allowing entry",
+                            "%s %s: leverage budget exhausted "
+                            "(remaining=%.2f equity=%.2f) — soft guard, allowing entry",
                             inp.ticker,
                             tag,
                             remaining,

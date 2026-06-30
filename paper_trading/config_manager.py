@@ -1,6 +1,8 @@
 import logging
 import os
+import stat
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import yaml
 from dotenv import load_dotenv
@@ -8,6 +10,39 @@ from dotenv import load_dotenv
 load_dotenv()
 
 logger = logging.getLogger("quantforge.config_manager")
+
+_SENSITIVE_ENV_VARS = frozenset(
+    {
+        "MT5_PASSWORD",
+        "MT5_ACCOUNT",
+        "OPENCODE_ZEN_API_KEY",
+        "QUANTFORGE_API_TOKEN",
+        "PAGERDUTY_ROUTING_KEY",
+        "SLACK_WEBHOOK_URL",
+    }
+)
+
+_DOTENV_PATH = Path(".env").absolute()
+
+
+def _warn_on_insecure_dotenv() -> None:
+    """Log a warning if .env exists with world-readable permissions."""
+    if not _DOTENV_PATH.exists():
+        return
+    try:
+        mode = _DOTENV_PATH.stat().st_mode
+        if mode & stat.S_IROTH:
+            exposed = [k for k in _SENSITIVE_ENV_VARS if os.environ.get(k)]
+            logger.warning(
+                ".env is world-readable (permissions=0%o). Run: chmod 600 .env. Exposed vars: %s",
+                mode & 0o777,
+                ", ".join(exposed) if exposed else "(none detected)",
+            )
+    except OSError:
+        pass
+
+
+_warn_on_insecure_dotenv()
 
 # Shared MT5 bridge port — single source of truth
 DEFAULT_MT5_BRIDGE_PORT = 9879
