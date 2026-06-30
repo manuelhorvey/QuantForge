@@ -383,3 +383,82 @@ class TestWalErrorHandling:
         assert len(events) == 2  # skips corrupt line
         assert events[0].event_type == "a"
         assert events[1].event_type == "b"
+
+
+class TestWalConcurrency:
+    """Verify locking works correctly under concurrent writes."""
+
+    def test_multithread_writes_no_lost_events(self, tmp_wal_dir: str):
+        """100 concurrent writes from multiple threads all land on disk."""
+        import threading
+
+        writer = WalWriter(tmp_wal_dir, source="concurrent", batch_size=1)
+        n_per_thread = 25
+        n_threads = 8
+        total_events = n_per_thread * n_threads
+
+        def write_batch(thread_id: int):
+            for i in range(n_per_thread):
+                writer.write("price_update", {"thread": thread_id, "i": i})
+
+        threads = [
+            threading.Thread(target=write_batch, args=(t,))
+            for t in range(n_threads)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # Force flush before reading
+        writer.flush()
+
+        # Verify all events were written
+        reader = WalReader(tmp_wal_dir, source="concurrent")
+        events = reader.read_all()
+        assert len(events) == total_events, (
+            f"Expected {total_events} events, got {len(events)}"
+        )
+
+        # Verify sequences are 1..N with no gaps
+        sequences = sorted(e.sequence for e in events)
+        assert sequences == list(range(1, total_events + 1)), (
+            f"Sequences not a perfect 1..{total_events}: "
+            f"min={sequences[0]} max={sequences[-1]} unique={len(set(sequences))}"
+        )
+
+    def test_concurrent_flush_does_not_corrupt(self, tmp_wal_dir: str):
+        """Concurrent writes + flush calls do not interleave writes half-completed."""
+        import threading
+
+        writer = WalWriter(tmp_wal_dir, source="concurrent_flush", batch_size=2)
+        n_per_thread = 10
+        n_threads = 4
+
+        errors: list[Exception] = []
+
+        def worker(thread_id: int):
+            try:
+                for i in range(n_per_thread):
+                    writer.write("test", {"thread": thread_id, "i": i})
+                    writer.flush()  # force concurrent flushes
+            except Exception as e:
+                errors.append(e)
+
+        threads = [
+            threading.Thread(target=worker, args=(t,))
+            for t in range(n_threads)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors, f"Concurrent workers raised: {errors}"
+
+        writer.flush()
+        reader = WalReader(tmp_wal_dir, source="concurrent_flush")
+        events = reader.read_all()
+        # All events should be valid JSON
+        for e in events:
+            assert isinstance(e.payload, dict)
