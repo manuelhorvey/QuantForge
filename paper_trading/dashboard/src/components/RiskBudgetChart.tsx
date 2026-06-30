@@ -17,9 +17,9 @@ export default function RiskBudgetChart() {
   const bars = useMemo(() => {
     if (!ps) return null
     return [
-      { label: 'Leverage Remaining', current: ps.leverage_remaining, max: ps.max_leverage },
-      { label: 'Concurrent Remaining', current: ps.concurrent_remaining, max: ps.max_concurrent },
-      { label: 'Daily Loss Remaining', current: ps.daily_loss_remaining, max: Math.abs(ps.max_daily_loss) || 1 },
+      { label: 'Leverage Remaining', current: ps.leverage_remaining ?? 0, max: ps.max_leverage ?? 1 },
+      { label: 'Concurrent Remaining', current: ps.concurrent_remaining ?? 0, max: ps.max_concurrent ?? 20 },
+      { label: 'Daily Loss Remaining', current: ps.daily_loss_remaining ?? 0, max: Math.abs(ps.max_daily_loss ?? 0) || 1 },
     ]
   }, [ps])
 
@@ -42,7 +42,7 @@ export default function RiskBudgetChart() {
               <div className="flex items-center justify-between text-xs">
                 <span className="text-tertiary">{b.label}</span>
                 <span className="font-mono text-primary tabular-nums">
-                  {b.current.toFixed(b.current % 1 === 0 ? 0 : 2)} / {b.max}
+                  {typeof b.current === 'number' ? b.current.toFixed(b.current % 1 === 0 ? 0 : 2) : '0'} / {b.max}
                 </span>
               </div>
               <div className="h-2 bg-panel rounded overflow-hidden">

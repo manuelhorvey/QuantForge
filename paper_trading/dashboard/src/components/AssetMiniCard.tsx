@@ -71,6 +71,8 @@ const AssetMiniCard = memo(function AssetMiniCard({ name }: Props) {
       signalDistribution: m.signal_distribution,
       sellOnly: asset.sell_only ?? false,
       tripwireActive: asset.tripwire_active ?? false,
+      slMult: m.current_sl_mult ?? asset.sl_mult ?? 0,
+      tpMult: m.current_tp_mult ?? asset.tp_mult ?? 0,
     }
   }, [asset])
 
@@ -131,6 +133,11 @@ const AssetMiniCard = memo(function AssetMiniCard({ name }: Props) {
             {info.nTrades}tr
           </span>
         </div>
+      </div>
+
+      <div className="flex items-center gap-3 mt-1 text-[9px] font-mono tabular-nums text-tertiary">
+        <span>SL <span className="text-primary">{info.slMult.toFixed(2)}</span></span>
+        <span>TP <span className="text-primary">{info.tpMult.toFixed(2)}</span></span>
       </div>
     </button>
   )
