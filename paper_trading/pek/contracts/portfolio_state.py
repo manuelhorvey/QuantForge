@@ -108,6 +108,9 @@ class PortfolioStateSnapshot:
     position_ranking_enabled: bool
 
     def __post_init__(self):
-        assert self.total_equity >= 0
-        assert self.open_position_count >= 0
-        assert -1.0 <= self.drawdown_pct <= 0.0, f"drawdown_pct={self.drawdown_pct} must be <= 0"
+        if self.total_equity < 0:
+            raise ValueError(f"total_equity must be >= 0, got {self.total_equity}")
+        if self.open_position_count < 0:
+            raise ValueError(f"open_position_count must be >= 0, got {self.open_position_count}")
+        if not (-1.0 <= self.drawdown_pct <= 0.0):
+            raise ValueError(f"drawdown_pct={self.drawdown_pct} must be in [-1.0, 0.0]")

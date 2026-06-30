@@ -284,7 +284,9 @@ class _AutoUptimeGauge:
             try:
                 value = self._source()
                 self._registry._set(self._name, value)
-            except Exception:
+            except (OSError, ValueError, TypeError, AttributeError):
+                # Auto-updater should never crash the host process; we
+                # simply skip this cycle and try again after the wait.
                 pass
             self._stop.wait(5.0)
 
