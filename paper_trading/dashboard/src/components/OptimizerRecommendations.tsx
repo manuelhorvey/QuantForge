@@ -38,7 +38,7 @@ export default function OptimizerRecommendations() {
 
     items.push({
       label: 'Assets Checked',
-      value: report.n_assets.toString(),
+      value: (report.n_assets ?? (report.flagged_assets.length + report.healthy_assets.length)).toString(),
       sub: `${report.flagged_assets.length} flagged, ${report.healthy_assets.length} healthy`,
       accent: '#3b82f6',
     })
