@@ -135,6 +135,7 @@ flowchart TD
 │  - shadow_trades                                                    │
 │  - confidence_buckets                                               │
 │  - equity_history                                                   │
+│  - strategy_metadata                                                │
 │                                                                     │
 │  Replay-oriented append semantics                                   │
 └─────────────────────────────────────────────────────────────────────┘
@@ -401,6 +402,7 @@ Persistent state is stored in SQLite WAL mode.
 | `shadow_trades`      | Counterfactual replay |
 | `confidence_buckets` | Confidence analytics  |
 | `equity_history`     | Equity curve history  |
+| `strategy_metadata`  | Per-asset training + fallback metadata |
 
 ---
 
@@ -519,8 +521,7 @@ Each asset executes independently. Failures in data ingestion, inference, govern
 | `MetricsService`         | Dashboard metrics           |
 | `GovernanceService`      | Governance state aggregation|
 | `PositionService`        | Position lifecycle          |
-| `StateStore`             | SQLite WAL persistence      |
-| `WALRunner`              | Deterministic replay engine |
+| `ReplayRunner`           | Deterministic replay engine (`paper_trading/replay/runner.py`) |
 
 ---
 

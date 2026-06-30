@@ -220,7 +220,9 @@ df.index = pd.to_datetime(df.index.tz_convert("UTC").date)
 
 **Pipeline:** `paper_trading/inference/training.py:AssetTrainingPipeline.train()`
 **Data window:** 5y history from yfinance (`_FETCH_PERIOD = "5y"`, `_FETCH_WARMUP_BUFFER = 1250`), train on last `retrain_window` years (default 5)
-**Feature builder:** `build_alpha_features()` — 21 alpha feature columns (17 per-asset + 4 cross-asset)
+**Feature builder:** `build_alpha_features()` — when OHLCV is provided, emits 15 per-asset columns (9 base `carry_vol_adj, mom_21d, mom_63d, mom_126d, mom_252d, zscore_20, vol_ratio, dow_signal, has_cot` + 6 trend-exhaustion `macd_hist, stoch_k, stoch_d, bb_pct_b, adx_slope, rsi_divergence`) + 4 cross-asset (`dxy_mom_21d, vix_mom_5d, spx_mom_5d, WTI_mom_21d`) + 2 × N COT-covered pairs (`cot_z, cot_change_4w`) joined into every asset's vector.
+Without OHLCV: 9 per-asset + 4 cross-asset + per-pair COT.
+See Section 3 for the canonical taxonomy.
 **Minimum samples:** 100 binary labels; 2+ unique classes
 **Train/val split:** 80/20 chronological, stratified by label if minimum class count ≥ 2
 **Per-asset max_depth** from `yaml` config (default 2).

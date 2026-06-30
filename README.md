@@ -3,7 +3,7 @@
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue)
 ![Status](https://img.shields.io/badge/status-paper%20trading-green)
 ![WalkForward](https://img.shields.io/badge/walk--forward-36%20assets%20screened-success)
-![Portfolio](https://img.shields.io/badge/portfolio-19%20dashboard%20assets-blue)
+![Portfolio](https://img.shields.io/badge/portfolio-21%20dashboard%20assets-blue)
 [![codecov](https://codecov.io/gh/manuelhorvey/Quorrin/graph/badge.svg)](https://codecov.io/gh/manuelhorvey/Quorrin)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
@@ -35,12 +35,14 @@ Every promoted asset must survive expanding-window validation before entering th
 
 # System Lifecycle
 
-The engine runs a continuous 4-phase orchestrator cycle. Below is the core loop for each tick (every 30s):
+The engine runs a continuous 5-phase orchestrator cycle (PRE → 1a → 1b → 2 → 3 → 4) with MT5 orphan sub-phases (A→D) inside Phase 3. Below is the core loop for each tick (every 30s):
 
 ```mermaid
 flowchart TD
-    Start((Start Cycle)) --> P1[Phase 1: REFRESH\nParallel actor refresh + signal gen\nThreadPoolExecutor 8 workers]
-    P1 --> P2[Phase 2: VALIDITY\nParallel validity state updates]
+    Start((Start Cycle)) --> PRE[PRE: PortfolioStateSnapshot\nRiskBudget + PerformanceState\nRiskEngineV2 adaptive budget]
+    PRE --> P1[Phase 1a: REFRESH\nParallel actor refresh + signal gen\nThreadPoolExecutor 8 workers]
+    P1 --> P1B[Phase 1b: ADMIT\nPEK collect intents → filter → rank\nClose over-budget positions]
+    P1B --> P2[Phase 2: VALIDITY\nParallel validity state updates]
     P2 --> P3[Phase 3: PORTFOLIO HEALTH]
     P3 --> CB{Circuit Breaker\n7-consecutive-loss / -15% DD?}
     CB -- tripped --> Halt[Flatten positions\nEmergency halt via RecoveryScheduler]
@@ -99,14 +101,16 @@ flowchart TD
 
 Allocation sums to ~0.90. Remaining capacity held as cash buffer.
 
-### Backtest Performance (pre-leak-fix baseline — 5-Year 2021–2025, 18-asset portfolio)
+### Backtest Performance ⚠️ Superseded
 
-> Metrics from the original screening (before look-ahead leak fixes). Current walk-forward
-> diagnostics (post-fix, 19-asset portfolio) show lower, honest metrics. These numbers are preserved as the
-> baseline that justified promotion; live performance will differ.
+> **Status (2026-06-30):** The pre-leak-fix baseline below is a **historical artifact**
+> describing the original screening that justified promotion. It does **not** reflect the
+> current 21-asset portfolio. Live metrics live in `/state.json:portfolio.live_sharpe` and
+> walk-forward may be regenerated from `scripts/backtest/backtest_pnl.py --weight-method factor_constrained_v2`.
 
 > **Note:** The original 18-asset baseline was calculated before GBPUSD promotion.
-> The current 19-asset portfolio includes GBPUSD with its own walk-forward validation.
+> The current 21-asset portfolio includes GBPUSD (2026-06-22) and USDJPY/GBPJPY
+> (2026-06-26), with the 2026-06-30 tp/sl ratio=3.0 optimizer pass applied to 11 assets.
 
 | Metric | Value |
 |--------|-------|

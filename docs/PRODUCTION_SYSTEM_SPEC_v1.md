@@ -432,8 +432,8 @@ In-memory TTL cache per download type:
 | `paper_trading/orchestrator/engine.py` | Parallel asset orchestration (ThreadPoolExecutor) |
 | `paper_trading/orchestrator/actor.py` | Per-asset actor with health state |
 | `paper_trading/orchestrator/health.py` | HealthMonitor, CircuitBreaker (max_consecutive_losses=7), RecoveryScheduler |
-| `paper_trading/orchestrator/engine.py` | EngineOrchestrator (ThreadPoolExecutor, 3 phases + VaR/CVaR in Phase 3g) |
-| `paper_trading/models/` | Trained models (.json) — 19 assets |
+| `paper_trading/orchestrator/engine.py` | EngineOrchestrator (ThreadPoolExecutor, 5 phases PRE→1a→1b→2→3→4 + MT5 sub-phases A–D inside Phase 3, VaR/CVaR in Phase 3g) |
+| `paper_trading/models/` | Trained models (.json) — 21 assets (4 archived in `orphaned/`) |
 | `paper_trading/state_store.py` | SQLite state persistence + schema migration (DB_SCHEMA_VERSION=2.0.0) |
 | `paper_trading/execution/decision_pipeline.py` | DEFAULT_STAGES (21 stages), SELL_ONLY_ASSETS frozenset |
 | `shared/portfolio_weights.py` | P0 portfolio truth layer — 4 weight strategies |

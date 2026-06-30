@@ -9,8 +9,10 @@ Project documentation for the Quorrin cross-sectional factor ranking and paper t
 | [`PAPER_TRADING_RUNBOOK.md`](PAPER_TRADING_RUNBOOK.md) | Daily/weekly ops, halt responses, troubleshooting |
 | [`SYSTEM_OVERVIEW.md`](SYSTEM_OVERVIEW.md) | Architecture, components, data flow, governance |
 | [`GOVERNANCE_LAYER.md`](GOVERNANCE_LAYER.md) | 15-layer governance + decision pipeline stages + position sizing guardrails |
-| [`FEATURES.md`](FEATURES.md) | Alpha features (13 cols), regime features (7 cols), archetype, labeling |
+| [`FEATURES.md`](FEATURES.md) | Alpha features (9 base + 6 trend-exhaustion per-asset, 4 cross-asset, 7 regime, archetype, labeling) |
 | [`LIVE_CONTRACT.md`](../LIVE_CONTRACT.md) | Immutable production system contract |
+| [`MODES.md`](MODES.md) | Per-mode override matrix (production / challenge_ftmo_10k / live) |
+| [`SECURITY.md`](SECURITY.md) | Bearer token auth, MT5 loopback enforcement, .env permission check, secrets scanner |
 
 ## Quick Reference
 
@@ -53,17 +55,24 @@ Project documentation for the Quorrin cross-sectional factor ranking and paper t
 
 ## Current Portfolio
 
-19 assets across FX, commodities, and equity indices. See `configs/paper_trading.yaml` for full configuration and allocations.
+21 assets across FX, commodities, and equity indices. See `configs/paper_trading.yaml` for full configuration and allocations.
 
 **Added 2026-06-22:** GBPUSD promoted (walk-forward IC 0.186, HR 0.371, pt_sl=(1.97, 0.52) → R:R=3.79).
 
+**Added 2026-06-26:** USDJPY, GBPJPY re-promoted after Step 3 trend-exhaustion features improved BuyWR above breakeven WR.
+
+**2026-06-30:** 11 assets bumped to ratio=3.0 via `scripts/optimization/portfolio_sltp_optimizer.py`.
+
 **Removed 2026-06-20:** AUDNZD, EURUSD, AUDCHF, GBPNZD (directional instability). USDCAD/NZDUSD halved 5%→2.5%.
 
-### Active
-GC, USDCHF, USDCAD, ES, NQ, GBPCAD, NZDCAD, ^DJI, NZDUSD, GBPAUD, NZDCHF, CADCHF, AUDUSD, EURCHF, EURCAD, EURNZD, GBPCHF, GBPUSD, EURAUD
+### Active (21)
+GC, USDCHF, USDCAD, ES, NQ, GBPCAD, NZDCAD, ^DJI, NZDUSD, GBPAUD, NZDCHF, CADCHF, AUDUSD, EURCHF, EURCAD, EURNZD, GBPCHF, GBPUSD, EURAUD, USDJPY, GBPJPY
+
+### SELL_ONLY (5 — BUY→FLAT override)
+CADCHF, ES, NQ, NZDCHF, EURAUD
 
 ### Removed (post walk-forward, insufficient edge)
-AUDCHF, AUDNZD, EURUSD, GBPNZD, CADJPY, CHFJPY, CL, USDJPY, BTCUSD, EURGBP, EURJPY, GBPJPY, AUDCAD, NZDJPY, ^VIX, IWM
+AUDCHF, AUDNZD, EURUSD, GBPNZD, CADJPY, CHFJPY, CL, BTCUSD, EURGBP, EURJPY, AUDCAD, NZDJPY, ^VIX, IWM
 
 ## Services / Processes
 

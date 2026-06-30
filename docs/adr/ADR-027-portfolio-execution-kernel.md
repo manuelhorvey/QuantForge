@@ -25,18 +25,18 @@ Replace the distributed budget_ref + backstop pattern with a centralized Portfol
 
 ### New Components
 
-1. **PortfolioStateSnapshot** (immutable dataclass, `risk/contracts/portfolio_state.py`)
+1. **PortfolioStateSnapshot** (immutable dataclass, `paper_trading/pek/contracts/portfolio_state.py`)
    - Built once per cycle in the PRE phase
    - Contains: all open positions, factor exposures, cluster detection, concurrent position counts, daily loss tracking, drawdown
    - Single source of truth for portfolio-level state
 
-2. **PerformanceState** (immutable dataclass, `risk/contracts/performance_state.py`)
+2. **PerformanceState** (immutable dataclass, `paper_trading/pek/contracts/performance_state.py`)
    - OutcomeTracker: rolling 20-trade win rate, R-multiples, streaks, MFE/MAE
    - VelocityProcessor: trend_factor, shock_factor, health_factor → composite scalar ∈ [0.5, 1.5]
    - MarketStateReader + ExecutionQualityTracker: vol, spread, slippage, MT5 health
    - Purely observational — never mutates state
 
-3. **RiskEngineV2** (`risk/engine_v2.py`)
+3. **RiskEngineV2** (`paper_trading/pek/engine_v2.py`)
    - Consumes PortfolioStateSnapshot + PerformanceState
    - Produces RiskBudget with adaptive max_risk_per_trade
    - Can only REDUCE risk below config base (never increase)

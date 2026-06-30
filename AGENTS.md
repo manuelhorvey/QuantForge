@@ -17,7 +17,7 @@ Cross-sectional multi-asset paper trading engine. 21-asset portfolio (FX, commod
 ## Architecture Quick Reference
 
 - **Models**: Per-asset XGBClassifier (base only) — regime-conditional ensemble disabled 2026-06-20 (walk-forward p=0.83; see ADR-026)
-- **Features**: 21 alpha (11 core + 6 trend-exhaustion + 4 cross-asset, include COT z/change) + 7 regime (hurst, kaufman_er, adx, vol_zscore, compression, utc_hour, session_vol_profile)
+- **Features**: 15–N alpha per asset (9 core + 6 trend-exhaustion when OHLCV present, plus 4 cross-asset, plus COT z/change for covered pairs) + 7 regime (hurst, kaufman_er, adx, vol_zscore, compression, utc_hour, session_vol_profile). See `docs/FEATURES.md` for canonical taxonomy.
 - **Labels**: Triple-barrier with per-asset pt_sl, vertical_barrier=20, gap >= vb
 - **Config**: `configs/paper_trading.yaml` — `mode:` selector + `modes:` overrides (production/ftmo/live), global defaults + per-asset (21 assets)
 - **Portfolio Maturity Framework (5-layer, P0–P4)**: P0 weights (`shared/portfolio_weights.py`), P1 calibration (`shared/calibration/`), P2 Kelly (`shared/kelly.py`), P3 factor model (`shared/factor_model.py`), P4 HRP (`portfolio/hrp_allocator.py`). All config-gated.
@@ -62,12 +62,12 @@ flowchart TD
 | `shared/portfolio_weights.py` | P0 portfolio truth layer — 4 weight strategies, decorator pattern, pure functions |
 | `shared/calibration/` | P1 calibration layer — `BinnedCalibrator`, `CalibrationRegistry`, `ECETracker` |
 | `shared/kelly.py` | P2 fractional Kelly sizing — `compute_kelly_fraction`, `compute_kelly_multiplier` |
-| `risk/contracts/portfolio_state.py` | Immutable `PortfolioStateSnapshot` — single source of truth for portfolio exposure |
-| `risk/contracts/performance_state.py` | Immutable `PerformanceState` with `RegimeVelocity` — system behavioral telemetry |
-| `risk/contracts/risk_budget.py` | `RiskBudget` — adaptive risk limits consumed by PEK |
-| `risk/state/portfolio_state_builder.py` | `PortfolioStateBuilder` — factory for `PortfolioStateSnapshot` |
-| `risk/perf/performance_state_builder.py` | `PerformanceStateBuilder` — outcome tracker + velocity processor |
-| `risk/engine_v2.py` | `RiskEngineV2` — adaptive budget from snapshot + performance state |
+| `paper_trading/pek/contracts/portfolio_state.py` | Immutable `PortfolioStateSnapshot` — single source of truth for portfolio exposure |
+| `paper_trading/pek/contracts/performance_state.py` | Immutable `PerformanceState` with `RegimeVelocity` — system behavioral telemetry |
+| `paper_trading/pek/contracts/risk_budget.py` | `RiskBudget` — adaptive risk limits consumed by PEK |
+| `paper_trading/pek/state/portfolio_state_builder.py` | `PortfolioStateBuilder` — factory for `PortfolioStateSnapshot` |
+| `paper_trading/pek/perf/performance_state_builder.py` | `PerformanceStateBuilder` — outcome tracker + velocity processor |
+| `paper_trading/pek/engine_v2.py` | `RiskEngineV2` — adaptive budget from snapshot + performance state |
 | `paper_trading/orchestrator/admission/controller.py` | `PortfolioAdmissionController` — PEK two-stage admission (filter → rank) |
 | `paper_trading/orchestrator/admission/signal.py` | `AdmissionSignal` — immutable signal admission contract |
 | `shared/factor_model.py` | P3 factor model — 9 factor groups, factor-constrained weight optimization |
@@ -226,7 +226,6 @@ The dashboard HTTP server (`paper_trading/serve.py`) supports optional bearer-to
 
 - **GBPNZD (REMOVED 2026-06-20)**: tp/sl ratio 0.33 required 75% breakeven WR, model achieved 72.3% — net-negative. Removed from trading.
 - **AUDNZD ensemble**: Ensemble degrades signal quality (IC -0.020 in pilot). Confirmed portfolio-wide by walk-forward (p=0.83 pooled); ensemble disabled 2026-06-20 (see ADR-026).
-- **Small MT5 equity ($107 demo)**: 0.01 lot minimum for forex (≈$1,150 notional on EURUSD) far exceeds the MT5 position budget (≈$15.67 at 15% of $104). MT5 positions quantize to 0.01 lots regardless of computed size. Leverage budget is deferred for MT5 — revisit when equity > $10K.
 - **Small MT5 equity ($107 demo)**: 0.01 lot minimum for forex (≈$1,150 notional on EURUSD) far exceeds the MT5 position budget (≈$15.67 at 15% of $104). MT5 positions quantize to 0.01 lots regardless of computed size. Leverage budget is deferred for MT5 — revisit when equity > $10K.
 - **SL/TP triple bug (FIXED 2026-06-16)**: Three independent issues (deactivated `atr_mult_tp`, uncalibrated `atr_mult_sl`, TP compiler convexity applied to inflated SL distance) produced TP distances up to 44%. Fixes: (1) `_atr_barriers()` now uses `atr_mult_tp` for TP vol basis, (2) `tp_compiler.py` caps R:R at `MAX_RR=5.0`.
 - **THIN liquidity (FIXED 2026-06-17)**: THIN regime was routing to hard_reasons (halted all assets). Fixed: only STRESSED halts; THIN → soft_warnings (SL/size adjust, no halt).
@@ -906,7 +905,7 @@ Both training and inference pipelines pass OHLCV to `build_alpha_features()`:
 - `paper_trading/inference/pipeline.py` — `ohlcv` fetch moved before `build_alpha_features()` call
 - `scripts/backtest/walk_forward_backtest.py` — `ohlcv` parameter threaded through
 
-Result: 19 total alpha features (13 base + 6 trend-exhaustion) in both training and inference.
+Result: 15 per-asset alpha features (9 base + 6 trend-exhaustion) + 4 cross-asset = 19 alpha columns total when OHLCV is passed in both training and inference.
 
 ### Walk-Forward Impact (21-asset portfolio)
 
@@ -1055,6 +1054,7 @@ python tools/check_config_schema.py
 python tools/check_import_firewall.py
 python tools/check_no_bare_asserts.py
 python tools/check_no_plaintext_secrets.py
+PYTHONPATH=$PYTHONPATH:. python tools/doc_drift_check.py
 PYTHONPATH=$PYTHONPATH:. python -m pytest tests/ -q
 ```
 
