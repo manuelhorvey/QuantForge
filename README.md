@@ -38,7 +38,7 @@ Every promoted asset must survive expanding-window validation before entering th
 The engine runs a continuous 4-phase orchestrator cycle. Below is the core loop for each tick (every 30s):
 
 ```mermaid
-graph TD
+flowchart TD
     Start((Start Cycle)) --> P1[Phase 1: REFRESH\nParallel actor refresh + signal gen\nThreadPoolExecutor 8 workers]
     P1 --> P2[Phase 2: VALIDITY\nParallel validity state updates]
     P2 --> P3[Phase 3: PORTFOLIO HEALTH]
@@ -400,7 +400,7 @@ Two additional gates protect entry quality and existing winners:
 Paper positions pass through a multiplicative guardrail chain in `_submit_to_broker()`:
 
 ```mermaid
-graph LR
+flowchart LR
     A["effective_cap =\ncapital_base × min(mtm/init, 3.0)"] --> B["notional =\neffective_cap × size_scalar"]
     B --> C[Per-Position Equity Cap\nmax_position_pct_of_equity]
     C --> D[Risk-per-Trade Cap\nskip if below min_viable]

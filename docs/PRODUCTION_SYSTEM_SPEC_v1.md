@@ -35,7 +35,7 @@ It is NOT a directional prediction system. It does NOT attempt to forecast price
 The engine runs a continuous 5-phase orchestrator cycle (PRE → 1a → 1b → 2 → 3 → 4). Each tick (every 30s) executes the following loop:
 
 ```mermaid
-graph TD
+flowchart TD
     Start((Start Cycle)) --> PRE[PRE: PortfolioStateSnapshot\nRiskBudget + PerformanceState]
     PRE --> P1[Phase 1: REFRESH\nParallel actor refresh + signal gen\nThreadPoolExecutor 8 workers]
     P1 --> P2[Phase 2: VALIDITY\nParallel validity state updates]

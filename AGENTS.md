@@ -30,7 +30,7 @@ Cross-sectional multi-asset paper trading engine. 21-asset portfolio (FX, commod
 - **Orchestrator**: `EngineOrchestrator` (ThreadPoolExecutor, 8 workers), **5-phase cycle**: PRE (PEK state) → 1a (signal) → 1b (admission) → 2 (validity) → 3 (health) → 4 (persist) with MT5 orphan sub-phases (A-D)
 
 ```mermaid
-graph TD
+flowchart TD
     Start((Start Cycle)) --> PRE[PRE: PortfolioStateSnapshot\nRiskBudget + PerformanceState\nRiskEngineV2 adaptive budget]
     PRE --> P1A[Phase 1a: REFRESH\nParallel actor refresh + signal gen\nThreadPoolExecutor 8 workers]
     P1A --> P1B[Phase 1b: ADMIT\nPEK collect intents → filter → rank\nClose over-budget positions]

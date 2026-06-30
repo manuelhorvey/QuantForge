@@ -31,7 +31,7 @@ The repository intentionally treats trading infrastructure as a distributed stat
 The engine runs a continuous 5-phase orchestrator cycle. Each tick (every 30s) executes the following loop:
 
 ```mermaid
-graph TD
+flowchart TD
     Start((Start Cycle)) --> PRE[PRE: PortfolioStateSnapshot\nRiskBudget + PerformanceState\nRiskEngineV2 adaptive budget]
     PRE --> P1[Phase 1: REFRESH\nParallel actor refresh + signal gen\nThreadPoolExecutor 8 workers]
     P1 --> P1B[Phase 1b: ADMIT\nPEK collect intents → filter → rank\nClose over-budget positions]
@@ -375,7 +375,7 @@ Applied multiplicatively in `EntryService._submit_to_broker()`:
 MT5 sizing runs the same chain independently using real broker equity (via `_compute_mt5_qty()`), excluding the leverage budget.
 
 ```mermaid
-graph LR
+flowchart LR
     A["effective_cap =\ncapital_base × min(mtm/init, 3.0)"] --> B["notional =\neffective_cap × size_scalar"]
     B --> C[Per-Position Equity Cap\nmax_position_pct_of_equity]
     C --> D[Risk-per-Trade Cap\nskip if below min_viable]
