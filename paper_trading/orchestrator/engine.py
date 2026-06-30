@@ -161,6 +161,7 @@ class EngineOrchestrator:
 
         # MT5 orphan cleanup tracking
         self._abandoned_orphans: int = 0
+        self._stale_ticket_cycles: dict[str, int] = {}
 
         # Position concentration snapshot (updated each cycle in Phase 3e)
         self._position_concentration: dict = {
@@ -988,6 +989,16 @@ class EngineOrchestrator:
         return None
 
     MAX_CLEANUP_RETRIES = 5
+    # Number of consecutive cycles a ticket must be missing from broker positions
+    # before the paper position is closed as stale.  At 30s/cycle this is ~5 minutes.
+    # Prevents premature closure during MT5 order fill propagation delay.
+    MAX_STALE_TICKET_CYCLES = 10
+    # After this many missing cycles, check the MT5 deal history (history_deals_get)
+    # to determine whether the ticket was ever filled.  If it was, the position
+    # was closed by MT5-native SL/TP or manual intervention.  If no deal exists,
+    # the order was never filled (e.g. broker rejection) and the paper position
+    # is a ghost.  At 30s/cycle this is ~90s for the deal-history check.
+    STALE_TICKET_DEAL_CHECK_CYCLES = 3
 
     def _reconcile_mt5_orphans(self) -> None:
         """Reconcile MT5 orphaned positions every cycle.
@@ -1063,6 +1074,14 @@ class EngineOrchestrator:
         # holds a stale mt5_ticket but the MT5 position no longer exists.
         # Invalidates broker cache first so entries placed earlier in this
         # cycle are visible (5s cache would otherwise return stale data).
+        #
+        # Multi-cycle grace period: tickets must be missing for
+        # MAX_STALE_TICKET_CYCLES (10) consecutive cycles before the paper
+        # position is closed.  After STALE_TICKET_DEAL_CHECK_CYCLES (3)
+        # cycles, the MT5 deal history is queried to distinguish between
+        # "order never filled" (close paper) and "position MT5-closed but
+        # paper stale" (close paper).  This prevents premature closure
+        # during MT5 order fill propagation delay through Wine.
         if not broker.ensure_connected():
             return
         try:
@@ -1083,26 +1102,108 @@ class EngineOrchestrator:
             mt5_ticket = engine.position.get("mt5_ticket")
             if mt5_ticket is None:
                 continue
+            ticket_key = f"{name}:{mt5_ticket}"
             if str(mt5_ticket) not in mt5_by_ticket:
-                logger.warning(
-                    "MT5_STALE_TICKET: %s ticket=%s not found on broker — clearing from paper state",
-                    name,
-                    mt5_ticket,
-                )
-                engine.position.pop("mt5_ticket", None)
-                exit_price = getattr(engine, "current_price", None)
-                if exit_price is not None and exit_price > 0:
+                # Ticket not found in broker positions — increment grace counter
+                prev = self._stale_ticket_cycles.get(ticket_key, 0)
+                self._stale_ticket_cycles[ticket_key] = prev + 1
+                missing_for = self._stale_ticket_cycles[ticket_key]
+
+                if missing_for >= self.MAX_STALE_TICKET_CYCLES:
+                    # Grace period exhausted — close the paper position
+                    logger.warning(
+                        "MT5_STALE_TICKET: %s ticket=%s missing for %d/%d cycles "
+                        "— closing paper position",
+                        name,
+                        mt5_ticket,
+                        missing_for,
+                        self.MAX_STALE_TICKET_CYCLES,
+                    )
+                    self._stale_ticket_cycles.pop(ticket_key, None)
+                    engine.position.pop("mt5_ticket", None)
+                    exit_price = getattr(engine, "current_price", None)
+                    if exit_price is not None and exit_price > 0:
+                        try:
+                            engine._close_position(
+                                exit_price,
+                                datetime.now(timezone.utc),
+                                "MT5_STALE_TICKET",
+                            )
+                        except Exception:
+                            logger.exception(
+                                "MT5_STALE_TICKET: %s failed to close paper position "
+                                "— position may be a ghost",
+                                name,
+                            )
+                elif missing_for >= self.STALE_TICKET_DEAL_CHECK_CYCLES:
+                    # Check MT5 deal history to determine if ticket was ever filled
                     try:
-                        engine._close_position(
-                            exit_price,
-                            datetime.now(timezone.utc),
-                            "MT5_STALE_TICKET",
-                        )
+                        deal = broker.get_deal_by_ticket(int(mt5_ticket))
                     except Exception:
-                        logger.exception(
-                            "MT5_STALE_TICKET: %s failed to close paper position — position may be a ghost",
+                        deal = None
+                    if deal is not None:
+                        logger.info(
+                            "MT5_STALE_TICKET_DEAL_CHECK: %s ticket=%s found in deal history "
+                            "(filled at %.5f profit=%.2f) — position was closed by MT5-native "
+                            "SL/TP or manual intervention after %d/%d cycles",
                             name,
+                            mt5_ticket,
+                            deal["result"].get("price", 0),
+                            deal["result"].get("profit", 0),
+                            missing_for,
+                            self.MAX_STALE_TICKET_CYCLES,
                         )
+                        # Deal exists → position was genuinely filled and later closed.
+                        # Don't pre-close the grace period — still wait for full
+                        # MAX_STALE_TICKET_CYCLES to avoid race conditions with
+                        # the paper position manager.  The log entry is for diagnostics.
+                    else:
+                        logger.warning(
+                            "MT5_ORDER_REJECTED: %s ticket=%s missing for %d/%d cycles "
+                            "and no deal found in history — order was never filled, "
+                            "closing paper position early",
+                            name,
+                            mt5_ticket,
+                            missing_for,
+                            self.MAX_STALE_TICKET_CYCLES,
+                        )
+                        self._stale_ticket_cycles.pop(ticket_key, None)
+                        engine.position.pop("mt5_ticket", None)
+                        exit_price = getattr(engine, "current_price", None)
+                        if exit_price is not None and exit_price > 0:
+                            try:
+                                engine._close_position(
+                                    exit_price,
+                                    datetime.now(timezone.utc),
+                                    "MT5_ORDER_REJECTED",
+                                )
+                            except Exception:
+                                logger.exception(
+                                    "MT5_ORDER_REJECTED: %s failed to close paper position "
+                                    "— position may be a ghost",
+                                    name,
+                                )
+                else:
+                    logger.info(
+                        "MT5_STALE_TICKET_GRACE: %s ticket=%s missing for %d/%d cycles "
+                        "(deal check at %d cycles) — holding",
+                        name,
+                        mt5_ticket,
+                        missing_for,
+                        self.MAX_STALE_TICKET_CYCLES,
+                        self.STALE_TICKET_DEAL_CHECK_CYCLES,
+                    )
+            else:
+                # Ticket found in broker positions — recovered or normal
+                if ticket_key in self._stale_ticket_cycles:
+                    logger.info(
+                        "MT5_STALE_TICKET_RECOVERED: %s ticket=%s reappeared "
+                        "after %d cycles — resetting grace counter",
+                        name,
+                        mt5_ticket,
+                        self._stale_ticket_cycles[ticket_key],
+                    )
+                    self._stale_ticket_cycles.pop(ticket_key, None)
 
         # ── Phase C: Dry-run orphan report (log only, no state mutation) ──
         # Reports every MT5 position with no matching paper-side ticket.

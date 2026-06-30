@@ -12,7 +12,7 @@ Covers:
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, PropertyMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -20,7 +20,6 @@ from paper_trading.execution.mt5_broker import MT5Broker
 from paper_trading.orchestrator.engine import EngineOrchestrator
 from paper_trading.services.entry_service import EntryService
 from tests.mock_mt5_client import MockMT5Client
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────
 
@@ -331,14 +330,134 @@ class TestReconcilePhaseA:
 
 
 class TestReconcilePhaseB:
-    def test_stale_ticket_cleared(self, orch, broker, mock_client):
-        """Paper has mt5_ticket but MT5 has no such position → cleared."""
+    def test_stale_ticket_grace_period_holds(self, orch, broker, mock_client):
+        """Ticket survives MAX_STALE_TICKET_CYCLES-1 cycles, then cleared on last.
+
+        Verifies the grace period prevents premature closure during MT5
+        order fill propagation delay (~5 min at 30s/cycle).
+        A valid deal result is returned so the deal-history check (cycle 3)
+        does not trigger early closure — the full grace period runs.
+        """
         mock_client._positions = []
+        # Provide a valid deal result so the deal check at
+        # STALE_TICKET_DEAL_CHECK_CYCLES does not trigger early closure
+        mock_client._deal_results = {
+            "99999": {
+                "result": {
+                    "ticket": 99999, "order": 88888, "symbol": "EURUSD.fx",
+                    "type": 1, "volume": 0.1, "price": 1.0500,
+                    "profit": 0.0, "commission": 0.0, "swap": 0.0,
+                    "time": 0, "comment": "Quorrin",
+                }
+            }
+        }
         actor = _OrphanActor("EURUSD", position={
             "side": "long", "mt5_ticket": 99999,
         }, broker=broker)
         orch._actors["EURUSD"] = actor
         broker.connect()
+
+        # Run MAX_STALE_TICKET_CYCLES-1 cycles — ticket should survive
+        for _ in range(orch.MAX_STALE_TICKET_CYCLES - 1):
+            orch._reconcile_mt5_orphans()
+            assert actor._engine.position.get("mt5_ticket") == 99999, \
+                f"Ticket cleared early at cycle {_+1}"
+
+        # Run the final cycle — ticket should be cleared
+        orch._reconcile_mt5_orphans()
+        assert actor._engine.position.get("mt5_ticket") is None
+
+    def test_stale_ticket_no_deal_rejected(self, orch, broker, mock_client):
+        """Ticket missing and deal history empty → closed after STALE_TICKET_DEAL_CHECK_CYCLES.
+
+        When the deal history confirms the order was never filled,
+        the paper position is closed early (after 3 cycles instead of 10).
+        """
+        mock_client._positions = []
+        mock_client._deal_results = {"99999": None}  # no deal found
+        actor = _OrphanActor("EURUSD", position={
+            "side": "long", "mt5_ticket": 99999,
+        }, broker=broker)
+        orch._actors["EURUSD"] = actor
+        broker.connect()
+
+        # Run STALE_TICKET_DEAL_CHECK_CYCLES-1 cycles — ticket survives
+        for _ in range(orch.STALE_TICKET_DEAL_CHECK_CYCLES - 1):
+            orch._reconcile_mt5_orphans()
+            assert actor._engine.position.get("mt5_ticket") == 99999
+
+        # Run the deal-check cycle — ticket should be cleared (order rejected)
+        orch._reconcile_mt5_orphans()
+        assert actor._engine.position.get("mt5_ticket") is None
+
+    def test_stale_ticket_deal_found_closed(self, orch, broker, mock_client):
+        """Ticket missing but deal history shows it was filled → grace continues.
+
+        When deal history confirms the order was genuinely filled (then
+        closed by MT5-native SL/TP or manual), we wait for the full
+        MAX_STALE_TICKET_CYCLES before closing the paper position to
+        avoid race conditions with the paper position manager.
+        """
+        mock_client._positions = []
+        mock_client._deal_results = {
+            "99999": {
+                "result": {
+                    "ticket": 99999, "order": 88888, "symbol": "EURUSD.fx",
+                    "type": 1, "volume": 0.1, "price": 1.0500,
+                    "profit": 100.0, "commission": 0.0, "swap": 0.0,
+                    "time": 0, "comment": "Quorrin",
+                }
+            }
+        }
+        actor = _OrphanActor("EURUSD", position={
+            "side": "long", "mt5_ticket": 99999,
+        }, broker=broker)
+        orch._actors["EURUSD"] = actor
+        broker.connect()
+
+        # Run STALE_TICKET_DEAL_CHECK_CYCLES cycles — deal found, ticket survives
+        for _ in range(orch.STALE_TICKET_DEAL_CHECK_CYCLES):
+            orch._reconcile_mt5_orphans()
+            assert actor._engine.position.get("mt5_ticket") == 99999, \
+                f"Ticket closed early despite deal found at cycle {_+1}"
+
+        # Full grace period should still complete
+        for _ in range(orch.MAX_STALE_TICKET_CYCLES - orch.STALE_TICKET_DEAL_CHECK_CYCLES):
+            orch._reconcile_mt5_orphans()
+        assert actor._engine.position.get("mt5_ticket") is None
+
+    def test_stale_ticket_recovered_before_deal_check(self, orch, broker, mock_client):
+        """Ticket missing for 2 cycles then reappears → counter resets."""
+        mock_client._positions = []
+        mock_client._deal_results = {}
+        actor = _OrphanActor("EURUSD", position={
+            "side": "long", "mt5_ticket": 99999,
+        }, broker=broker)
+        orch._actors["EURUSD"] = actor
+        broker.connect()
+
+        # 2 cycles with no position
+        for _ in range(2):
+            orch._reconcile_mt5_orphans()
+            assert actor._engine.position.get("mt5_ticket") == 99999
+
+        # Ticket reappears in broker positions
+        mock_client._positions = [
+            {"ticket": 99999, "symbol": "EURUSD.fx", "type": "buy",
+             "volume": 0.1, "price_open": 1.0500, "price_current": 1.0600,
+             "profit": 100.0, "commission": 0.0, "sl": 1.0400, "tp": 1.0700,
+             "time": 0, "comment": "Quorrin"},
+        ]
+        orch._reconcile_mt5_orphans()
+        assert actor._engine.position.get("mt5_ticket") == 99999  # recovered
+
+        # Remove ticket again and verify grace period restarts from 0
+        mock_client._positions = []
+        for _ in range(orch.STALE_TICKET_DEAL_CHECK_CYCLES - 1):
+            orch._reconcile_mt5_orphans()
+            assert actor._engine.position.get("mt5_ticket") == 99999, \
+                f"Ticket cleared early after reset at cycle {_+1}"
+        # Deal check would fire here but deal_results is {} so closes early
         orch._reconcile_mt5_orphans()
         assert actor._engine.position.get("mt5_ticket") is None
 

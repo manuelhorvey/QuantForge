@@ -35,6 +35,7 @@ class MockMT5Client:
         order_result: dict | None = None,
         close_result: dict | None = None,
         modify_result: dict | None = None,
+        deal_results: dict[str, dict | None] | None = None,
         connect_fails: bool = False,
         ensure_fails: bool = False,
     ):
@@ -56,6 +57,7 @@ class MockMT5Client:
         self._order_result = order_result or {"retcode": 10009, "ticket": 98765}
         self._close_result = close_result or {"result": {"retcode": 10009}}
         self._modify_result = modify_result or {"result": {"retcode": 10009}}
+        self._deal_results: dict[str, dict | None] = deal_results or {}
         self._connect_fails = connect_fails
         self._ensure_fails = ensure_fails
 
@@ -182,6 +184,10 @@ class MockMT5Client:
     def modify_position(self, ticket: int, sl: float | None = None, tp: float | None = None) -> dict:
         self._record("modify_position", ticket, sl, tp)
         return self._modify_result
+
+    def get_deal_by_ticket(self, ticket: int) -> dict | None:
+        self._record("get_deal_by_ticket", ticket)
+        return self._deal_results.get(str(ticket))
 
     def close_position(self, ticket: int) -> dict:
         self._record("close_position", ticket)

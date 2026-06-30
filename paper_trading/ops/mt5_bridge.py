@@ -26,6 +26,7 @@ Supports:
   - get_account     ()
   - modify_position (ticket, sl, tp)
   - close_position  (ticket)
+  - get_deal        (ticket)
   - heartbeat       ()
   - shutdown        ()
 """
@@ -385,6 +386,31 @@ def _handle_close_position(params: dict) -> dict:
     return {"result": {"retcode": result.retcode, "ticket": ticket}}
 
 
+def _handle_get_deal(params: dict) -> dict:
+    """Look up a deal in MT5 history by ticket.  Returns deal dict or null if not found."""
+    ticket = params["ticket"]
+    mt5.history_select(datetime(2000, 1, 1), datetime.now())
+    deals = mt5.history_deals_get(ticket=ticket)
+    if deals is None or len(deals) == 0:
+        return {"result": None}
+    d = deals[0]
+    return {
+        "result": {
+            "ticket": d.ticket,
+            "order": d.order,
+            "symbol": d.symbol,
+            "type": d.type,
+            "volume": float(d.volume),
+            "price": float(d.price),
+            "profit": float(d.profit),
+            "commission": float(getattr(d, "commission", 0.0)),
+            "swap": float(getattr(d, "swap", 0.0)),
+            "time": d.time,
+            "comment": d.comment,
+        }
+    }
+
+
 def _handle_heartbeat(params: dict) -> dict:
     return {"result": {"status": "alive", "time": time.time()}}
 
@@ -401,6 +427,7 @@ _HANDLERS = {
     "get_account": _handle_get_account,
     "modify_position": _handle_modify_position,
     "close_position": _handle_close_position,
+    "get_deal": _handle_get_deal,
     "heartbeat": _handle_heartbeat,
 }
 

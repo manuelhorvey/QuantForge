@@ -526,6 +526,17 @@ class MT5Client:
             params["tp"] = tp
         return self._proto.send_request("modify_position", params)
 
+    def get_deal_by_ticket(self, ticket: int) -> dict | None:
+        """Look up a deal (historical execution) by ticket number.
+
+        Returns a dict with deal details if the ticket was ever filled,
+        or None if no deal exists for this ticket.
+        """
+        try:
+            return self._proto.send_request("get_deal", {"ticket": ticket})
+        except MT5DataError:
+            return None
+
     def close_position(self, ticket: int) -> dict:
         return self._proto.send_request("close_position", {"ticket": ticket})
 

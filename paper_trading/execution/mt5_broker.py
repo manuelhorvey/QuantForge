@@ -341,6 +341,19 @@ class MT5Broker(BrokerInterface):
         logger.info("Position modified: ticket=%s asset=%s sl=%s tp=%s", ticket, asset, sl, tp)
         return True
 
+    def get_deal_by_ticket(self, ticket: int) -> dict | None:
+        """Look up a deal in MT5 history by ticket number.
+
+        Returns the deal dict if the ticket was ever filled on the broker,
+        or None if no deal exists for this ticket (order never filled).
+        """
+        self.ensure_connected()
+        try:
+            return self._client.get_deal_by_ticket(ticket)
+        except Exception as e:
+            logger.error("get_deal_by_ticket failed for ticket=%s: %s", ticket, e)
+            return None
+
     def cancel_order(self, order_id: str) -> bool:
         logger.warning("cancel_order not implemented for MT5")
         return False
