@@ -29,7 +29,7 @@ logger = logging.getLogger("threshold_opt")
 WALKDIR = Path(__file__).resolve().parent.parent.parent / "walkforward"
 
 SELL_ONLY_ASSETS: frozenset[str] = frozenset({
-    "CADCHF", "ES", "NQ", "NZDCHF", "EURAUD",
+    "CADCHF", "NZDCHF", "EURAUD",
 })
 # ^DJI, USDCHF, EURCHF removed 2026-06-26 after trend-exhaustion features improved BuyWR above breakeven.
 

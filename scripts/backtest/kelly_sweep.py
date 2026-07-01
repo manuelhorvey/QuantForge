@@ -157,7 +157,7 @@ def main():
 
     all_asset_data: dict[str, dict] = {}
     asset_ic: dict[str, float] = {}
-    SELL_ONLY_ASSETS = frozenset({"CADCHF", "ES", "NQ", "NZDCHF", "EURAUD"})
+    SELL_ONLY_ASSETS = frozenset({"CADCHF", "NZDCHF", "EURAUD"})
 
     for pq in parquets:
         stem = pq.stem

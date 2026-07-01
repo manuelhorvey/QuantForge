@@ -13,7 +13,7 @@ def get_sell_only_assets() -> frozenset[str]:
 
     The config source of truth lives in paper_trading.yaml under
     ``defaults.sell_only_assets``.  If config is not yet loaded (e.g. during
-    import time), falls back to the known hardcoded 5-asset set derived from
+    import time), falls back to the known hardcoded 3-asset set derived from
     the 2026-06-26 walk-forward analysis.  Once config is loaded, the config
     value takes precedence.
     """
@@ -23,12 +23,10 @@ def get_sell_only_assets() -> frozenset[str]:
             return cfg.sell_only_assets
     except Exception:
         logger.debug("Config not yet available — using hardcoded SELL_ONLY_ASSETS", exc_info=True)
-    # Hardcoded fallback: 5 assets with confirmed inverted BUY signal
+    # Hardcoded fallback: 3 assets with confirmed inverted BUY signal
     return frozenset(
         {
             "CADCHF",
-            "ES",
-            "NQ",
             "NZDCHF",
             "EURAUD",
         }

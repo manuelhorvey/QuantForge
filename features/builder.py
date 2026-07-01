@@ -120,6 +120,14 @@ def _attach_lead_lag_features(a: pd.DataFrame, df: pd.DataFrame, contract: Featu
         if "close" not in leader_df.columns:
             continue
         leader_df = _normalize(leader_df)
+        # Strip tz from leader_df if df is tz-unaware (inference path).
+        # If leader_df stays tz-aware while df is tz-unaware,
+        # apply_lead_lag_features returns a Series with tz-aware index
+        # that .reindex(a.index) cannot align (a.index is tz-unaware)
+        # producing all NaN (see ADR-017 inference path).
+        if df.index.tz is None and leader_df.index.tz is not None:
+            leader_df = leader_df.copy()
+            leader_df.index = leader_df.index.tz_localize(None)
         a[col] = apply_lead_lag_features(df, leader_df, lag=int(edge.get("lag", 1)), column_name=col).reindex(a.index)
 
 
@@ -155,6 +163,15 @@ def build_features(
 
     if compute_labels:
         a.index = labels.index
+    else:
+        # Inference path: a has tz-unaware index (from pi), but _normalize
+        # made df tz-aware.  Strip tz from df/ref so pandas index alignment
+        # works when assigning feature columns to a.
+        df = df.copy()
+        df.index = df.index.tz_localize(None)
+        if ref is not None:
+            ref = ref.copy()
+            ref.index = ref.index.tz_localize(None)
 
     slug = (contract.contract_prefix or contract.name).lower()
     for w in contract.price_mom_windows:

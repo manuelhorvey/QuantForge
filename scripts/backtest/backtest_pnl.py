@@ -454,8 +454,6 @@ def main():
             SELL_ONLY_ASSETS = frozenset(
                 {
                     "CADCHF",
-                    "ES",
-                    "NQ",
                     "NZDCHF",
                     "EURAUD",
                 }

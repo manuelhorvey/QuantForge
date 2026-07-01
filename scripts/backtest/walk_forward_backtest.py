@@ -52,16 +52,12 @@ ASSETS = {
     "AUDJPY": "AUDJPY=X",
     "CHFJPY": "CHFJPY=X",
     "USDJPY": "USDJPY=X",
-    # Promoted portfolio (19 assets)
+    # Promoted portfolio (16 assets)
     "GC": "GC=F",
     "USDCHF": "USDCHF=X",
     "USDCAD": "USDCAD=X",
-    "ES": "ES=F",
-    "NQ": "NQ=F",
     "GBPCAD": "GBPCAD=X",
-    # "GBPNZD": "GBPNZD=X",  # removed 2026-06-20 — tp/sl ratio 0.33
     "NZDCAD": "NZDCAD=X",
-    "^DJI": "^DJI",
     "NZDUSD": "NZDUSD=X",
     "GBPAUD": "GBPAUD=X",
     "NZDCHF": "NZDCHF=X",
@@ -71,6 +67,7 @@ ASSETS = {
     "EURCAD": "EURCAD=X",
     "EURNZD": "EURNZD=X",
     "GBPCHF": "GBPCHF=X",
+    "GBPUSD": "GBPUSD=X",
     "EURAUD": "EURAUD=X",
 }
 

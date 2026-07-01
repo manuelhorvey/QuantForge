@@ -102,28 +102,7 @@ class HealthMonitor:
         if snapshot.halt_ratio >= self._max_halt_ratio:
             summary.recommendations.append(f"halt_ratio_{snapshot.halt_ratio:.2f}_exceeds_{self._max_halt_ratio:.2f}")
 
-        # Equity cluster alarm: ES, NQ, ^DJI all on the same side
-        eq_cluster = ("ES", "NQ", "^DJI")
-        cluster_sides: set[str | None] = set()
-        for name in eq_cluster:
-            actor = actors.get(name)
-            if actor is None:
-                continue
-            eng = getattr(actor, "_engine", None)
-            if eng is None:
-                continue
-            pos_mgr = getattr(eng, "pos_mgr", None)
-            if pos_mgr is None:
-                continue
-            pos = getattr(pos_mgr, "position", None)
-            if pos is None:
-                cluster_sides.add(None)
-            else:
-                side = getattr(pos, "side", None)
-                cluster_sides.add(side.value if hasattr(side, "value") else side)
-        if len(cluster_sides - {None}) == 1 and None not in cluster_sides:
-            side_str = next(iter(cluster_sides - {None}))
-            summary.recommendations.append(f"equity_cluster_all_{side_str}_ES_NQ_^DJI")
+        # Equity cluster alarm removed: ES, NQ, ^DJI no longer in portfolio
 
         # Rate-limit warnings: same recommendation within 60s
         throttled = []

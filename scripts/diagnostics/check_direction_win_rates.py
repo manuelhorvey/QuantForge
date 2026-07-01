@@ -36,7 +36,7 @@ WALKDIR = Path(__file__).resolve().parent.parent / "walkforward"
 BASELINE_CSV = WALKDIR / "pnl_backtest_base.csv"
 
 SELL_ONLY_ASSETS: frozenset[str] = frozenset({
-    "CADCHF", "ES", "NQ", "NZDCHF", "EURAUD",
+    "CADCHF", "NZDCHF", "EURAUD",
 })
 
 ALERT_SELL_DRIFT_PP = 10.0  # SELL WR drop >10pp → alert
