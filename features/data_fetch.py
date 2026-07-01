@@ -9,8 +9,7 @@ from paper_trading.ops.data_fetcher import fetch_live as _provider_fetch_live
 
 logger = logging.getLogger("quorrin.data_fetch")
 
-# Fetch ~5 years for training — tight-SL assets (AUDCHF, ES, NQ, ^DJI)
-# need more binary samples to reach the 100 minimum.
+# Fetch ~5 years for training.
 # Indicator max lookback is 253 bars; 1250 provides ~1k-bar warmup margin.
 _FETCH_PERIOD = "5y"
 _FETCH_WARMUP_BUFFER = 1250
@@ -40,7 +39,7 @@ CURRENCY_YIELD_TICKERS: dict[str, str] = {
 }
 
 # Assets that have no meaningful interest rate differential (crypto, commodities)
-_ZERO_RATE_ASSETS: set[str] = {"BTC", "GC", "CL", "ES", "NQ", "IWM", "VIX", "DJI"}
+_ZERO_RATE_ASSETS: set[str] = {"BTC", "GC", "CL", "IWM", "VIX"}
 
 # Known major currency codes — built from CURRENCY_YIELD_TICKERS keys
 _KNOWN_CURRENCIES: set[str] = set(CURRENCY_YIELD_TICKERS.keys())

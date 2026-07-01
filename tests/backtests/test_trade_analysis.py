@@ -316,29 +316,17 @@ class TestPaperStats:
 
 
 class TestConstants:
-    def test_sltp_cfg_has_expected_keys(self):
-        expected = {
-            "GC",
-            "USDCHF",
-            "EURUSD",
-            "NZDUSD",
-            "GBPAUD",
-            "NZDCHF",
-            "CADCHF",
-            "AUDUSD",
-            "AUDNZD",
-            "EURCHF",
-            "EURCAD",
-            "EURNZD",
-            "GBPCHF",
-        }
-        assert expected.issubset(set(SLTP_CFG.keys()))
+    def test_sltp_cfg_is_empty(self):
+        """SLTP_CFG cleared in Phase 4 — stale refs to decommissioned assets."""
+        assert SLTP_CFG == {}
 
-    def test_dashboard_tickers_not_empty(self):
-        assert len(DASHBOARD_TICKERS) > 0
+    def test_dashboard_tickers_is_empty(self):
+        """DASHBOARD_TICKERS cleared in Phase 4 — stale refs to decommissioned assets."""
+        assert DASHBOARD_TICKERS == []
 
-    def test_model_depth_not_empty(self):
-        assert len(MODEL_DEPTH) > 0
+    def test_model_depth_is_empty(self):
+        """MODEL_DEPTH cleared in Phase 4 — stale refs to decommissioned assets."""
+        assert MODEL_DEPTH == {}
 
     def test_regime_geom_has_expected_keys(self):
         for key in ["low", "mid", "high"]:

@@ -7,42 +7,11 @@ import pandas as pd
 # Constants
 # ──────────────────────────────────────────────
 
-SLTP_CFG = {
-    "GC": {},
-    "USDCHF": {},
-    "EURUSD": {},
-    "NZDUSD": {},
-    "GBPAUD": {},
-    "NZDCHF": {},
-    "CADCHF": {},
-    "AUDUSD": {},
-    "AUDNZD": {},
-    "EURCHF": {},
-    "EURCAD": {},
-    "EURNZD": {},
-    "GBPCHF": {},
-}
+SLTP_CFG: dict[str, dict] = {}
 
-DASHBOARD_TICKERS = [
-    "EURUSD",
-    "GBPUSD",
-    "USDJPY",
-    "AUDUSD",
-    "USDCAD",
-    "NZDUSD",
-    "EURCHF",
-    "GBPJPY",
-    "EURJPY",
-    "CHFJPY",
-]
+DASHBOARD_TICKERS: list[str] = []
 
-MODEL_DEPTH = {
-    "EURUSD": 4,
-    "GBPUSD": 4,
-    "USDJPY": 4,
-    "AUDUSD": 4,
-    "USDCAD": 4,
-}
+MODEL_DEPTH: dict[str, int] = {}
 
 REGIME_GEOM = {
     "low": {"sl": 1.0, "tp": 2.0},

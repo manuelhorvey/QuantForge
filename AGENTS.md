@@ -1378,3 +1378,16 @@ The adaptive exit system is **structurally shock-stationary** — edge degrades 
 | `paper_trading/asset_pnl_controller.py` | `_apply_adaptive_exit()` integration in `_check_intraday_sltp` |
 | `configs/paper_trading.yaml` | Per-asset `adaptive_exit` config blocks |
 | `data/processed/trade_lifecycle_results.json` | Full lifecycle analysis output (1.8MB, 4679 trades)
+
+---
+## Production Audit Remediation (2026-07-01+)
+
+Systematic 4-phase remediation of audit findings on `feature/production-audit-remediation`.
+
+**Phase 1 — Critical Production Blockers (commit 290711f)**: Dual trailing stop conflict resolved (`_check_intraday_sltp` routes to one exit system per cycle); MT5 modify_position failure log DEBUG→ERROR with SL read-back verification (`_verify_sltp_applied`); paper close no-longer aborted on MT5 failure — proceeds with error logging, orphan handled by reconciliation loop. 2375 tests pass.
+
+**Phase 2 — Architecture Hardening (commit 02166f0)**: Shared `_load_sltp_data` helper extracted (eliminates duplicated guard logic); atomic cache invalidation in `_verify_sltp_applied` (no lock race window); Position dataclass extended with `stop_loss`/`take_profit`; dead fields removed from EngineSnapshot state (`gates_trace`, `last_regime_raw_probas`, `last_regime_features`, `calibration`).
+
+**Phase 3 — Frontend UX Redesign (commit 4dbcf97)**: CommandCenter page merges TradingDashboard + DashboardOverview; EquityCurveSparkline SVG component from `/equity_history.json`; sortable asset list by risk/name/pnl/exit; Conviction badges removed (non-predictive — per audit finding); PEK status bar removed; dead field references cleaned from ExecutionFeed, GateAggregationPanel, AssetDetailPanel. TypeScript 0 errors.
+
+**Phase 4 — Polish & Cleanup (current)**: Stale asset refs cleaned (data_fetch.py _ZERO_RATE_ASSETS: removed ES/NQ/DJI; trade_analysis.py: cleared stale SLTP_CFG/DASHBOARD_TICKERS/MODEL_DEPTH); LIVE_CONTRACT.md US_EQUITY factor group updated; AGENTS.md changelog added. ruff format + check clean.

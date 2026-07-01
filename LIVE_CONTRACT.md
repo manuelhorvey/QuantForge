@@ -718,7 +718,7 @@ Where `p` = calibrated P(TP hit), `q = 1-p`.
 | CHF | EURCHF, USDCHF, NZDCHF, CADCHF, GBPCHF |
 | CAD | USDCAD, CADCHF, EURCAD |
 | GBP | GBPUSD, GBPCHF |
-| US_EQUITY | (none active — ES, NQ, ^DJI orphaned) |
+| US_EQUITY | (empty — none active) |
 | COMMODITY | GC |
 
 **Functions:**
