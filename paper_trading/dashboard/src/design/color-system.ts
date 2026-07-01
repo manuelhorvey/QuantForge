@@ -204,44 +204,6 @@ export const rawTokens = {
   'animation-fade-in': 'fade-in 0.4s ease-out',
 } as const
 
-// ── Light-mode overrides ────────────────────────────
-// Only role-mapping tokens that change in light mode.
-// Brand scales (teal, indigo, neutral), gov colors, accents, and
-// structural tokens (spacing, fonts, radii) stay the same.
-export const rawLightTokens = {
-  // Surfaces
-  'color-app': '#f3f6f5',
-  'color-surface': '#ffffff',
-  'color-card': '#ffffff',
-  'color-panel': '#e1e6e4',
-  'color-panel-hover': '#c3cdc8',
-
-  // Text
-  'color-text-primary': '#1b221f',
-  'color-text-secondary': '#4b5b55',
-  'color-text-tertiary': '#5f726b',
-  'color-text-muted': '#7a8d85',
-
-  // Borders
-  'color-border': '#9eada6',
-  'color-border-strong': '#7a8d85',
-
-  // Glass
-  'color-glass': 'rgba(255, 255, 255, 0.92)',
-
-  // Interactive states (light bg → dark overlays)
-  'color-interactive-hover': 'rgba(0, 0, 0, 0.04)',
-  'color-interactive-active': 'rgba(0, 0, 0, 0.08)',
-  'color-interactive-selected': 'rgba(20, 184, 166, 0.08)',
-
-  // Shadows (softer on light backgrounds)
-  'shadow-panel': '0 1px 0 rgba(0,0,0,0.04) inset, 0 4px 24px rgba(0,0,0,0.08)',
-  'shadow-card': '0 1px 0 rgba(0,0,0,0.03) inset, 0 8px 32px rgba(0,0,0,0.1)',
-  'shadow-modal': '0 0 0 1px rgba(0,0,0,0.04), 0 24px 80px rgba(0,0,0,0.15)',
-  'shadow-tooltip': '0 4px 20px rgba(0,0,0,0.12)',
-  'shadow-inner-subtle': 'inset 0 1px 3px rgba(0,0,0,0.05)',
-} as const
-
 // ── Tailwind-only values (not expressible as single CSS vars) ──
 export const tailwindOnly = {
   fontWeight: {

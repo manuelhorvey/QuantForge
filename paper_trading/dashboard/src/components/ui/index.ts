@@ -34,7 +34,6 @@ export { Skeleton, SkeletonText, MetricCardSkeleton, SkeletonKpi, TableSkeleton 
 export { default as SltpGauge } from './SltpGauge'
 export { default as StatCard } from './StatCard'
 export { default as TablePagination } from './TablePagination'
-export { default as ThemeToggle } from './ThemeToggle'
 export { default as Tooltip } from './Tooltip'
 export {
   GOVERNANCE_STATES,

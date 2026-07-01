@@ -5,7 +5,6 @@ import { useSystemSnapshot } from '../hooks/useSystemSnapshot'
 import { useEngineHealth } from '../hooks/useEngineHealth'
 import { useSystemHealthModal } from '../hooks/useSystemHealthModal'
 import { systemSelectors } from '../selectors/system'
-import ThemeToggle from './ui/ThemeToggle'
 import MT5Status from './MT5Status'
 
 interface HeaderProps {
@@ -84,7 +83,6 @@ function Header({ onMenuClick }: HeaderProps) {
 
         <div className="flex items-center gap-1 sm:gap-2">
           <HealthBadge />
-          <ThemeToggle />
           <MT5Status />
 
           <button

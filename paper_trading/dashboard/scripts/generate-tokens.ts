@@ -1,7 +1,7 @@
 import { writeFileSync, mkdirSync } from 'fs'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { rawTokens, rawLightTokens, tailwindOnly } from '../src/design/color-system.js'
+import { rawTokens, tailwindOnly } from '../src/design/color-system.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const OUT = resolve(__dirname, '../generated')
@@ -40,15 +40,6 @@ for (const [name, frames] of Object.entries(tailwindOnly.keyframes)) {
       css += `    ${camelToKebab(prop)}: ${val};\n`
     }
     css += '  }\n'
-  }
-  css += '}\n\n'
-}
-
-// ── Light mode override block ─────────────────────────
-if (Object.keys(rawLightTokens).length > 0) {
-  css += '.light {\n'
-  for (const [key, value] of Object.entries(rawLightTokens)) {
-    css += `  --${key}: ${value};\n`
   }
   css += '}\n\n'
 }

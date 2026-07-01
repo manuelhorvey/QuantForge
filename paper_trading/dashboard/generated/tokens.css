@@ -204,26 +204,3 @@
     box-shadow: 0 0 8px rgba(240, 68, 68, 0.3);
   }
 }
-
-.light {
-  --color-app: #f3f6f5;
-  --color-surface: #ffffff;
-  --color-card: #ffffff;
-  --color-panel: #e1e6e4;
-  --color-panel-hover: #c3cdc8;
-  --color-text-primary: #1b221f;
-  --color-text-secondary: #4b5b55;
-  --color-text-tertiary: #5f726b;
-  --color-text-muted: #7a8d85;
-  --color-border: #9eada6;
-  --color-border-strong: #7a8d85;
-  --color-glass: rgba(255, 255, 255, 0.92);
-  --color-interactive-hover: rgba(0, 0, 0, 0.04);
-  --color-interactive-active: rgba(0, 0, 0, 0.08);
-  --color-interactive-selected: rgba(20, 184, 166, 0.08);
-  --shadow-panel: 0 1px 0 rgba(0,0,0,0.04) inset, 0 4px 24px rgba(0,0,0,0.08);
-  --shadow-card: 0 1px 0 rgba(0,0,0,0.03) inset, 0 8px 32px rgba(0,0,0,0.1);
-  --shadow-modal: 0 0 0 1px rgba(0,0,0,0.04), 0 24px 80px rgba(0,0,0,0.15);
-  --shadow-tooltip: 0 4px 20px rgba(0,0,0,0.12);
-  --shadow-inner-subtle: inset 0 1px 3px rgba(0,0,0,0.05);
-}
