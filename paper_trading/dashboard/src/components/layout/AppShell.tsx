@@ -27,8 +27,8 @@ export default function AppShell({ children }: AppShellProps) {
       <>
         {!integrity.isBroken && <Header onMenuClick={toggleSidebar} />}
         <ErrorScreen
-          title="System Unavailable"
-          message="The engine snapshot could not be loaded. The system may be restarting."
+          title="Engine unavailable"
+          message="Couldn't load the engine snapshot. It may be restarting."
         />
       </>
     )

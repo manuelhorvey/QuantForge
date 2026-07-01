@@ -23,8 +23,8 @@ function HealthBadge() {
       type="button"
       onClick={openSystemHealth}
       className="min-h-[44px] min-w-[44px] flex items-center justify-center gap-1.5 px-2 rounded-md border border-default hover:border-strong hover:bg-panel transition-colors active:scale-95 focus-ring text-2xs font-mono tabular-nums"
-      title={`Engine: ${label} — click for details`}
-      aria-label="Open system health monitor"
+      title={`Engine ${label}`}
+      aria-label={`Engine status: ${label}. Open details.`}
     >
       <span className={`relative inline-flex w-2 h-2 rounded-full ${dot}`} />
       <span className="hidden sm:inline text-tertiary">{label}</span>
@@ -63,8 +63,8 @@ function Header({ onMenuClick }: HeaderProps) {
             type="button"
             onClick={onMenuClick}
             className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md border border-default hover:border-strong hover:bg-panel transition-colors lg:hidden active:scale-95 focus-ring"
-            title="Toggle navigation"
-            aria-label="Toggle navigation"
+            title="Menu"
+            aria-label="Open navigation menu"
           >
             <Menu className="w-3.5 h-3.5 text-secondary" strokeWidth={2} />
           </button>
@@ -90,8 +90,8 @@ function Header({ onMenuClick }: HeaderProps) {
             onClick={handleRefresh}
             disabled={refreshing}
             className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-md border border-default hover:border-strong hover:bg-panel transition-colors disabled:opacity-40 active:scale-95 focus-ring"
-            title="Refresh all data"
-            aria-label="Refresh all dashboard data"
+            title="Refresh"
+            aria-label="Refresh dashboard data"
           >
             <RefreshCw className={`w-3 h-3 text-secondary ${refreshing ? 'animate-spin' : ''}`} strokeWidth={2} />
           </button>
