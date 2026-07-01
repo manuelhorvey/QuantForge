@@ -32,7 +32,7 @@
   --color-neutral-800: #2e3835;
   --color-neutral-900: #1b221f;
   --color-neutral-950: #0b0e0c;
-  --color-app: #08090c;
+  --color-app: #07080b;
   --color-surface: #0c0d12;
   --color-card: #0c0d12;
   --color-panel: #13161f;
@@ -44,10 +44,10 @@
   --color-border: #1e2233;
   --color-border-strong: #2a3040;
   --color-glass: rgba(12, 13, 18, 0.92);
-  --color-focus-ring: rgba(20, 184, 166, 0.45);
+  --color-focus-ring: rgba(61, 217, 174, 0.45);
   --color-interactive-hover: rgba(255, 255, 255, 0.04);
   --color-interactive-active: rgba(255, 255, 255, 0.08);
-  --color-interactive-selected: rgba(20, 184, 166, 0.08);
+  --color-interactive-selected: rgba(61, 217, 174, 0.08);
   --color-gov-green: #25d065;
   --color-gov-green-muted: rgba(37, 208, 101, 0.12);
   --color-gov-green-muted2: rgba(37, 208, 101, 0.06);
@@ -69,7 +69,7 @@
   --color-gov-gray: #6b7280;
   --color-gov-gray-muted: rgba(107, 114, 128, 0.12);
   --color-gov-gray-muted2: rgba(107, 114, 128, 0.06);
-  --color-accent-emerald: #2dd4bf;
+  --color-accent-emerald: #3dd9ae;
   --color-accent-blue: #60a5fa;
   --color-accent-purple: #a78bfa;
   --color-accent-amber: #fbbf24;

@@ -47,7 +47,9 @@ export const rawTokens = {
   'color-neutral-950': '#0b0e0c',
 
   // ── Application surfaces ──────────────────────────
-  'color-app': '#08090c',
+  // Terminal-precision: ink is one notch deeper than the previous #08090c
+  // so the chrome is more clearly the chrome against the working surface.
+  'color-app': '#07080b',
   'color-surface': '#0c0d12',
   'color-card': '#0c0d12',
   'color-panel': '#13161f',
@@ -67,12 +69,12 @@ export const rawTokens = {
   'color-glass': 'rgba(12, 13, 18, 0.92)',
 
   // ── Focus ring ────────────────────────────────────
-  'color-focus-ring': 'rgba(20, 184, 166, 0.45)',
+  'color-focus-ring': 'rgba(61, 217, 174, 0.45)',
 
   // ── Interactive states ────────────────────────────
   'color-interactive-hover': 'rgba(255, 255, 255, 0.04)',
   'color-interactive-active': 'rgba(255, 255, 255, 0.08)',
-  'color-interactive-selected': 'rgba(20, 184, 166, 0.08)',
+  'color-interactive-selected': 'rgba(61, 217, 174, 0.08)',
 
   // ── Governance (semantic) ─────────────────────────
   'color-gov-green': '#25d065',
@@ -102,7 +104,11 @@ export const rawTokens = {
   'color-gov-gray-muted2': 'rgba(107, 114, 128, 0.06)',
 
   // ── Extended accent palette ───────────────────────
-  'color-accent-emerald': '#2dd4bf',
+  // Emerald is the single accent for the operator-console identity: the
+  // teal-emerald that already anchors the rail (Phase 8.1) and the
+  // Header chip. Hotter (the previous #2dd4bf read as a teal at small
+  // sizes; #3dd9ae reads as readable on hairline rules).
+  'color-accent-emerald': '#3dd9ae',
   'color-accent-blue': '#60a5fa',
   'color-accent-purple': '#a78bfa',
   'color-accent-amber': '#fbbf24',
@@ -363,8 +369,8 @@ export const usage = {
   primaryActionText: neutral[950],
   secondaryAction: neutral[800],
   secondaryActionHover: neutral[700],
-  activeBorder: teal[500],
-  activeGlow: 'rgba(20, 184, 166, 0.3)',
+  activeBorder: teal[400],
+  activeGlow: 'rgba(61, 217, 174, 0.3)',
   signalLong: success.DEFAULT,
   signalShort: error.DEFAULT,
   signalFlat: warning.DEFAULT,
