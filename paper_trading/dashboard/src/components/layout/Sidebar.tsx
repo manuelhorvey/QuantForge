@@ -6,7 +6,7 @@ import { useEngineHealth } from '../../hooks/useEngineHealth'
 import { useSidebarBadges } from '../../hooks/useSidebarBadges'
 import Divider from '../ui/Divider'
 
-type TabId = 'dashboard' | 'trading' | 'execution' | 'risk'
+type TabId = 'dashboard' | 'engine' | 'trading' | 'execution' | 'risk'
 
 interface NavItemDef {
   id: TabId
@@ -28,7 +28,8 @@ const NAV_GROUPS: NavGroupDef[] = [
     title: 'Overview',
     icon: LayoutDashboard,
     items: [
-      { id: 'dashboard', to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, desc: 'Health + alerts + portfolio summary' },
+      { id: 'dashboard', to: '/', label: 'Dashboard', icon: LayoutDashboard, desc: 'System health + exception view' },
+      { id: 'engine', to: '/engine', label: 'Engine', icon: Heart, desc: 'Raw metrics + full data' },
     ],
   },
   {
