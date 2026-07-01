@@ -50,7 +50,12 @@ def walk_forward_one(ticker, macro, ref, window_years=3, step_years=1, conf_thre
         logger.warning('  %s: insufficient data (%d rows), skipping', ticker, len(features_df))
         return None
 
-    closes = df['close'].reindex(features_df.index)
+    # Strip tz from close to match features_df's tz-unaware index (build_features
+    # returns tz-unaware in the inference path).  Use .copy() to avoid mutating df.
+    close_series = df['close'].copy()
+    if close_series.index.tz is not None:
+        close_series.index = close_series.index.tz_localize(None)
+    closes = close_series.reindex(features_df.index)
     returns = closes.pct_change().shift(-1)
     years = sorted(features_df.index.year.unique())
     start_year = years[0]
@@ -80,10 +85,12 @@ def walk_forward_one(ticker, macro, ref, window_years=3, step_years=1, conf_thre
         # triple-barrier labels have a complete lookahead window.
         train_close = closes.loc[train_mask]
         train_extended_end = min(len(closes), train_mask.sum() + vb)
-        train_close_ext = closes.iloc[:train_extended_end]
+        train_close_ext = closes.iloc[:train_extended_end].to_frame("close")
         train_labels = apply_triple_barrier(train_close_ext, pt_sl=pt_sl, vertical_barrier=vb)
         if train_labels is not None and not train_labels.empty:
             y_train = train_labels.reindex(train_close.index)['label'].dropna().astype(int)
+            # Triple-barrier labels are -1/0/1; XGBoost multi:softprob expects 0/1/2
+            y_train = (y_train + 1).astype(int)
         else:
             y_train = pd.Series(dtype=int)
         train_valid = y_train.index.intersection(X_train.index)
@@ -93,10 +100,12 @@ def walk_forward_one(ticker, macro, ref, window_years=3, step_years=1, conf_thre
         # OOS labels: extend close by vb rows past OOS for complete lookahead.
         oos_close = closes.loc[oos_mask]
         oos_extended_end = min(len(closes), oos_mask.sum() + vb + train_mask.sum())
-        oos_close_ext = closes.iloc[train_mask.sum():oos_extended_end]
+        oos_close_ext = closes.iloc[train_mask.sum():oos_extended_end].to_frame("close")
         oos_labels = apply_triple_barrier(oos_close_ext, pt_sl=pt_sl, vertical_barrier=vb)
         if oos_labels is not None and not oos_labels.empty:
             y_oos = oos_labels.reindex(oos_close.index)['label'].dropna().astype(int)
+            # Triple-barrier labels are -1/0/1; XGBoost multi:softprob expects 0/1/2
+            y_oos = (y_oos + 1).astype(int)
         else:
             y_oos = pd.Series(dtype=int)
         oos_valid = y_oos.index.intersection(X_oos.index)
@@ -124,12 +133,12 @@ def walk_forward_one(ticker, macro, ref, window_years=3, step_years=1, conf_thre
 
         signals = pd.Series(0, index=X_oos.index)
         signals[prob_long > conf_threshold] = 2
-        signals[prob_short > conf_threshold] = 0
+        signals[prob_short > conf_threshold] = 1
 
         oos_returns = returns.loc[X_oos.index]
         pnl = pd.Series(0.0, index=X_oos.index)
         active = signals != 0
-        direction = np.where(signals == 2, 1, np.where(signals == 0, -1, 0))
+        direction = np.where(signals == 2, 1, np.where(signals == 1, -1, 0))
         pnl[active] = direction[active] * oos_returns[active]
 
         trades = pnl[pnl != 0]

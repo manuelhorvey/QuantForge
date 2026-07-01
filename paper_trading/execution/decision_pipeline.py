@@ -513,6 +513,74 @@ def apply_risk_off_suppression(ctx: DecisionContext) -> None:
         ctx.new_side = None
 
 
+# ── VIX suppression gate ────────────────────────────────────────────────────
+
+VIX_GATE_THRESHOLD = 30.0
+VIX_GATE_ASSETS = frozenset({"CL"})
+
+
+def apply_vix_gate(ctx: DecisionContext) -> None:
+    """Suppress signals for CL=F when VIX exceeds threshold.
+
+    CL=F (crude oil) suffers catastrophic losses during tail-risk events
+    (2020 COVID crash: -2.72R) because the model's momentum/carry features
+    fail under extreme volatility.  VIX > 30 is a reliable proxy for
+    tail-risk regimes across multiple historical episodes (2008, 2011, 2020).
+
+    Re-enables immediately when VIX drops back below threshold (no cooldown)
+    because the CL=F model performs well in normal conditions (6/7 non-2020
+    years positive).
+
+    See the 2026-07-01 profitability diagnostic for full evidence.
+    """
+    engine = ctx.engine
+    if engine.name not in VIX_GATE_ASSETS:
+        return
+
+    # Check VIX level via the macro data cache (shared across assets).
+    # The macro cache has daily frequency; if the last value is more than
+    # 5 calendar days old (long weekend gap), skip the check to avoid
+    # suppressing based on stale data.
+    try:
+        from features.data_fetch import _macro_cache
+
+        macro = _macro_cache.get("macro_batch")
+        if macro is None or "^VIX" not in macro:
+            logger.debug(
+                "%s: VIX gate — macro data unavailable, fail-open (allow entry)",
+                engine.name,
+            )
+            return
+
+        vix_series = macro["^VIX"]
+        if vix_series.empty:
+            return
+
+        # Freshness check: skip if last VIX data point is >5 days old
+        last_vix_date = vix_series.index[-1]
+        days_ago = (datetime.now(timezone.utc).date() - last_vix_date.date()).days
+        if days_ago > 5:
+            logger.debug(
+                "%s: VIX gate — data stale (%d days old), pass-through",
+                engine.name,
+                days_ago,
+            )
+            return
+
+        vix_level = vix_series.iloc[-1]
+        if vix_level > VIX_GATE_THRESHOLD:
+            logger.info(
+                "%s: VIX gate suppressing — VIX=%.1f > threshold=%.0f (data age=%dd)",
+                engine.name,
+                vix_level,
+                VIX_GATE_THRESHOLD,
+                days_ago,
+            )
+            ctx.new_side = None
+    except Exception:
+        logger.exception("%s: VIX gate error — fail-open", engine.name)
+
+
 # ── Sell-only filter stage ────────────────────────────────────────────────
 
 # SELL_ONLY_ASSETS resolved via get_sell_only_assets() from paper_trading.execution.gate_constants
@@ -807,6 +875,7 @@ DEFAULT_STAGES: list[StageFn] = [
     update_mae_mfe,
     resolve_signal,
     apply_risk_off_suppression,
+    apply_vix_gate,
     apply_sell_only_filter,
     apply_spread_gate,
     apply_session_gate,

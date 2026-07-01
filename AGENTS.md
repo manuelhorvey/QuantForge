@@ -222,6 +222,30 @@ The dashboard HTTP server (`paper_trading/serve.py`) supports optional bearer-to
 - **Bind address**: Override with `QUORRIN_BIND` env var. Warning is logged if binding to anything other than 127.0.0.1.
 - **CORS**: Restricted to `http://127.0.0.1:3000` (Vite dev server) and same-origin. No wildcard.
 
+## Structural Limitations (Permanent)
+
+- **BUY signal inversion (5 assets — CADCHF, ES, NQ, NZDCHF, EURAUD)**:
+  The feature space encodes SELL alpha but not BUY alpha for these assets.
+  Counterfactual walk-forward ablation disproved both carry and DXY as causal
+  mechanisms. SELL_ONLY filter is the correct long-term answer, not a stopgap.
+  Recovery requires new feature R&D or separate BUY/SELL classifiers.
+  See the 2026-06-20 diagnostic chain in walk-forward backtest and SHAP audit
+  for full evidence.
+
+## Per-Asset Decision Thresholds
+
+- **NZDCAD, NZDUSD, EURCHF**: Deployed with `min_confidence: 0.40` (down from
+  global default 0.45). Threshold validation (2026-07-01) showed trade counts
+  increase 140-420% with neutral-to-positive PnL impact at 0.40. These were
+  classified as "monitor live" bets — NZDCAD has only 46 total trades and 6/8
+  zero-trade years at 0.45. Monitor first 3 months for unexpected behavior.
+
+- **ES, NQ**: Kept at default 0.45 threshold. The marginal signals at 0.40
+  degraded PnL (ES: -0.0232R from additional trades). ES exit rule defined:
+  if ES averages <5 trades/year in the next 12 months (review date 2027-07-01),
+  remove from portfolio. ES has 3 trades in 8 years and is SELL_ONLY on a
+  mildly BUY-biased model — the threshold won't fix this alone.
+
 ## Known Issues
 
 - **GBPNZD (REMOVED 2026-06-20)**: tp/sl ratio 0.33 required 75% breakeven WR, model achieved 72.3% — net-negative. Removed from trading.
