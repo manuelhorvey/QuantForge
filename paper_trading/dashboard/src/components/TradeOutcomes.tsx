@@ -19,7 +19,7 @@ export default function TradeOutcomes() {
   if (isPending) {
     return (
       <Panel className="animate-pulse">
-        <SectionHeader title="Trade Outcomes" accent="purple" />
+        <SectionHeader title="Trade Outcomes" accent="emerald" />
         <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-4">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="bg-panel rounded-lg p-3">
@@ -36,7 +36,7 @@ export default function TradeOutcomes() {
   if (isError || !outcomes) {
     return (
       <Panel>
-        <SectionHeader title="Trade Outcomes" accent="purple" />
+        <SectionHeader title="Trade Outcomes" accent="emerald" />
         <div className="text-xs text-tertiary text-center py-8">Failed to load outcome data</div>
       </Panel>
     )
@@ -47,7 +47,7 @@ export default function TradeOutcomes() {
 
   return (
     <Panel padding="lg">
-      <SectionHeader title="Trade Outcomes" accent="purple" border />
+      <SectionHeader title="Trade Outcomes" accent="emerald" border />
       {!hasData ? (
         <div className="text-xs text-tertiary text-center py-8">No trades closed yet</div>
       ) : (
