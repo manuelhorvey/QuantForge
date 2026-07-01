@@ -147,8 +147,14 @@ class TestPositionServiceAtomicClose:
         )
         return svc
 
-    def test_aborts_paper_close_on_mt5_failure(self, pos_service, broker, mock_client, mock_asset_engine):
-        """When MT5 close fails, paper close is aborted — empty mutations returned."""
+    def test_does_not_abort_paper_close_on_mt5_failure(self, pos_service, broker, mock_client, mock_asset_engine):
+        """When MT5 close fails, paper close still proceeds — mutations returned.
+
+        This is a critical safety fix: previously, a single MT5 failure would
+        block the paper close, causing the paper position to become orphaned
+        indefinitely. Now the paper close proceeds regardless, and the MT5
+        orphan is cleaned up by the orchestrator's reconciliation loop.
+        """
         mock_client._close_result = {"error": "close failed: market closed"}
         mutations = pos_service.close_position(
             exit_price=1.0500,
@@ -169,8 +175,9 @@ class TestPositionServiceAtomicClose:
             last_macro_dir=None,
             last_blend_dir=None,
         )
-        assert mutations == {}
-        pos_service.pos_mgr.close.assert_not_called()
+        assert mutations != {}, "Paper close should proceed despite MT5 failure"
+        assert "trade" in mutations, "Paper close should return trade data"
+        pos_service.pos_mgr.close.assert_called_once()
 
     def test_paper_close_on_mt5_success(self, pos_service, broker, mock_client, mock_asset_engine):
         """When MT5 close succeeds, paper close proceeds."""
@@ -344,24 +351,35 @@ class TestReconcilePhaseB:
         mock_client._deal_results = {
             "99999": {
                 "result": {
-                    "ticket": 99999, "order": 88888, "symbol": "EURUSD.fx",
-                    "type": 1, "volume": 0.1, "price": 1.0500,
-                    "profit": 0.0, "commission": 0.0, "swap": 0.0,
-                    "time": 0, "comment": "Quorrin",
+                    "ticket": 99999,
+                    "order": 88888,
+                    "symbol": "EURUSD.fx",
+                    "type": 1,
+                    "volume": 0.1,
+                    "price": 1.0500,
+                    "profit": 0.0,
+                    "commission": 0.0,
+                    "swap": 0.0,
+                    "time": 0,
+                    "comment": "Quorrin",
                 }
             }
         }
-        actor = _OrphanActor("EURUSD", position={
-            "side": "long", "mt5_ticket": 99999,
-        }, broker=broker)
+        actor = _OrphanActor(
+            "EURUSD",
+            position={
+                "side": "long",
+                "mt5_ticket": 99999,
+            },
+            broker=broker,
+        )
         orch._actors["EURUSD"] = actor
         broker.connect()
 
         # Run MAX_STALE_TICKET_CYCLES-1 cycles — ticket should survive
         for _ in range(orch.MAX_STALE_TICKET_CYCLES - 1):
             orch._reconcile_mt5_orphans()
-            assert actor._engine.position.get("mt5_ticket") == 99999, \
-                f"Ticket cleared early at cycle {_+1}"
+            assert actor._engine.position.get("mt5_ticket") == 99999, f"Ticket cleared early at cycle {_ + 1}"
 
         # Run the final cycle — ticket should be cleared
         orch._reconcile_mt5_orphans()
@@ -375,9 +393,14 @@ class TestReconcilePhaseB:
         """
         mock_client._positions = []
         mock_client._deal_results = {"99999": None}  # no deal found
-        actor = _OrphanActor("EURUSD", position={
-            "side": "long", "mt5_ticket": 99999,
-        }, broker=broker)
+        actor = _OrphanActor(
+            "EURUSD",
+            position={
+                "side": "long",
+                "mt5_ticket": 99999,
+            },
+            broker=broker,
+        )
         orch._actors["EURUSD"] = actor
         broker.connect()
 
@@ -402,24 +425,37 @@ class TestReconcilePhaseB:
         mock_client._deal_results = {
             "99999": {
                 "result": {
-                    "ticket": 99999, "order": 88888, "symbol": "EURUSD.fx",
-                    "type": 1, "volume": 0.1, "price": 1.0500,
-                    "profit": 100.0, "commission": 0.0, "swap": 0.0,
-                    "time": 0, "comment": "Quorrin",
+                    "ticket": 99999,
+                    "order": 88888,
+                    "symbol": "EURUSD.fx",
+                    "type": 1,
+                    "volume": 0.1,
+                    "price": 1.0500,
+                    "profit": 100.0,
+                    "commission": 0.0,
+                    "swap": 0.0,
+                    "time": 0,
+                    "comment": "Quorrin",
                 }
             }
         }
-        actor = _OrphanActor("EURUSD", position={
-            "side": "long", "mt5_ticket": 99999,
-        }, broker=broker)
+        actor = _OrphanActor(
+            "EURUSD",
+            position={
+                "side": "long",
+                "mt5_ticket": 99999,
+            },
+            broker=broker,
+        )
         orch._actors["EURUSD"] = actor
         broker.connect()
 
         # Run STALE_TICKET_DEAL_CHECK_CYCLES cycles — deal found, ticket survives
         for _ in range(orch.STALE_TICKET_DEAL_CHECK_CYCLES):
             orch._reconcile_mt5_orphans()
-            assert actor._engine.position.get("mt5_ticket") == 99999, \
-                f"Ticket closed early despite deal found at cycle {_+1}"
+            assert actor._engine.position.get("mt5_ticket") == 99999, (
+                f"Ticket closed early despite deal found at cycle {_ + 1}"
+            )
 
         # Full grace period should still complete
         for _ in range(orch.MAX_STALE_TICKET_CYCLES - orch.STALE_TICKET_DEAL_CHECK_CYCLES):
@@ -430,9 +466,14 @@ class TestReconcilePhaseB:
         """Ticket missing for 2 cycles then reappears → counter resets."""
         mock_client._positions = []
         mock_client._deal_results = {}
-        actor = _OrphanActor("EURUSD", position={
-            "side": "long", "mt5_ticket": 99999,
-        }, broker=broker)
+        actor = _OrphanActor(
+            "EURUSD",
+            position={
+                "side": "long",
+                "mt5_ticket": 99999,
+            },
+            broker=broker,
+        )
         orch._actors["EURUSD"] = actor
         broker.connect()
 
@@ -443,10 +484,20 @@ class TestReconcilePhaseB:
 
         # Ticket reappears in broker positions
         mock_client._positions = [
-            {"ticket": 99999, "symbol": "EURUSD.fx", "type": "buy",
-             "volume": 0.1, "price_open": 1.0500, "price_current": 1.0600,
-             "profit": 100.0, "commission": 0.0, "sl": 1.0400, "tp": 1.0700,
-             "time": 0, "comment": "Quorrin"},
+            {
+                "ticket": 99999,
+                "symbol": "EURUSD.fx",
+                "type": "buy",
+                "volume": 0.1,
+                "price_open": 1.0500,
+                "price_current": 1.0600,
+                "profit": 100.0,
+                "commission": 0.0,
+                "sl": 1.0400,
+                "tp": 1.0700,
+                "time": 0,
+                "comment": "Quorrin",
+            },
         ]
         orch._reconcile_mt5_orphans()
         assert actor._engine.position.get("mt5_ticket") == 99999  # recovered
@@ -455,8 +506,9 @@ class TestReconcilePhaseB:
         mock_client._positions = []
         for _ in range(orch.STALE_TICKET_DEAL_CHECK_CYCLES - 1):
             orch._reconcile_mt5_orphans()
-            assert actor._engine.position.get("mt5_ticket") == 99999, \
-                f"Ticket cleared early after reset at cycle {_+1}"
+            assert actor._engine.position.get("mt5_ticket") == 99999, (
+                f"Ticket cleared early after reset at cycle {_ + 1}"
+            )
         # Deal check would fire here but deal_results is {} so closes early
         orch._reconcile_mt5_orphans()
         assert actor._engine.position.get("mt5_ticket") is None
@@ -464,14 +516,29 @@ class TestReconcilePhaseB:
     def test_valid_ticket_preserved(self, orch, broker, mock_client):
         """Paper mt5_ticket matches an open MT5 position → preserved."""
         mock_client._positions = [
-            {"ticket": 12345, "symbol": "EURUSD.fx", "type": "buy",
-             "volume": 0.1, "price_open": 1.0500, "price_current": 1.0600,
-             "profit": 100.0, "commission": 0.0, "sl": 1.0400, "tp": 1.0700,
-             "time": 0, "comment": "Quorrin"},
+            {
+                "ticket": 12345,
+                "symbol": "EURUSD.fx",
+                "type": "buy",
+                "volume": 0.1,
+                "price_open": 1.0500,
+                "price_current": 1.0600,
+                "profit": 100.0,
+                "commission": 0.0,
+                "sl": 1.0400,
+                "tp": 1.0700,
+                "time": 0,
+                "comment": "Quorrin",
+            },
         ]
-        actor = _OrphanActor("EURUSD", position={
-            "side": "long", "mt5_ticket": 12345,
-        }, broker=broker)
+        actor = _OrphanActor(
+            "EURUSD",
+            position={
+                "side": "long",
+                "mt5_ticket": 12345,
+            },
+            broker=broker,
+        )
         orch._actors["EURUSD"] = actor
         broker.connect()
         orch._reconcile_mt5_orphans()
@@ -494,10 +561,20 @@ class TestPreOpenGuard:
     def entry_with_orphan(self, broker, mock_client):
         """EntryService with MT5 broker that has an orphaned position."""
         mock_client._positions = [
-            {"ticket": 99999, "symbol": "EURUSD.fx", "type": "buy",
-             "volume": 0.1, "price_open": 1.0500, "price_current": 1.0600,
-             "profit": 100.0, "commission": 0.0, "sl": 1.0400, "tp": 1.0700,
-             "time": 0, "comment": "Quorrin"},
+            {
+                "ticket": 99999,
+                "symbol": "EURUSD.fx",
+                "type": "buy",
+                "volume": 0.1,
+                "price_open": 1.0500,
+                "price_current": 1.0600,
+                "profit": 100.0,
+                "commission": 0.0,
+                "sl": 1.0400,
+                "tp": 1.0700,
+                "time": 0,
+                "comment": "Quorrin",
+            },
         ]
         mock_client._close_result = {"result": {"retcode": 10009, "ticket": 99999}}
 
@@ -553,7 +630,11 @@ class TestPreOpenGuard:
         service = EntryService()
 
         fill_price, slippage, mt5_ticket = service._submit_mt5_order(
-            engine, "buy", 1.0600, 1.0400, 1.0700,
+            engine,
+            "buy",
+            1.0600,
+            1.0400,
+            1.0700,
         )
 
         assert mt5_ticket is None

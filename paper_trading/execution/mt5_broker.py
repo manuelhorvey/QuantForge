@@ -321,6 +321,63 @@ class MT5Broker(BrokerInterface):
         logger.info("Position closed: ticket=%s asset=%s", ticket, asset)
         return True
 
+    def _verify_sltp_applied(
+        self, ticket: int, asset: str, submitted_sl: float | None, submitted_tp: float | None
+    ) -> bool:
+        """Read back position from broker to verify SL/TP was applied correctly.
+
+        Invalidates the position cache to ensure a fresh read. Logs ERROR
+        on mismatch and returns False so the caller can escalate."""
+        with self._cache_lock:
+            self._position_cache_time = 0.0  # force cache refresh
+        try:
+            positions = self.get_positions()
+        except Exception:
+            logger.error("SLTP_VERIFY: failed to fetch positions for ticket=%s asset=%s", ticket, asset)
+            return False
+        for p in positions:
+            if p.position_id == str(ticket):
+                # Broker may return None for unset SL/TP — treat as 0.0
+                actual_sl = float(p.stop_loss) if p.stop_loss is not None else 0.0
+                actual_tp = float(p.take_profit) if p.take_profit is not None else 0.0
+                sub_sl = 0.0 if submitted_sl is None else float(submitted_sl)
+                sub_tp = 0.0 if submitted_tp is None else float(submitted_tp)
+
+                sl_match = abs(actual_sl - sub_sl) < 1e-4 or (actual_sl == 0.0 and sub_sl == 0.0)
+                tp_match = abs(actual_tp - sub_tp) < 1e-4 or (actual_tp == 0.0 and sub_tp == 0.0)
+
+                if not sl_match:
+                    logger.error(
+                        "SLTP_VERIFY_SL_MISMATCH: ticket=%s asset=%s submitted=%.5f actual=%.5f",
+                        ticket,
+                        asset,
+                        sub_sl,
+                        actual_sl,
+                    )
+                if not tp_match:
+                    logger.error(
+                        "SLTP_VERIFY_TP_MISMATCH: ticket=%s asset=%s submitted=%.5f actual=%.5f",
+                        ticket,
+                        asset,
+                        sub_tp,
+                        actual_tp,
+                    )
+                return sl_match and tp_match
+
+        # Position not found in broker positions — not a verification failure.
+        # The position may have been closed by MT5-native SL/TP between
+        # modify and read-back. The retcode already confirmed success;
+        # a missing position is a separate concern handled by orphan
+        # reconciliation (Phase B). Log a warning and return True so
+        # the caller considers the modification successful.
+        logger.warning(
+            "SLTP_VERIFY: position ticket=%s asset=%s not found after modify "
+            "— likely closed by MT5-native SL/TP or manual intervention",
+            ticket,
+            asset,
+        )
+        return True
+
     def modify_position(self, asset: str, position_id: str, sl: float | None = None, tp: float | None = None) -> bool:
         self.ensure_connected()
         ticket = int(position_id)
@@ -338,7 +395,27 @@ class MT5Broker(BrokerInterface):
         if retcode != 10009:
             logger.error("Modify position failed: retcode=%d ticket=%s asset=%s", retcode, ticket, asset)
             return False
-        logger.info("Position modified: ticket=%s asset=%s sl=%s tp=%s", ticket, asset, sl, tp)
+
+        # Read-back verification: confirm the broker actually applied our SL/TP
+        if not self._verify_sltp_applied(ticket, asset, sl, tp):
+            logger.error(
+                "Modify position VERIFICATION FAILED for ticket=%s asset=%s sl=%s tp=%s "
+                "— retcode=%d reported success but broker SL/TP differs",
+                ticket,
+                asset,
+                sl,
+                tp,
+                retcode,
+            )
+            return False
+
+        logger.info(
+            "Position modified and verified: ticket=%s asset=%s sl=%s tp=%s",
+            ticket,
+            asset,
+            sl,
+            tp,
+        )
         return True
 
     def get_deal_by_ticket(self, ticket: int) -> dict | None:

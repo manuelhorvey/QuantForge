@@ -23,24 +23,47 @@ ET = pytz.timezone("US/Eastern")
 _MAX_TRADES = 10_000
 
 
-def _sync_broker_sltp(asset) -> None:
-    """Push current SL/TP to the real broker (MT5) after in-memory adjustment."""
+def _sync_broker_sltp(asset) -> bool:
+    """Push current SL/TP to the real broker (MT5) after in-memory adjustment.
+
+    Returns True if sync was successful, False if it failed (logged as ERROR).
+    """
     mt5_ticket = asset.position.get("mt5_ticket") if asset.position else None
     if mt5_ticket is None:
-        return
+        return True
     bridge = getattr(asset, "execution_bridge", None)
     if bridge is None or not getattr(bridge, "_is_real_broker", False):
-        return
+        return True
     pos = asset.pos_mgr.position
     if pos is None:
-        return
+        return True
     if pd.isna(pos.stop_loss) or pd.isna(pos.take_profit):
         logger.error("%s: cannot sync NaN SL=%.4f or TP=%.4f to broker", asset.name, pos.stop_loss, pos.take_profit)
-        return
+        return False
     try:
-        bridge.broker.modify_position(asset.ticker, str(mt5_ticket), sl=float(pos.stop_loss), tp=float(pos.take_profit))
+        ok = bridge.broker.modify_position(
+            asset.ticker,
+            str(mt5_ticket),
+            sl=float(pos.stop_loss),
+            tp=float(pos.take_profit),
+        )
+        if not ok:
+            logger.error(
+                "%s: MT5 modify_position returned failure for ticket=%s sl=%.5f tp=%.5f",
+                asset.name,
+                mt5_ticket,
+                pos.stop_loss,
+                pos.take_profit,
+            )
+        return ok
     except Exception as e:
-        logger.debug("%s: MT5 modify_position failed: %s", asset.name, e)
+        logger.error(
+            "%s: MT5 modify_position raised exception for ticket=%s: %s",
+            asset.name,
+            mt5_ticket,
+            e,
+        )
+        return False
 
 
 class AssetPnlController:
@@ -71,8 +94,19 @@ class AssetPnlController:
         self._check_scale_out_tiers(asset)
         if self._check_sltp_hit(asset):
             return True
-        self._apply_trailing_stop(asset)
-        self._apply_adaptive_exit(asset)
+
+        # Apply EXACTLY ONE trailing exit system per cycle to prevent SL ping-pong.
+        # When adaptive_exit is enabled, it is the authoritative exit logic.
+        # When disabled, the dynamic_sltp trailing stop runs instead.
+        # Post-entry adjustment (vol spike tightening, TP nudging) runs
+        # independently regardless of which trailing system is active.
+        ae_cfg = asset.config.get("adaptive_exit", {})
+        if ae_cfg.get("enabled", False):
+            self._apply_post_entry_adjust_only(asset)
+            self._apply_adaptive_exit(asset)
+        else:
+            self._apply_trailing_stop(asset)
+
         return self._check_time_stop(asset, max_hold)
 
     def _tick_shadow_sltp(self, asset) -> None:
@@ -255,6 +289,20 @@ class AssetPnlController:
                 reason="trailing",
             )
 
+        self._apply_post_entry_adjust(asset, data)
+
+    def _apply_post_entry_adjust_only(self, asset) -> None:
+        """Run post-entry adjustment (vol spike tightening, TP nudging) without trailing stop.
+
+        Called when adaptive_exit is the active trailing system. This runs
+        independently of the trailing stop logic to avoid SL ping-pong."""
+        if not asset.config.get("dynamic_sltp", {}).get("enabled", False) or asset._entry_vol is None:
+            return
+        data = getattr(asset, "price_data", None)
+        if data is None:
+            data = getattr(asset, "_price_df", None)
+        if data is None or asset.pos_mgr.position is None:
+            return
         self._apply_post_entry_adjust(asset, data)
 
     def _apply_adaptive_exit(self, asset) -> None:

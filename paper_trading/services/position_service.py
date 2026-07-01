@@ -92,7 +92,11 @@ class PositionService:
                 self.ticker, broker_side, qty, exit_price
             )
 
-        # ── Real broker close (MT5) — MUST succeed before paper close ──
+        # ── Real broker close (MT5) — log failure but DO NOT block paper close ──
+        # Paper close proceeds regardless of MT5 outcome. If MT5 close fails,
+        # the orphan ticket remains in the broker and is cleaned up by the
+        # orchestrator's Phase A orphan reconciliation loop. This prevents a
+        # single MT5 failure from orphaning the paper position indefinitely.
         mt5_ticket = position.get("mt5_ticket") if position else None
         is_real = getattr(self.execution_bridge, "_is_real_broker", False)
         if mt5_ticket is not None and self.execution_bridge is not None and is_real:
@@ -102,22 +106,26 @@ class PositionService:
                 if not success:
                     mt5_symbol = broker.ticker_to_mt5_symbol(self.ticker)
                     logger.error(
-                        "%s: MT5 close returned failure for ticket=%s on %s — aborting paper close",
+                        "%s: MT5 close failed for ticket=%s on %s — paper close proceeds, orphan queued for cleanup",
                         self.name,
                         mt5_ticket,
                         mt5_symbol,
                     )
-                    return {}
+                else:
+                    logger.info(
+                        "%s: MT5 position closed: ticket=%s",
+                        self.name,
+                        mt5_ticket,
+                    )
             except Exception as e:
                 mt5_symbol = broker.ticker_to_mt5_symbol(self.ticker)
                 logger.error(
-                    "%s: MT5 close raised exception for ticket=%s on %s: %s — aborting paper close",
+                    "%s: MT5 close raised exception for ticket=%s on %s: %s — paper close proceeds, orphan queued",
                     self.name,
                     mt5_ticket,
                     mt5_symbol,
                     e,
                 )
-                return {}
 
         trade = self.pos_mgr.close(fill_price, exit_date, reason)
         if trade is None:
