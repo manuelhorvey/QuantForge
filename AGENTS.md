@@ -1391,3 +1391,33 @@ Systematic 4-phase remediation of audit findings on `feature/production-audit-re
 **Phase 3 — Frontend UX Redesign (commit 4dbcf97)**: CommandCenter page merges TradingDashboard + DashboardOverview; EquityCurveSparkline SVG component from `/equity_history.json`; sortable asset list by risk/name/pnl/exit; Conviction badges removed (non-predictive — per audit finding); PEK status bar removed; dead field references cleaned from ExecutionFeed, GateAggregationPanel, AssetDetailPanel. TypeScript 0 errors.
 
 **Phase 4 — Polish & Cleanup (current)**: Stale asset refs cleaned (data_fetch.py _ZERO_RATE_ASSETS: removed ES/NQ/DJI; trade_analysis.py: cleared stale SLTP_CFG/DASHBOARD_TICKERS/MODEL_DEPTH); LIVE_CONTRACT.md US_EQUITY factor group updated; AGENTS.md changelog added. ruff format + check clean.
+
+---
+
+## Dashboard Operator-Console Redesign (in progress + paused)
+
+Branch: `redesign/operator-console-terminal-precision`. Visual identity: **operator-console / terminal-precision**, dark-only, mono supremacy, single accent (teal-emerald).
+
+**Phases 1–4 complete (8 commits)**:
+
+- **Phase 1.1** `ceda2d5` — Removed dead pages & token file: `pages/TradingDashboard.tsx`, `pages/DashboardOverview.tsx`, `components/AnchorNav.tsx`, `theme/tokens.ts`. Verified via `lazy(`/`dynamic(` grep that none of these were dynamically imported before deletion.
+- **Phase 1.2** `9c32101` — Collapsed `KpiCard` + `MetricCard` into `StatCard`. Migrated `WeeklyReviewModal`'s 10 instances to `StatCard variant="kpi"`.
+- **Phase 1.3** `f528020` — Cut light mode entirely for v1: removed `ThemeToggle.tsx`, `rawLightTokens` from color-system.ts, the `.light {}` block in `generated/tokens.css`, and the `light` DTCG group in `generated/tokens.json`.
+- **Phase 1.4** `900467d` — Removed dead CSS classes from `index.css` (`.metric-card`, `.section-title`, `.glass`, `.btn-primary`, `.btn-ghost`, `.signal-pill*`, `.metric-value`, `.interactive*`, `:root` smooth-theme transition). Living classes preserved: `.panel`, `.skeleton`, `.metric-label`, `.table-header`, `.sort-header`, `.table-row-hover`, `.anchor-nav`, `.input-terminal`, `.focus-ring`.
+- **Phase 2.5** `fbab2c6` — Extracted `BarRow` named export from `ProgressBar.tsx`; `SltpGauge.tsx` now stacks three `BarRow`s. Public APIs unchanged.
+- **Phase 2.7** `69b853b` — Removed unused `SkeletonText` + `SkeletonKpi` from `ui/Skeleton.tsx`. Kept `Skeleton`, `MetricCardSkeleton` (2 live consumers), `TableSkeleton` (4 live consumers).
+- **Phase 2.8a** `d46f101` — `SectionHeader`: dropped 3-layer pulsing accent (static dot + glow halo + animate-ping). API unchanged (7 accent variants still accepted).
+- **Phase 2.8b** `f219c42` — `EntranceAnimator`: dropped `stagger`/`staggerDelay`/internal `EntranceAnimatorItem` (zero external consumers). Single mode with `delay` retained.
+- **Phase 2.4** `6604fd5` — Merged `AssetMiniCard` into `AssetCard` with `density: 'comfortable' | 'compact'` prop. Shared signal-extraction logic. `AssetMiniCard.tsx` deleted; `AssetMiniGrid.tsx` updated to pass `density="compact"`.
+- **Phase 3** `a7329eb` — Removed duplicate `<EmergencyHaltBanner>` render in `pages/CommandCenter.tsx`. `AppShell.tsx` already mounts it once at top level.
+- **Phase 4** `d3d322e` — **IA-1**: nav-rail status chip. `useSidebarBadges` extended to expose engine `'alive'|'stale'|'dead'` state. Inline engine dot on the Dashboard nav item, bottom-of-rail `engine STATUS` caption row, removed the redundant top strip widget. Header still shows engine health as a separate glance surface.
+
+**Phase 5 — IA-3 HOLD**: Per the explicit decision from the design lead — "IA-1 and IA-3 both solve the same glance-check; ship IA-1 first, hold off on IA-3's CommandCenter 4-tab split until IA-1 has been confirmed against the operator's actual workflow." Phase 5 is the decision pause. **Do not implement IA-3** in this branch without an explicit re-approval. Re-evaluation criteria:
+
+1. Does the operator still open CommandCenter and scroll to find a status field that isn't in the rail?
+2. Does the Dashboard nav item dot+bottom-caption row, combined with the Header heartbeat button, give the glance-check in < 1 second without scrolling?
+3. Is the existing 8-section CommandCenter overwhelming on a 13" laptop, or is it scannable with the rail status chip and the bottom rail caption?
+
+If (1) is yes or (3) is yes → revisit IA-3 (split into Status / Positions / Signal Queue / Review). If (2) is yes, CommandCenter needs no further split — proceed to Phase 6 (remaining IA moves) and Phase 7+ (design system implementation, visual redesign).
+
+**Audit items deferred to dedicated PRs** (not in this branch): #1 (QuickStatCard → StatCard), #2 (PekStatusBar fold-in), #7 (TradingAssetRow extraction), #11 (Panel variant collapse), #13 (rawLightTokens exposure already partly done), #14 (EquityChart/Attribution migration), #16 (Header health chip move). Each has large file-fan-out and is its own reviewable commit when picked up.
