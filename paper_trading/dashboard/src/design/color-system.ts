@@ -100,6 +100,17 @@ export const rawTokens = {
   'color-panel': '#13161f',
   'color-panel-hover': '#161820',
 
+  // ── Role-named tokens (canonical names) ───────────
+  // These shadow the existing gov-*/border-* tokens. New components
+  // should prefer these; migration of existing consumers is incremental.
+  'color-ink': '#07080b',                    // same as color-app
+  'color-rule': '#1e2233',                   // same as color-border
+  'color-signal-long': '#25d065',            // same as color-gov-green
+  'color-signal-warn': '#eab308',            // same as color-gov-yellow
+  'color-signal-short': '#f04444',           // same as color-gov-red
+  'color-tripwire': '#ff3864',               // distinct from signal-short — brighter, more urgent
+  'color-accent-glow': 'rgba(61, 217, 174, 0.3)',
+
   // ── Text hierarchy ────────────────────────────────
   'color-text-primary': '#f1f3f6',
   'color-text-secondary': '#94a3b8',

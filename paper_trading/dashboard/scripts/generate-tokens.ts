@@ -85,9 +85,16 @@ const COLOR_MAP: Record<string, string> = {
   'color-accent-amber': 'accent-amber',
   'color-accent-indigo': 'accent-indigo',
   'color-accent-pink': 'accent-pink',
-  'color-chart-rose': 'chart-rose',
-  'color-chart-teal': 'chart-teal',
-}
+   'color-chart-rose': 'chart-rose',
+   'color-chart-teal': 'chart-teal',
+   'color-ink': 'ink',
+   'color-rule': 'rule',
+   'color-signal-long': 'signal-long.DEFAULT',
+   'color-signal-warn': 'signal-warn.DEFAULT',
+   'color-signal-short': 'signal-short.DEFAULT',
+   'color-tripwire': 'tripwire',
+   'color-accent-glow': 'accent-glow',
+ }
 
 const colors: Obj = {}
 

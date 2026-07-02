@@ -37,6 +37,13 @@
   --color-card: #0c0d12;
   --color-panel: #13161f;
   --color-panel-hover: #161820;
+  --color-ink: #07080b;
+  --color-rule: #1e2233;
+  --color-signal-long: #25d065;
+  --color-signal-warn: #eab308;
+  --color-signal-short: #f04444;
+  --color-tripwire: #ff3864;
+  --color-accent-glow: rgba(61, 217, 174, 0.3);
   --color-text-primary: #f1f3f6;
   --color-text-secondary: #94a3b8;
   --color-text-tertiary: #64748b;
