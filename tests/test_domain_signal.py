@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -127,6 +126,6 @@ class TestTradeDecision:
         assert td.archetype == "UNKNOWN"
 
     def test_to_dict_includes_feature_hash(self):
-        td = TradeDecision("EURUSD", SignalType.BUY, 1, 0.7, 0.7, 0.2, 0.1, 1.10, "2026-06-30", 0.5, feature_hash="abc123")
+        td = TradeDecision("EURUSD", SignalType.BUY, 1, 0.7, 0.7, 0.2, 0.1, 1.10, "2026-06-30", 0.5, feature_hash="abc123")  # noqa: E501
         d = td.to_dict()
         assert d["feature_hash"] == "abc123"
