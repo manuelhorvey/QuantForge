@@ -1,5 +1,4 @@
 import pytest
-import pandas as pd
 from paper_trading.entry.decision import PositionIntent
 from paper_trading.position.manager import PositionManager
 

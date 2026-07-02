@@ -4,7 +4,6 @@ from __future__ import annotations
 import math
 import random
 
-import pytest
 
 from eigencapital.observability.atlas import AtlasDetector, AtlasVerdict
 

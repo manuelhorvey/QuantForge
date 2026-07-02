@@ -34,7 +34,6 @@ from paper_trading.shadow.learning import (
 )
 
 from paper_trading.shadow.analytics import (
-    PAPER_PORTFOLIO,
     build_asset_learning_profile,
     compare_assets,
     compare_learning_profiles,

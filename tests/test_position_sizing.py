@@ -1,6 +1,4 @@
-import pytest
 import pandas as pd
-import numpy as np
 from risk.position_sizing import calculate_position_size
 
 

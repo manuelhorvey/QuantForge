@@ -12,7 +12,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from paper_trading.ops.slack_alerter import (
-    CHECK_INTERVAL,
     COOLDOWN_HALT,
     DRAWDOWN_THRESHOLD,
     SlackAlerter,

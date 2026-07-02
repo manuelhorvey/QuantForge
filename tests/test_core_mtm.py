@@ -1,7 +1,5 @@
 import unittest
 from unittest.mock import MagicMock
-import pandas as pd
-import numpy as np
 from paper_trading.asset_engine import AssetEngine
 from paper_trading.entry.decision import PositionIntent
 

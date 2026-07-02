@@ -6,7 +6,6 @@ and the singleton accessor.
 """
 from __future__ import annotations
 
-import pytest
 from paper_trading.performance.edge_health import EdgeHealthMonitor, get_monitor, reset_monitor
 
 

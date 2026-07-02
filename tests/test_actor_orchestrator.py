@@ -10,24 +10,18 @@ Covers:
 """
 
 import time
-import threading
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, PropertyMock
 
-import pytest
 
 from paper_trading.orchestrator.actor import (
     AssetActor,
-    AssetResult,
     ActorHealth,
-    compute_health_snapshot,
 )
 from paper_trading.orchestrator.engine import EngineOrchestrator, EnginePhase
 from paper_trading.orchestrator.health import (
     CircuitBreaker,
     HealthMonitor,
     RecoveryScheduler,
-    BreakerDecision,
 )
 
 

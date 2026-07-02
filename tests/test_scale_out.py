@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from hypothesis import assume, given, strategies as st
+from hypothesis import given, strategies as st
 
 from paper_trading.position.scale_out import (
     ScaleOutEngine,

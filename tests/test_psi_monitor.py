@@ -1,10 +1,9 @@
-import os
 import tempfile
 
 import numpy as np
 import pandas as pd
 
-from monitoring.psi_monitor import PSIMonitor, PSIDriftEntry, PSISnapshot
+from monitoring.psi_monitor import PSIMonitor
 
 
 def test_compute_psi_identical_distributions():

@@ -387,7 +387,6 @@ class TestTimestampProvenance:
 
     def test_no_tz_truncation_in_inference_pipeline(self):
         """The tz_convert('UTC').date pattern destroys temporal precision."""
-        import ast
         import inspect
         from paper_trading.inference import pipeline
 

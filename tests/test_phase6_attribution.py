@@ -11,9 +11,7 @@ Required verification:
   8. Trade lifecycle — record is populated from open through close
 """
 
-import hashlib
 import pickle
-from dataclasses import dataclass
 
 import pytest
 

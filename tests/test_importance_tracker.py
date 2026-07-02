@@ -2,7 +2,6 @@ import os
 import tempfile
 
 import numpy as np
-import pandas as pd
 import pytest
 
 from monitoring.importance_tracker import (

@@ -18,7 +18,7 @@ import pytest
 
 from paper_trading.execution.bridge import ExecutionBridge, MarketSnapshot
 from paper_trading.execution.paper_broker import PaperBroker
-from paper_trading.execution.simulator import ExecutionSimulator, FillResult
+from paper_trading.execution.simulator import ExecutionSimulator
 from paper_trading.execution.slippage import SlippageModel
 from paper_trading.execution.fill import FillModel
 from paper_trading.execution.latency import LatencyModel

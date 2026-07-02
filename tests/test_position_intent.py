@@ -2,7 +2,6 @@
 Tests for PositionIntent domain entity.
 Validates effective_sl composition and risk envelope invariants.
 """
-import pytest
 from eigencapital.domain.entities.position import PositionIntent, PositionSide, StackLayer
 
 
@@ -87,7 +86,6 @@ class TestEffectiveSL:
         from copy import deepcopy
         # Override total_size for the test
         pos_copy = deepcopy(pos)
-        import types
         # Quick test: notional_risk uses effective_sl property
         current = 100.0
         effective = pos.effective_sl  # 98.0

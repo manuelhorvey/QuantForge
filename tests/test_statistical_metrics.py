@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from eigencapital.domain.value_objects.statistical_metrics import (
     _moments,

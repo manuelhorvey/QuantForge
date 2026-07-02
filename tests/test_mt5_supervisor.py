@@ -7,9 +7,7 @@ import json
 import socket
 import struct
 import threading
-import time
 
-import pytest
 
 from scripts.ops.mt5_bridge_supervisor import (
     BridgeSupervisor,

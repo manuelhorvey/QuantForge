@@ -3,7 +3,7 @@ import os
 
 import pytest
 import requests.exceptions
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import patch, MagicMock
 from datetime import datetime, timedelta
 
 from features.macro_narrative import MacroNarrativeFeatures
@@ -18,10 +18,6 @@ from features.fxstreet_fetcher import (
     get_fetch_error,
     get_narrative_status,
     _write_error,
-    NARRATIVE_PENDING,
-    NARRATIVE_ACTIVE,
-    NARRATIVE_DIR,
-    NARRATIVE_ERROR,
 )
 
 

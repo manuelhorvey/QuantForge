@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import pytest
 
 from features.publication_lags import (
     audit_lookahead,

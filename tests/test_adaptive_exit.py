@@ -5,7 +5,7 @@ Covers state machine transitions, peak tracking, short/long symmetry,
 and all failure modes identified in the Production Deployment Gate.
 """
 import pytest
-from paper_trading.position.adaptive_exit import AdaptiveExitEngine, AdaptiveExitResult
+from paper_trading.position.adaptive_exit import AdaptiveExitEngine
 
 
 # ── Standard configs ───────────────────────────────────────────────────────

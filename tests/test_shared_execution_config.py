@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-from dataclasses import fields
 
 from shared.execution_config import (
     ExecutionConfig,

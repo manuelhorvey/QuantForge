@@ -612,7 +612,6 @@ class TestPaperTradingEngine:
         assert engine._cycle_count == 1
 
     def test_run_once_benchmark_logging(self, engine):
-        import logging
         with patch("paper_trading.engine.is_market_closed", return_value=False):
             with patch.object(engine, "_cycle_times", [0.1] * 100):
                 engine.run_once()

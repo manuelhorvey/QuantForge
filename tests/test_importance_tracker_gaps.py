@@ -201,7 +201,6 @@ def test_store_get_latest_two_snapshots_same_window(tmp_path):
 def test_store_get_latest_two_snapshots_no_window_ids(tmp_path):
     """get_latest_two_snapshots returns (None, None) when no window_ids."""
     store = ImportanceStore(tmp_path)
-    import pyarrow.parquet as pq
     df = pd.DataFrame({"asset": ["TEST"], "feature": ["a"], "window_id": [None]})
     df.to_parquet(store.path)
     latest, prev = store.get_latest_two_snapshots("TEST")

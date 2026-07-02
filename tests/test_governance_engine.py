@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 import pytest
-from hypothesis import assume, given, strategies as st
 
 from features.liquidity_regime import (
     classify_liquidity_regime,

@@ -1,4 +1,3 @@
-import pytest
 from paper_trading.entry.decision import TradeDecision, PositionIntent
 
 

@@ -1,4 +1,3 @@
-import pytest
 import pandas as pd
 import numpy as np
 from labels.triple_barrier import apply_triple_barrier

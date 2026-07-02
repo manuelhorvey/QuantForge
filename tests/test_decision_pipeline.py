@@ -1,9 +1,8 @@
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
-import pytest
 
-from paper_trading.entry.decision import PositionSide, SignalType, TradeDecision
+from paper_trading.entry.decision import PositionSide, TradeDecision
 from paper_trading.execution.decision_pipeline import (
     DecisionContext,
     DEFAULT_STAGES,

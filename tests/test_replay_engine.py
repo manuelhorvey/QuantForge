@@ -3,7 +3,6 @@ Deterministic replay tests: given known signal + price sequences,
 assert that PnL, position state, and trade log are fully deterministic.
 """
 import pandas as pd
-import numpy as np
 import pytest
 
 from paper_trading.engine import AssetEngine
@@ -177,7 +176,6 @@ class TestStateStoreDeterministic:
 
     def test_snapshot_roundtrip_exact(self):
         import tempfile
-        import json
         from paper_trading.state_store import StateStore, EngineSnapshot
 
         with tempfile.TemporaryDirectory() as td:

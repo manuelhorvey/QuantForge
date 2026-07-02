@@ -9,7 +9,6 @@ Required tests:
 """
 
 import hashlib
-import inspect
 import pickle
 
 import numpy as np
@@ -28,8 +27,6 @@ from paper_trading.entry.decision import (
     PolicyDecision,
     PositionIntent,
     PositionSide,
-    SignalType,
-    TradeDecision,
     TPGeometry,
 )
 from shared.execution_config import ExecutionConfig

@@ -4,7 +4,6 @@ import pytest
 
 from shared.meta_labeling import (
     MetaModel,
-    MetaInferenceResult,
     decision_from_confidence,
     encode_regime,
     compute_vol_zscore,

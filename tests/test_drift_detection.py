@@ -11,8 +11,6 @@ from monitoring.drift_detection import (
     ks_drift,
     DriftDetector,
     STRUCTURAL_PSI_COLUMNS,
-    BEHAVIORAL_PSI_COLUMNS,
-    INTERACTION_PSI_COLUMNS,
 )
 
 

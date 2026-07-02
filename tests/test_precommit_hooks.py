@@ -5,7 +5,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 
 from tools.check_no_bare_asserts import _finds_top_level_assert, _walk_python_files
 from tools.check_no_plaintext_secrets import _is_allowed_secret_match, _scan_paths

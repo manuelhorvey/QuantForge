@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import pytest
 from hypothesis import given, strategies as st, settings
 
 from monitoring.psi_monitor import PSIMonitor, PSIDriftEntry, PSISnapshot

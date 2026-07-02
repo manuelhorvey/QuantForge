@@ -1,12 +1,10 @@
 import pandas as pd
 import numpy as np
 import pytest
-from datetime import datetime, timedelta
 
 from features.publication_lags import (
     PUBLICATION_LAGS_RAW,
     DERIVED_FEATURE_LAGS,
-    ALL_LAGS,
     publication_lag,
     apply_publication_lags,
     apply_lag_to_macro_derived,

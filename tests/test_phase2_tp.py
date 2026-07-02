@@ -1,5 +1,4 @@
 import pytest
-import pandas as pd
 from paper_trading.entry.tp_compiler import compute_take_profit
 from paper_trading.entry.decision import MarketStructureState, ValidityState
 
